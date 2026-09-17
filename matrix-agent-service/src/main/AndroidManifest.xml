@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sharedUserId="android.uid.system">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- VoiceRuntime owns AudioRecord in the Host process; Launcher never receives PCM. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="com.matrix.agent.permission.ACCESS_AGENT" />
+
+    <permission
+        android:name="com.matrix.agent.permission.ACCESS_AGENT"
+        android:protectionLevel="signature" />
+
+    <application
+        android:name="com.matrix.agent.host.MatrixAgentApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <service
+            android:name="com.matrix.agent.download.DownloadService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <service
+            android:name="com.matrix.agent.host.MatrixAgentManagerService"
+            android:exported="true"
+            android:permission="com.matrix.agent.permission.ACCESS_AGENT" />
+
+        <!-- 系统语音入口与 Binder PTT 共用同一个 Host-owned VoiceRuntime。系统是否选为
+             默认助手仍由用户/OEM 决定；未选中时不会后台常驻采音。 -->
+        <service
+            android:name="com.matrix.agent.voice.system.MatrixVoiceInteractionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService.SERVICE_INTERFACE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction_service" />
+        </service>
+
+        <service
+            android:name="com.matrix.agent.voice.system.MatrixRecognitionService"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService.SERVICE_INTERFACE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="com.matrix.agent.voice.system.MatrixVoiceInteractionSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionSessionService.SERVICE_INTERFACE" />
+            </intent-filter>
+        </service>
+
+        <!-- Registers the root Binder during normal boot and after an APK replacement. -->
+        <receiver
+            android:name="com.matrix.agent.host.MatrixAgentBootReceiver"
+            android:directBootAware="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

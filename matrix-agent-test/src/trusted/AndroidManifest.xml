@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Same signing lineage as the Host in CI/userdebug images. Untrusted flavor intentionally omits it. -->
+    <uses-permission android:name="com.matrix.agent.permission.ACCESS_AGENT" />
+</manifest>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  第七轮 P1.1 + 第八轮 P2.2 修正：网络安全配置。
+  - release: 默认 HTTPS,仅 loopback (localhost / 127.0.0.1 / 10.0.2.2) 放行明文;
+  - debug: 在 release 规则之上叠加 cleartextTrafficPermitted=true + user CA 信任,
+    开发者自测任意内网 HTTP 模型服务 (android:debuggable=true 时自动生效)。
+
+  第七轮版本的 <debug-overrides> 只新增了 user CA 信任,未设 cleartextTrafficPermitted,
+  导致 debug 下填 http://192.168.x.x:port 仍被 base-config 拦住——注释与实际不符。
+  本版显式声明 cleartextTrafficPermitted="true" 让 debug 真正放开。
+
+  替代 V0.4.x AndroidManifest 中的全局 usesCleartextTraffic="true"——后者一旦在 release
+  残留,叠加用户可配置任意 endpoint,整个 LLM 请求 (API Key + 用户原文) 可在局域网被嗅探。
+-->
+<network-security-config>
+
+    <!-- 默认拒绝明文 HTTP —— release 路径完全禁止 -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 仅本地开发 LLM 端点放行：emulator host = 10.0.2.2，本机 = localhost/127.0.0.1 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+
+    <!--
+      debug 构建叠加放开 (android:debuggable=true 时自动生效):
+      - cleartextTrafficPermitted="true" 让开发者自测任意内网 HTTP 模型服务
+        (例如 http://192.168.1.10:8080 的局域网 LLM 服务);
+      - user CA 信任让 Charles / mitmproxy 等抓包工具的根证书生效。
+      release 构建不会加载本块,base-config 的 false 默认继续生效。
+    -->
+    <debug-overrides cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+
+</network-security-config>

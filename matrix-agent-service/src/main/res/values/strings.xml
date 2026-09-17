@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">MatrixAgent</string>
+    <string name="download_notification_channel">模型下载</string>
+    <string name="download_notification_channel_description">端侧大模型下载进度</string>
+    <string name="download_notification_title">模型下载</string>
+    <string name="download_preparing">准备下载</string>
+    <string name="download_completed">下载完成：%1$s</string>
+    <string name="download_failed">下载失败：%1$s</string>
+    <string name="download_progress">下载 %1$s %2$d%%</string>
+    <string name="download_waiting">等待下载：%1$s</string>
+</resources>

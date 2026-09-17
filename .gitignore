@@ -1,0 +1,21 @@
+# Gradle 缓存
+.gradle/
+
+# 构建产物（匹配所有模块层级）与 native 构建缓存
+build/
+.cxx/
+outputs/
+*.apk
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+
+# 本地环境
+local.properties
+.claude/settings.local.json
+
+# platform 签名密钥与密码——绝不入库（**/ 前缀匹配三个模块下的 tools/key/；
+# 注意不能写成 tools/key/，带中间斜杠的模式会锚定仓库根而失效）
+**/tools/key/

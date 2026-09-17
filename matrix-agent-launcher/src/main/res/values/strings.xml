@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MatrixAgent Launcher</string>
+    <string name="launcher_connecting">正在连接 Matrix Host…</string>
+    <string name="nav_tasks">任务</string>
+    <string name="nav_models">模型</string>
+    <string name="nav_downloads">下载</string>
+    <string name="host_connected">Host 已连接</string>
+    <string name="host_not_ready">Host 未就绪（%1$d）</string>
+    <string name="agent_task_intro">任务由 Host 依据调用方身份归属；此页面不伪造主驾/副驾或车辆状态。</string>
+    <string name="agent_command_hint">输入任务，例如：把主驾温度调到24度，然后导航回家</string>
+    <string name="agent_sample_climate">空调</string>
+    <string name="agent_sample_climate_value">把主驾温度调到24度</string>
+    <string name="agent_sample_navigation">导航</string>
+    <string name="agent_sample_navigation_value">导航回家</string>
+    <string name="agent_sample_preference">偏好</string>
+    <string name="agent_sample_preference_value">记住我喜欢24度</string>
+    <string name="agent_submit">提交任务</string>
+    <string name="agent_cancel">取消当前任务</string>
+    <string name="agent_refresh">刷新任务快照</string>
+    <string name="agent_idle">尚未提交任务</string>
+    <string name="agent_enter_task">请输入任务</string>
+    <string name="agent_submitting">正在提交任务…</string>
+    <string name="agent_submit_failed">提交失败：Host 未就绪</string>
+    <string name="agent_rejected">任务未受理，错误码=%1$d</string>
+    <string name="agent_accepted">已受理\n任务：%1$s\n状态：%2$s</string>
+    <string name="agent_subscribe_failed">订阅建立失败，将以快照恢复：%1$s</string>
+    <string name="agent_event">#%1$d %2$s · %3$s\n%4$s</string>
+    <string name="agent_snapshot_unavailable">任务快照不可用（可能尚在恢复或已过期）</string>
+    <string name="agent_snapshot">任务：%1$s\n状态：%2$s\n序列：%3$d\n错误码：%4$d</string>
+    <string name="agent_pending_confirmation">\n等待确认：%1$s</string>
+    <string name="agent_no_active_cancel">没有可取消的活动任务</string>
+    <string name="agent_cancelling">正在请求取消…</string>
+    <string name="agent_cancel_result">取消请求：错误码=%1$d，状态=%2$s</string>
+    <string name="safe_detail_empty">（无安全详情）</string>
+    <string name="event_state_changed">状态变更</string>
+    <string name="event_text_delta">文本更新</string>
+    <string name="event_confirmation">等待确认</string>
+    <string name="event_resync">需要同步</string>
+    <string name="event_unknown">未知事件(%1$d)</string>
+    <string name="state_accepted">已受理</string><string name="state_running">运行中</string>
+    <string name="state_waiting_confirmation">等待确认</string><string name="state_deferred">已暂缓</string>
+    <string name="state_completed">已完成</string><string name="state_partially_completed">部分完成</string>
+    <string name="state_rejected">已拒绝</string><string name="state_failed">失败</string>
+    <string name="state_cancelled">已取消</string><string name="state_unknown_execution">执行结果未知</string>
+    <string name="state_unknown">未知状态(%1$d)</string>
+    <string name="model_guidance">Provider 固定为 Host 支持的受控集合；Endpoint 与凭据存储均由 Host 管理。</string>
+    <string name="model_provider_glm">智谱 GLM</string>
+    <string name="model_provider_deepseek">DeepSeek</string>
+    <string name="model_provider_qwen">阿里通义千问</string>
+    <string name="model_provider_kimi">Moonshot Kimi</string>
+    <string name="model_provider_doubao">火山方舟 / 豆包</string>
+    <string name="model_provider_anthropic">Anthropic Claude</string>
+    <string name="model_provider_gemini">Google Gemini</string>
+    <string name="model_provider_detail">%1$s\n默认模型：%2$s%3$s</string>
+    <string name="model_provider_doubao_hint">\n豆包必须填写已创建推理接入点的 Endpoint ID。</string>
+    <string name="model_doubao_id_hint">填写已创建推理接入点的 Endpoint ID</string>
+    <string name="model_default_model">Host 默认</string>
+    <string name="model_model_id_hint">可选；留空使用 Provider 默认模型</string>
+    <string name="model_config_saved_refresh">凭据已由 Host 加密保存，正在刷新运行状态…</string>
+    <string name="model_key_content_description">显示或隐藏 API Key</string>
+    <string name="model_key_hint">API Key（仅一次性安全管道传输）</string>
+    <string name="model_save">安全保存凭据</string><string name="model_test">测试已保存的连接</string>
+    <string name="model_refresh">刷新模型状态</string><string name="model_waiting">等待 Host 连接…</string>
+    <string name="host_not_connected">Host 未连接</string>
+    <string name="model_missing_key">Host 未连接或未填写凭据</string>
+    <string name="model_missing_model_id">豆包需要填写已创建推理接入点的 Endpoint ID</string>
+    <string name="model_invalid_model_id">模型标识仅可包含字母、数字、点、下划线、连字符或冒号</string>
+    <string name="model_provisioning">正在将凭据交给 Host 的一次性安全管道…</string>
+    <string name="model_saved">凭据已由 Host 加密保存</string><string name="model_save_failed">保存失败，错误码=%1$d</string>
+    <string name="model_testing">正在验证 Host 已保存的模型连接…</string>
+    <string name="model_test_success">连接验证成功 · %1$d ms</string>
+    <string name="model_test_failed">连接验证失败</string><string name="model_test_failed_code">连接验证失败，错误码=%1$d</string>
+    <string name="model_runtime">运行时：%1$s\n当前模型：%2$s\n就绪：%3$b%4$s</string>
+    <string name="model_runtime_error">\n错误码：%1$d</string>
+    <string name="model_backend_device">端侧</string>
+    <string name="model_backend_cloud">云端</string><string name="model_backend_none">未配置</string><string name="none">无</string>
+    <string name="model_active_prefix">● </string><string name="model_inactive_prefix">○ </string>
+    <string name="model_unavailable_suffix"> · 不可用</string><string name="model_current">当前使用</string><string name="model_select">选用</string>
+    <string name="model_switching">正在请求 Host 切换模型…</string><string name="model_switched">已切换到：%1$s</string>
+    <string name="model_switch_failed">切换失败，错误码=%1$d</string>
+    <string name="model_available_title">可用模型（由 Host 返回，不显示文件路径）</string>
+    <string name="model_empty">Host 尚未提供可用模型。</string>
+    <string name="model_row">%1$s%2$s
+%3$s · %4$s%5$s</string>
+    <string name="download_guidance">下载项只来自 Host 已验签目录。安装、校验、空间预检与删除均由 Host 执行。</string>
+    <string name="download_refresh">刷新目录与下载状态</string>
+    <string name="download_catalog_empty">Host 当前没有可下载的受控目录项</string>
+    <string name="download_catalog_ready">目录来自 Host 已验签缓存；下载进度每秒刷新。</string>
+    <string name="download_delete_local">删除本地模型</string><string name="download_pause">暂停</string>
+    <string name="download_resume">继续下载</string><string name="download_install">下载并安装</string>
+    <string name="download_preparing">Host 正在准备下载：%1$s</string><string name="download_installed">安装完成：%1$s</string>
+    <string name="download_install_failed">安装失败，错误码=%1$d</string><string name="download_start_unavailable">无法启动下载：Host 当前不可用</string>
+    <string name="download_pause_rejected">暂停请求未被 Host 接受</string><string name="download_paused">已请求暂停：%1$s</string>
+    <string name="download_completed">下载完成：%1$s</string><string name="download_resume_failed">继续下载失败，错误码=%1$d</string>
+    <string name="download_resume_rejected">继续请求未被 Host 接受</string>
+    <string name="download_delete_title">删除本地模型？</string><string name="download_delete_message">将删除“%1$s”的本地文件；之后可从受控目录重新下载。</string>
+    <string name="cancel">取消</string><string name="delete">删除</string>
+    <string name="download_delete_rejected">删除请求未被 Host 接受</string><string name="download_deleting">Host 正在删除：%1$s</string>
+    <string name="download_status_installed">状态：已安装</string><string name="download_status_none">状态：尚未下载</string>
+    <string name="download_progress">%1$s / %2$s（%3$d%%）</string>
+    <string name="download_status_downloading">状态：下载中 · %1$s</string><string name="download_status_paused">状态：已暂停 · %1$s</string>
+    <string name="download_status_completed">状态：已完成</string><string name="download_status_failed">状态：失败，错误码=%1$d · %2$s</string>
+    <string name="download_status_waiting">状态：等待下载</string>
+    <string name="download_row">%1$s · %2$s
+大小：%3$s
+%4$s</string>
+    <string name="download_active_empty">当前没有进行中的下载。</string>
+    <string name="download_installed_empty">尚未安装端侧模型。</string>
+    <string name="download_unknown_size">大小将在 Host 建立下载任务后显示</string>
+    <string name="download_progress_label">下载进度：%1$d%%</string>
+    <string name="download_model_id">模型 ID：%1$s</string>
+</resources>

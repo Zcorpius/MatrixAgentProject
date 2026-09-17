@@ -1,0 +1,54 @@
+<resources>
+    <style name="Theme.MatrixLauncher" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/matrix_accent</item>
+        <item name="android:navigationBarColor">@color/matrix_primary_dark</item>
+        <item name="android:statusBarColor">@color/matrix_primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/matrix_surface</item>
+    </style>
+
+    <style name="MatrixOutlineButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@drawable/bg_outline</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/matrix_primary_dark</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="MatrixPrimaryButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@drawable/bg_primary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="MatrixHeroButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">@drawable/bg_hero_button</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/matrix_primary_dark</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="MatrixFieldLabel" parent="Widget.AppCompat.TextView">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textColor">@color/matrix_muted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="MatrixField" parent="Widget.AppCompat.EditText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textColor">@color/matrix_text</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+</resources>

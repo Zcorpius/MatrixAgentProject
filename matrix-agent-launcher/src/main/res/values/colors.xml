@@ -1,0 +1,14 @@
+<resources>
+    <color name="matrix_primary">#206D78</color>
+    <color name="matrix_primary_dark">#102D3A</color>
+    <color name="matrix_accent">#EF6B4A</color>
+    <color name="matrix_surface">#F5F8F6</color>
+    <color name="matrix_card">#FEFFFC</color>
+    <color name="matrix_text">#142E3A</color>
+    <color name="matrix_muted">#71808A</color>
+    <color name="matrix_border">#D5E0DC</color>
+    <color name="matrix_badge">#E6F1ED</color>
+    <color name="matrix_success">#1D817B</color>
+    <color name="matrix_warning">#B9771E</color>
+    <color name="matrix_danger">#D74B43</color>
+</resources>
