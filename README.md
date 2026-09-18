@@ -27,19 +27,26 @@ MatrixAgent 不是把 UI、模型密钥和执行逻辑塞进同一个 APK 的聊
 
 ## Launcher
 
-Launcher 用一套克制的工作区界面承载三个页面：任务、模型与模型市场。以下截图来自
-Mi 9 SE（`grus`）真机上的 v0.6.13 Launcher。
+Launcher 用一套克制的工作区界面承载四个对称的入口：任务工作、语音功能、模型接入与
+模型市场。以下截图来自 Mi 9 SE（`grus`）真机上的 v0.6.13 Launcher；页面顶部会为系统状态栏
+预留安全区域，避免应用内容与时间、信号和电池图标重叠。
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/launcher-tasks.png" width="280" alt="任务工作台" /></td>
-    <td align="center"><img src="docs/images/launcher-models.png" width="280" alt="模型与推理" /></td>
+    <td align="center"><img src="docs/images/launcher-tasks.png" width="280" alt="任务工作" /></td>
+    <td align="center"><img src="docs/images/launcher-voice.png" width="280" alt="语音功能" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>任务工作</sub></td>
+    <td align="center"><sub>语音功能：会话状态与实时转写</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/launcher-models.png" width="280" alt="模型接入" /></td>
     <td align="center"><img src="docs/images/launcher-downloads.png" width="280" alt="模型市场" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>任务工作台</sub></td>
-    <td align="center"><sub>模型与推理</sub></td>
-    <td align="center"><sub>模型市场与本地模型库</sub></td>
+    <td align="center"><sub>模型接入与推理配置</sub></td>
+    <td align="center"><sub>模型市场、下载队列与本地模型库</sub></td>
   </tr>
 </table>
 
@@ -75,7 +82,7 @@ hidden API 的普通可信 APK 连接。Binder 死亡后 SDK 会重连并恢复�
 |---|---|---|
 | `matrix-agent-service` | `com.matrix.agent` APK | system UID Host、Root Binder、四域 Stub、任务引擎、模型、下载、语音、持久化与审计 |
 | `matrix-agent-service-lib` | `com.matrix.agent:matrix-agent-service-lib` AAR | AIDL、Parcelable DTO、常量、`MatrixAgent` 门面和四个客户端 Manager |
-| `matrix-agent-launcher` | `com.matrix.agent.launcher` APK | SDK-only MVVM 工作区，提供任务、模型与下载页面 |
+| `matrix-agent-launcher` | `com.matrix.agent.launcher` APK | SDK-only MVVM 工作区，提供任务工作、语音功能、模型接入与模型市场页面 |
 | `matrix-agent-test` | trusted / untrusted APK | 跨 APK 权限、身份、契约与 Binder 行为验证 |
 | `ondevice` | Android Library + JNI | MNN-LLM Java 边界和 native 生命周期管理；不暴露给客户端 |
 
@@ -114,6 +121,7 @@ Launcher 不保存密钥，也不把密钥写入页面状态或日志。
 
 - Host-owned `AudioRecord`、Vosk ASR、Android TTS、音频焦点和 PTT 会话状态机。
 - Launcher 页面入口与系统 VoiceInteractionService 共用唯一 VoiceRuntime，避免双重采音。
+- 首次安装中英文 Vosk 离线识别模型时，Launcher 会展示实时下载进度；已安装模型显示版本、大小和删除操作，删除后可再次下载并安装。
 - Vosk 模型下载带 SHA-256 校验、版本指针、安装锁和失败回滚。
 - RECORD_AUDIO 未授权、前台服务被拒或模型未就绪时均显式失败，不转为隐形后台录音。
 
