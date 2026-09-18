@@ -149,7 +149,18 @@ ROM 的签名或 `android.jar` 代替。
 sdk.dir=/absolute/path/to/Android/sdk
 ```
 
-### 2. 准备系统构建材料
+### 2. 初始化 MNN 子模块
+
+首次 clone 或切换到包含子模块的提交后，执行：
+
+```bash
+git submodule update --init --recursive
+```
+
+`ondevice/src/main/cpp/MNN` 固定为上游 `18759c835f7c36d3fcaec25f6d9a029386e802f8`；它是 native
+MNN-LLM 编译输入，不以普通源码副本重复提交到本仓库。
+
+### 3. 准备系统构建材料
 
 三个 APK 模块分别从自己的 `tools/key/` 读取：
 
@@ -169,7 +180,7 @@ matrix-agent-service/tools/framework/framework-lineage-grus.jar
 [`matrix-agent-service/tools/framework/README.md`](matrix-agent-service/tools/framework/README.md)。
 生产 platform 私钥不得提交到公共仓库，也不要在不同 ROM 间复用。
 
-### 3. 构建 APK
+### 4. 构建 APK
 
 ```bash
 ./buildTool.sh all debug

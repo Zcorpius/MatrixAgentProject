@@ -1,0 +1,3 @@
+[submodule "ondevice/src/main/cpp/MNN"]
+	path = ondevice/src/main/cpp/MNN
+	url = https://github.com/alibaba/MNN.git
