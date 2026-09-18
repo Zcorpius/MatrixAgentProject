@@ -12,7 +12,7 @@ import java.util.function.BooleanSupplier;
  * 语音装配工厂：把「引擎特定」的准备与装配从 {@code VoiceRuntime} 中分离——
  * Runtime(main,通用生命周期/恢复治理)只依赖本接口,不依赖任何具体引擎。
  *
- * <p>三个定向消费者：debug 源集的 {@code VoskVoiceAssemblyFactory}(Vosk 模型下载+装配)、
+ * <p>三个定向消费者：release 主源集的 {@code VoskVoiceAssemblyFactory}(Vosk 模型下载+装配)、
  * JVM 测试的假工厂({@code VoiceRuntimeTest} 恢复路径回归)、阶段 3 系统入口运行时。
  *
  * <p>生命周期契约：{@link #prepare}(引擎资源就绪,如模型下载)由 Runtime 的下载线程调用一次;

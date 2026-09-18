@@ -32,16 +32,7 @@ import java.util.List;
 /** SDK-only model gateway for cloud, LAN OpenAI-compatible, and downloaded on-device models. */
 public final class ModelFragment extends Fragment {
     private static final String ARG_ON_DEVICE_MODEL = "on_device_model";
-    private static final List<ProviderOption> PROVIDERS = Arrays.asList(
-            cloud("glm", "智谱 GLM", "glm-5.2"), cloud("deepseek", "DeepSeek", "deepseek-v4-flash"),
-            cloud("qwen", "阿里通义千问", "qwen3.7-plus"), cloud("kimi", "Moonshot Kimi", "kimi-k2.5"),
-            cloud("doubao", "火山方舟 / 豆包", "Endpoint ID"), cloud("anthropic", "Anthropic Claude", "claude-sonnet-4-5"),
-            cloud("gemini", "Google Gemini", "gemini-3.5-flash"),
-            local("ollama", "Ollama（局域网）", "qwen2.5:7b", "http://127.0.0.1:11434/api/chat"),
-            local("lmstudio", "LM Studio（局域网）", "local-model", "http://127.0.0.1:1234/v1/chat/completions"),
-            local("vllm", "本地 vLLM（OpenAI 兼容）", "Qwen/Qwen3-8B", "http://127.0.0.1:8000/v1/chat/completions"),
-            new ProviderOption("on_device", "已下载的端侧模型", "", "", false, false, true),
-            local("custom", "自定义 OpenAI 兼容接口", "", "https://example.com/v1"));
+    private List<ProviderOption> providers;
 
     private Spinner provider;
     private EditText modelId, endpoint, key;
@@ -62,6 +53,7 @@ public final class ModelFragment extends Fragment {
             @Nullable ViewGroup parent, @Nullable Bundle state) {
         View root = inflater.inflate(R.layout.fragment_model, parent, false);
         viewModel = new ViewModelProvider(requireActivity(), activity().viewModelFactory()).get(ModelViewModel.class);
+        providers = providerOptions();
         provider = root.findViewById(R.id.model_provider); modelId = root.findViewById(R.id.model_id);
         endpoint = root.findViewById(R.id.model_endpoint); key = root.findViewById(R.id.model_key);
         detail = root.findViewById(R.id.model_provider_detail); status = root.findViewById(R.id.model_status);
@@ -70,12 +62,12 @@ public final class ModelFragment extends Fragment {
         models = root.findViewById(R.id.model_list); save = root.findViewById(R.id.model_save);
         test = root.findViewById(R.id.model_test); refresh = root.findViewById(R.id.model_refresh);
         provider.setDropDownVerticalOffset(dp(8));
-        provider.setAdapter(new ArrayAdapter<ProviderOption>(requireContext(), R.layout.item_model_provider, PROVIDERS) {
-            @NonNull @Override public View getView(int p, @Nullable View v, @NonNull ViewGroup parent) { TextView t=(TextView)super.getView(p,v,parent); t.setText(PROVIDERS.get(p).label); return t; }
-            @NonNull @Override public View getDropDownView(int p, @Nullable View v, @NonNull ViewGroup parent) { TextView t=(TextView)super.getDropDownView(p,v,parent); t.setText(PROVIDERS.get(p).label); return t; }
+        provider.setAdapter(new ArrayAdapter<ProviderOption>(requireContext(), R.layout.item_model_provider, providers) {
+            @NonNull @Override public View getView(int p, @Nullable View v, @NonNull ViewGroup parent) { TextView t=(TextView)super.getView(p,v,parent); t.setText(providers.get(p).label); return t; }
+            @NonNull @Override public View getDropDownView(int p, @Nullable View v, @NonNull ViewGroup parent) { TextView t=(TextView)super.getDropDownView(p,v,parent); t.setText(providers.get(p).label); return t; }
         });
         provider.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { renderProvider(PROVIDERS.get(pos)); }
+            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { renderProvider(providers.get(pos)); }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
         String requestedModel = getArguments() == null ? null : getArguments().getString(ARG_ON_DEVICE_MODEL);
@@ -89,31 +81,44 @@ public final class ModelFragment extends Fragment {
         new ViewModelProvider(requireActivity(), activity().viewModelFactory()).get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> { connected = viewModel.isHostConnected(); renderControls(); if (connected) viewModel.refresh(); });
         return root;
     }
-    private static ProviderOption cloud(String id, String label, String model) { return new ProviderOption(id,label,model,"",true,false,false); }
-    private static ProviderOption local(String id, String label, String model, String url) { return new ProviderOption(id,label,model,url,false,true,false); }
+    private List<ProviderOption> providerOptions() {
+        return Arrays.asList(
+                cloud("glm", R.string.model_provider_glm, "glm-5.2"), cloud("deepseek", R.string.model_provider_deepseek, "deepseek-v4-flash"),
+                cloud("qwen", R.string.model_provider_qwen, "qwen3.7-plus"), cloud("kimi", R.string.model_provider_kimi, "kimi-k2.5"),
+                cloud("doubao", R.string.model_provider_doubao, "Endpoint ID"), cloud("anthropic", R.string.model_provider_anthropic, "claude-sonnet-4-5"),
+                cloud("gemini", R.string.model_provider_gemini, "gemini-3.5-flash"),
+                local("ollama", R.string.model_provider_ollama, "qwen2.5:7b", "http://127.0.0.1:11434/api/chat"),
+                local("lmstudio", R.string.model_provider_lmstudio, "local-model", "http://127.0.0.1:1234/v1/chat/completions"),
+                local("vllm", R.string.model_provider_vllm, "Qwen/Qwen3-8B", "http://127.0.0.1:8000/v1/chat/completions"),
+                new ProviderOption("on_device", getString(R.string.model_provider_on_device), "", "", false, false, true),
+                local("custom", R.string.model_provider_custom, "", "https://example.com/v1"));
+    }
+    private ProviderOption cloud(String id, int label, String model) { return new ProviderOption(id,getString(label),model,"",true,false,false); }
+    private ProviderOption local(String id, int label, String model, String url) { return new ProviderOption(id,getString(label),model,url,false,true,false); }
     private ProviderOption currentProvider() { return (ProviderOption) provider.getSelectedItem(); }
-    private int indexOf(String providerId) { for (int i = 0; i < PROVIDERS.size(); i++) if (providerId.equals(PROVIDERS.get(i).id)) return i; return 0; }
+    private int indexOf(String providerId) { for (int i = 0; i < providers.size(); i++) if (providerId.equals(providers.get(i).id)) return i; return 0; }
     private void renderProvider(ProviderOption p) {
         modelId.setText(p.defaultModel); endpoint.setText(p.defaultEndpoint); endpointGroup.setVisibility(p.endpointEditable ? View.VISIBLE : View.GONE); keyGroup.setVisibility(p.onDevice ? View.GONE : View.VISIBLE);
-        idLabel.setText(p.onDevice ? "已安装模型 ID" : "模型 ID"); modelId.setHint(p.onDevice ? "先在“下载”页安装模型" : p.id.equals("doubao") ? "填写推理接入点 Endpoint ID" : "可选；留空使用默认模型");
-        keyLabel.setText(p.apiKeyRequired ? "API Key（必填）" : "API Key（可选）");
-        detail.setText(p.onDevice ? "端侧模型不需要 API Key。请先从下载页安装，再选择模型 ID。" : p.endpointEditable ? "服务地址仅支持 http/https；Host 会校验并保存配置。" : "使用 Host 内置的受控 Provider 与默认服务地址。");
+        idLabel.setText(p.onDevice ? R.string.model_installed_id_label : R.string.model_id_label); modelId.setHint(p.onDevice ? R.string.model_on_device_id_hint : p.id.equals("doubao") ? R.string.model_doubao_id_hint : R.string.model_id_hint);
+        keyLabel.setText(p.apiKeyRequired ? R.string.model_key_required : R.string.model_key_optional);
+        detail.setText(p.onDevice ? R.string.model_on_device_guidance
+                : p.endpointEditable ? R.string.model_endpoint_lan_guidance : R.string.model_guidance);
     }
     private void provision() {
         ProviderOption p=currentProvider(); String model=modelId.getText().toString().trim();
         if (p.onDevice) {
-            if (model.isEmpty()) { status.setText("请先在“模型市场”下载端侧模型，再填写或选用模型 ID。"); return; }
+            if (model.isEmpty()) { status.setText(R.string.model_on_device_missing); return; }
             viewModel.select(new ModelInfo(model, model, "on_device", false, true)); return;
         }
         char[] secret=key.getText().toString().toCharArray(); key.setText(""); viewModel.provision(p.id,model,endpoint.getText().toString().trim(),p.apiKeyRequired,secret);
     }
     private void toggleKeyVisibility() { keyVisible=!keyVisible; int at=key.getSelectionEnd(); key.setInputType(InputType.TYPE_CLASS_TEXT | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD)); key.setTypeface(key.getTypeface()); if(at>=0&&at<=key.length())key.setSelection(at); requireView().<ImageButton>findViewById(R.id.model_key_visibility).setImageResource(keyVisible?R.drawable.ic_eye_visible:R.drawable.ic_eye_hidden); }
-    private void render(@NonNull ModelViewModel.State v) { rendered=v; renderStatus(v); models.removeAllViews(); if(v.models.isEmpty()) models.addView(muted("尚无可用模型。端侧模型请先在下载页安装。")); else for(ModelInfo m:v.models)addModelCard(m,v.busy); renderControls(); }
+    private void render(@NonNull ModelViewModel.State v) { rendered=v; renderStatus(v); models.removeAllViews(); if(v.models.isEmpty()) models.addView(muted(getString(R.string.model_empty_with_download_hint))); else for(ModelInfo m:v.models)addModelCard(m,v.busy); renderControls(); }
     private void renderStatus(ModelViewModel.State v) {
-        if(v.notice==ModelViewModel.Notice.RUNTIME&&v.runtime!=null){ ModelRuntimeStatus r=v.runtime; String b=r.backend==ModelRuntimeStatus.BACKEND_ON_DEVICE?"端侧":r.backend==ModelRuntimeStatus.BACKEND_CLOUD?"云端":"未配置"; status.setText("运行时："+b+"\n当前模型："+(r.activeModelId==null?"无":r.activeModelId)+"\n就绪："+r.ready+(r.lastErrorCode==0?"":"\n错误码："+r.lastErrorCode)); return; }
-        switch(v.notice){case MISSING_KEY:status.setText("请填写 API Key");break;case MISSING_MODEL_ID:status.setText("请填写模型或 Endpoint ID");break;case INVALID_MODEL_ID:status.setText("模型标识格式不合法");break;case PROVISIONING:status.setText("正在通过安全通道交给 Host…");break;case SAVED:status.setText("配置已保存并启用，正在刷新运行时…");viewModel.refresh();break;case SAVE_FAILED:status.setText("保存失败，错误码="+v.code);break;case TESTING:status.setText("正在验证当前 Provider…");break;case TEST_SUCCEEDED:status.setText("连接验证成功 · "+v.code+" ms");break;case TEST_FAILED:status.setText("连接验证失败，错误码="+v.code);break;case SWITCHING:status.setText("正在切换模型…");break;case SWITCH_FAILED:status.setText("切换失败，错误码="+v.code);break;case HOST_UNAVAILABLE:status.setText("Host 未连接");break;default:if(v.runtime==null)status.setText("等待 Host 连接…");}
+        if(v.notice==ModelViewModel.Notice.RUNTIME&&v.runtime!=null){ ModelRuntimeStatus r=v.runtime; int backend=r.backend==ModelRuntimeStatus.BACKEND_ON_DEVICE?R.string.model_backend_device:r.backend==ModelRuntimeStatus.BACKEND_CLOUD?R.string.model_backend_cloud:R.string.model_backend_none; String error=r.lastErrorCode==0?"":getString(R.string.model_runtime_error,r.lastErrorCode); status.setText(getString(R.string.model_runtime,getString(backend),r.activeModelId==null?getString(R.string.none):r.activeModelId,r.ready,error)); return; }
+        switch(v.notice){case MISSING_KEY:status.setText(R.string.model_missing_key);break;case MISSING_MODEL_ID:status.setText(R.string.model_missing_model_id);break;case INVALID_MODEL_ID:status.setText(R.string.model_invalid_model_id);break;case PROVISIONING:status.setText(R.string.model_provisioning);break;case SAVED:status.setText(R.string.model_saved_active);viewModel.refresh();break;case SAVE_FAILED:status.setText(getString(R.string.model_save_failed,v.code));break;case TESTING:status.setText(R.string.model_testing);break;case TEST_SUCCEEDED:status.setText(getString(R.string.model_test_success,v.code));break;case TEST_FAILED:status.setText(getString(R.string.model_test_failed_code,v.code));break;case SWITCHING:status.setText(R.string.model_switching);break;case SWITCH_FAILED:status.setText(getString(R.string.model_switch_failed,v.code));break;case HOST_UNAVAILABLE:status.setText(R.string.host_not_connected);break;default:if(v.runtime==null)status.setText(R.string.model_waiting);}
     }
-    private void addModelCard(ModelInfo m, boolean busy) { LinearLayout c=new LinearLayout(requireContext());c.setOrientation(LinearLayout.VERTICAL);c.setBackgroundResource(R.drawable.bg_card);c.setPadding(dp(15),dp(13),dp(15),dp(13)); TextView t=new TextView(requireContext());t.setText((m.active?"● ":"")+m.displayName);t.setTextSize(16);t.setTypeface(Typeface.DEFAULT_BOLD);t.setTextColor(color(R.color.matrix_text));c.addView(t);c.addView(muted(m.modelId+" · "+m.providerId+(m.available?"":" · 不可用")),top(4));Button b=new Button(requireContext());b.setText(m.active?"当前使用":"选用");b.setEnabled(connected&&!busy&&!m.active&&m.available);b.setBackgroundResource(m.active?R.drawable.bg_outline:R.drawable.bg_primary);b.setTextColor(color(m.active?R.color.matrix_primary_dark:android.R.color.white));b.setOnClickListener(v->viewModel.select(m));c.addView(b,top(9));models.addView(c,space()); }
+    private void addModelCard(ModelInfo m, boolean busy) { LinearLayout c=new LinearLayout(requireContext());c.setOrientation(LinearLayout.VERTICAL);c.setBackgroundResource(R.drawable.bg_card);c.setPadding(dp(15),dp(13),dp(15),dp(13)); TextView t=new TextView(requireContext());t.setText(getString(R.string.model_card_title,m.active?getString(R.string.model_active_prefix):getString(R.string.model_inactive_prefix),m.displayName));t.setTextSize(16);t.setTypeface(Typeface.DEFAULT_BOLD);t.setTextColor(color(R.color.matrix_text));c.addView(t);c.addView(muted(getString(R.string.model_card_detail,m.modelId,m.providerId,m.available?"":getString(R.string.model_unavailable_suffix))),top(4));Button b=new Button(requireContext());b.setText(m.active?R.string.model_current:R.string.model_select);b.setEnabled(connected&&!busy&&!m.active&&m.available);b.setBackgroundResource(m.active?R.drawable.bg_outline:R.drawable.bg_primary);b.setTextColor(color(m.active?R.color.matrix_primary_dark:android.R.color.white));b.setOnClickListener(v->viewModel.select(m));c.addView(b,top(9));models.addView(c,space()); }
     private void renderControls() { boolean busy=rendered!=null&&rendered.busy; save.setEnabled(connected&&!busy); test.setEnabled(connected&&!busy&&!currentProvider().onDevice); refresh.setEnabled(connected&&!busy); }
     private TextView muted(String s){TextView v=new TextView(requireContext());v.setText(s);v.setTextColor(color(R.color.matrix_muted));v.setTextSize(13);return v;} private LinearLayout.LayoutParams top(int n){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);p.topMargin=dp(n);return p;} private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=top(0);p.bottomMargin=dp(9);return p;} private int color(int r){return ContextCompat.getColor(requireContext(),r);} private int dp(int v){return activity().dp(v);} private LauncherActivity activity(){return (LauncherActivity)requireActivity();}
     private static final class ProviderOption { final String id,label,defaultModel,defaultEndpoint; final boolean apiKeyRequired,endpointEditable,onDevice; ProviderOption(String i,String l,String m,String e,boolean key,boolean endpoint,boolean device){id=i;label=l;defaultModel=m;defaultEndpoint=e;apiKeyRequired=key;endpointEditable=endpoint;onDevice=device;} }

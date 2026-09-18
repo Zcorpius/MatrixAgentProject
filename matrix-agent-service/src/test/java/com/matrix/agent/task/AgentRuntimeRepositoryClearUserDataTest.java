@@ -508,7 +508,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget,
                 new SteerMailbox(), new AgentEngineConfiguration.Builder()
                         .auditSink(audit::persist).build());
-        return new AgentRuntimeRepository(engineFactory, provider,
+        return new AgentRuntimeRepository(engineFactory,
                 sessionManager, memoryStore, gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
                 com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE, audit);
@@ -554,7 +554,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget,
                 mailbox, AgentEngineConfiguration.defaults());
-        AgentRuntimeRepository repo = new AgentRuntimeRepository(engineFactory, provider,
+        AgentRuntimeRepository repo = new AgentRuntimeRepository(engineFactory,
                 sessionManager, memoryStore, gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
                 com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE,

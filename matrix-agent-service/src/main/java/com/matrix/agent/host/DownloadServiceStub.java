@@ -1,10 +1,8 @@
 package com.matrix.agent.host;
 
 import android.content.Context;
-import android.content.Intent;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.download.IDownloadService;
@@ -13,14 +11,19 @@ import com.matrix.agent.api.download.ModelDownloadInfo;
 import com.matrix.agent.api.model.IModelCallback;
 import com.matrix.agent.api.model.ModelOperationHandle;
 import com.matrix.agent.data.db.ModelDownloadEntity;
-import com.matrix.agent.download.DownloadService;
 import com.matrix.agent.download.ModelDownloadManager;
 import com.matrix.agent.download.ModelMarketClient;
+import com.matrix.agent.download.ModelDownloadWorkScheduler;
+import com.matrix.agent.model.ApiProtocol;
+import com.matrix.agent.model.ModelConfig;
+import com.matrix.agent.model.ModelGatewayRepository;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -28,6 +31,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+
+import okhttp3.OkHttpClient;
 
 /**
  * Host-owned MNN market, download progress and local-model lifecycle.
@@ -40,20 +46,32 @@ final class DownloadServiceStub extends IDownloadService.Stub {
     private final Context appContext;
     private final ModelDownloadManager manager;
     private final com.matrix.agent.data.db.ModelDownloadDao dao;
+    private final ModelGatewayRepository models;
+    private final ModelDownloadWorkScheduler workScheduler;
     private final PersistenceGate persistenceGate;
+    private final BooleanSupplier recoveryReady;
+    private final OkHttpClient metadataHttpClient;
     private final ModelServiceStub.CallerResolver callerResolver;
     private final ExecutorService io;
     private final ScheduledExecutorService scheduler;
     private final AtomicReference<List<CatalogEntry>> catalog;
 
     DownloadServiceStub(Context appContext, ModelDownloadManager manager,
-            com.matrix.agent.data.db.ModelDownloadDao dao, ExecutorService io,
+            com.matrix.agent.data.db.ModelDownloadDao dao, ModelGatewayRepository models,
+            ModelDownloadWorkScheduler workScheduler,
+            ExecutorService io,
             ScheduledExecutorService scheduler,
-            PersistenceGate persistenceGate, ModelServiceStub.CallerResolver callerResolver) {
+            PersistenceGate persistenceGate, BooleanSupplier recoveryReady,
+            OkHttpClient metadataHttpClient,
+            ModelServiceStub.CallerResolver callerResolver) {
         this.appContext = appContext.getApplicationContext();
         this.manager = manager;
         this.dao = dao;
+        this.models = models;
+        this.workScheduler = workScheduler;
         this.persistenceGate = persistenceGate;
+        this.recoveryReady = recoveryReady;
+        this.metadataHttpClient = metadataHttpClient;
         this.callerResolver = callerResolver;
         this.io = io;
         this.scheduler = scheduler;
@@ -62,10 +80,11 @@ final class DownloadServiceStub extends IDownloadService.Stub {
 
     @Override public List<ModelCatalogItem> listCatalog() {
         callerResolver.caller();
+        Set<String> installed = installedModelIds();
         List<ModelCatalogItem> out = new ArrayList<>();
         for (CatalogEntry entry : catalog.get()) {
             out.add(new ModelCatalogItem(entry.id, entry.name, entry.version, entry.sizeBytes,
-                    isInstalled(entry.id)));
+                    installed.contains(entry.id)));
         }
         return out;
     }
@@ -73,10 +92,14 @@ final class DownloadServiceStub extends IDownloadService.Stub {
     @Override public List<ModelDownloadInfo> listDownloads() {
         callerResolver.caller();
         List<ModelDownloadInfo> out = new ArrayList<>();
-        if (dao == null) return out;
-        for (ModelDownloadEntity item : dao.getAll()) {
-            out.add(new ModelDownloadInfo(item.modelName, mapState(item.status), item.downloadedBytes,
-                    item.totalBytes, MatrixErrorCode.SUCCESS));
+        if (dao == null || !recoveryReady.getAsBoolean()) return out;
+        try {
+            for (ModelDownloadEntity item : dao.getAll()) {
+                out.add(new ModelDownloadInfo(item.modelName, mapState(item.status), item.downloadedBytes,
+                        item.totalBytes, MatrixErrorCode.SUCCESS));
+            }
+        } catch (RuntimeException unavailable) {
+            android.util.Log.w("MatrixAgent", "[ModelDownload] list state unavailable", unavailable);
         }
         return out;
     }
@@ -91,7 +114,8 @@ final class DownloadServiceStub extends IDownloadService.Stub {
                 int code = MatrixErrorCode.SUCCESS;
                 ModelOperationHandle result;
                 try {
-                    List<CatalogEntry> refreshed = toCatalog(ModelMarketClient.fetchModels(cacheFile()));
+                    List<CatalogEntry> refreshed = toCatalog(ModelMarketClient.fetchModels(cacheFile(),
+                            metadataHttpClient));
                     if (refreshed.isEmpty()) throw new IllegalStateException("market has no downloadable models");
                     catalog.set(refreshed);
                     result = new ModelOperationHandle(safeOperation, "mnn-market",
@@ -121,10 +145,12 @@ final class DownloadServiceStub extends IDownloadService.Stub {
     @Override public ModelOperationHandle pause(String modelId, String operationId) {
         callerResolver.caller();
         HostInputValidator.requireOperationId(operationId);
-        if (!persistenceGate.isAvailable() || manager == null) {
-            return failed(operationId, modelId, MatrixErrorCode.PERSISTENCE_UNAVAILABLE, null);
+        int availability = downloadAvailabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return failed(operationId, modelId, availability, null);
         }
         manager.cancel(requireModel(modelId).id);
+        workScheduler.cancel(modelId);
         return new ModelOperationHandle(operationId, modelId, ModelOperationHandle.STATE_SUCCEEDED);
     }
 
@@ -140,18 +166,32 @@ final class DownloadServiceStub extends IDownloadService.Stub {
         callerResolver.caller();
         String safeOperation = HostInputValidator.requireOperationId(operationId);
         final CatalogEntry entry = requireModel(modelId);
-        if (!persistenceGate.isAvailable() || manager == null) {
-            return failed(safeOperation, entry.id, MatrixErrorCode.PERSISTENCE_UNAVAILABLE, callback);
+        int availability = downloadAvailabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return failed(safeOperation, entry.id, availability, callback);
         }
         try {
             ModelOperationHandle pending = new ModelOperationHandle(safeOperation, entry.id,
                     ModelOperationHandle.STATE_PENDING);
             io.execute(() -> {
                 try {
-                    manager.delete(entry.id);
+                    models.withModelMutationLock(() -> {
+                        models.withOnDeviceMutationLock(() -> {
+                            if (isActiveOnDeviceModel(entry.id)) {
+                                throw new ActiveModelDeletionException();
+                            }
+                            manager.delete(entry.id);
+                            workScheduler.cancel(entry.id);
+                            return null;
+                        });
+                        return null;
+                    });
                     notify(callback, new ModelOperationHandle(safeOperation, entry.id,
                             ModelOperationHandle.STATE_SUCCEEDED), MatrixErrorCode.SUCCESS);
-                } catch (RuntimeException failure) {
+                } catch (ActiveModelDeletionException active) {
+                    notify(callback, new ModelOperationHandle(safeOperation, entry.id,
+                            ModelOperationHandle.STATE_FAILED), MatrixErrorCode.UNSUPPORTED_OPERATION);
+                } catch (Exception failure) {
                     android.util.Log.w("MatrixAgent", "[ModelDownload] delete failed: " + entry.id,
                             failure);
                     notify(callback, new ModelOperationHandle(safeOperation, entry.id,
@@ -166,17 +206,13 @@ final class DownloadServiceStub extends IDownloadService.Stub {
 
     private ModelOperationHandle start(String modelId, String operationId, IModelCallback callback) {
         CatalogEntry entry = requireModel(modelId);
-        if (!persistenceGate.isAvailable() || manager == null) {
-            return failed(operationId, entry.id, MatrixErrorCode.PERSISTENCE_UNAVAILABLE, callback);
+        int availability = downloadAvailabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return failed(operationId, entry.id, availability, callback);
         }
         try {
-            Intent intent = new Intent(appContext, DownloadService.class)
-                    .setAction(DownloadService.ACTION_DOWNLOAD)
-                    .putExtra(DownloadService.EXTRA_MODEL_NAME, entry.id)
-                    .putExtra(DownloadService.EXTRA_MODEL_SCOPE_REPO, entry.repo)
-                    .putExtra(DownloadService.EXTRA_DESCRIPTION, entry.name)
-                    .putExtra(DownloadService.EXTRA_SIZE_GB, entry.sizeGb);
-            ContextCompat.startForegroundService(appContext, intent);
+            workScheduler.enqueue(new ModelMarketClient.ModelEntry(entry.id, entry.name,
+                    entry.sizeGb, entry.repo));
             ModelOperationHandle pending = new ModelOperationHandle(operationId, entry.id,
                     ModelOperationHandle.STATE_PENDING);
             watchCompletion(entry.id, pending, callback);
@@ -185,6 +221,22 @@ final class DownloadServiceStub extends IDownloadService.Stub {
             return failed(operationId, entry.id, MatrixErrorCode.TASK_FAILED, callback);
         }
     }
+
+    private boolean isActiveOnDeviceModel(String modelId) {
+        ModelConfig active = models.load();
+        return active != null && active.protocol == ApiProtocol.ON_DEVICE
+                && modelId.equals(active.model);
+    }
+
+    private int downloadAvailabilityError() {
+        if (!persistenceGate.isAvailable() || manager == null) {
+            return MatrixErrorCode.PERSISTENCE_UNAVAILABLE;
+        }
+        return recoveryReady.getAsBoolean() ? MatrixErrorCode.SUCCESS
+                : MatrixErrorCode.SERVICE_NOT_READY;
+    }
+
+    private static final class ActiveModelDeletionException extends Exception { }
 
     private void watchCompletion(String modelId, ModelOperationHandle pending, IModelCallback callback) {
         if (callback == null || dao == null) return;
@@ -252,9 +304,19 @@ final class DownloadServiceStub extends IDownloadService.Stub {
         if (id != null) for (CatalogEntry entry : catalog.get()) if (entry.id.equals(id)) return entry;
         throw new IllegalArgumentException("model is not in current Host market cache");
     }
-    private boolean isInstalled(String id) {
-        ModelDownloadEntity item = dao == null ? null : dao.getByName(id);
-        return item != null && "COMPLETED".equals(item.status);
+    /** One DAO snapshot prevents an N+1 query storm when the remote market has many models. */
+    private Set<String> installedModelIds() {
+        if (dao == null || !recoveryReady.getAsBoolean()) return Collections.emptySet();
+        try {
+            Set<String> installed = new HashSet<>();
+            for (ModelDownloadEntity item : dao.getAll()) {
+                if ("COMPLETED".equals(item.status)) installed.add(item.modelName);
+            }
+            return installed;
+        } catch (RuntimeException unavailable) {
+            android.util.Log.w("MatrixAgent", "[ModelDownload] installed state unavailable", unavailable);
+            return Collections.emptySet();
+        }
     }
     private static int mapState(String value) {
         if ("DOWNLOADING".equals(value)) return ModelDownloadInfo.DOWNLOAD_STATE_DOWNLOADING;

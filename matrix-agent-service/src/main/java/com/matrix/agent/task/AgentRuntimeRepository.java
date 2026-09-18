@@ -23,9 +23,6 @@ import com.matrix.agent.task.identity.VehicleStateSource;
 import com.matrix.agent.task.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
-import com.matrix.agent.voice.FinalTranscript;
-import com.matrix.agent.voice.VoiceAgentRequest;
 import com.matrix.agent.data.audit.AuditEventRecorder;
 import com.matrix.agent.data.audit.AuditRepository;
 import com.matrix.agent.data.audit.NoopAuditRepository;
@@ -49,7 +46,6 @@ public final class AgentRuntimeRepository {
      * </ul>
      */
     private static final String ARBITRATION_KEY = "demo-vehicle";
-    private final MockCapabilityProvider mockProvider;
     private final SessionManager sessionManager;
     /**
      * AgentRequest.timeoutMillis 必须用 budget.totalDeadlineMillis 作为单一权威来源,
@@ -120,30 +116,30 @@ public final class AgentRuntimeRepository {
      */
 
     public AgentRuntimeRepository(AgentEngineFactory engineFactory,
-            MockCapabilityProvider mockProvider, SessionManager sessionManager, MemoryStore memoryStore,
+            SessionManager sessionManager, MemoryStore memoryStore,
             ModelGateway initialGateway, String initialDisplayName, TaskScheduler scheduler,
             VehicleStateSource vehicleStateSource, CapabilityRegistry registry) {
-        this(engineFactory, mockProvider, sessionManager, memoryStore, initialGateway,
+        this(engineFactory, sessionManager, memoryStore, initialGateway,
                 initialDisplayName, new AgentBudget(), scheduler, vehicleStateSource, registry,
                 KeywordIntentClassifier.INSTANCE, NoopAuditRepository.INSTANCE);
     }
 
     public AgentRuntimeRepository(AgentEngineFactory engineFactory,
-            MockCapabilityProvider mockProvider, SessionManager sessionManager, MemoryStore memoryStore,
+            SessionManager sessionManager, MemoryStore memoryStore,
             ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
             TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry) {
-        this(engineFactory, mockProvider, sessionManager, memoryStore, initialGateway,
+        this(engineFactory, sessionManager, memoryStore, initialGateway,
                 initialDisplayName, budget, scheduler, vehicleStateSource, registry,
                 KeywordIntentClassifier.INSTANCE, NoopAuditRepository.INSTANCE);
     }
 
     /** 注入自定义 IntentClassifier(测试 / 未来 LLM-based 替换用)。 */
     public AgentRuntimeRepository(AgentEngineFactory engineFactory,
-            MockCapabilityProvider mockProvider, SessionManager sessionManager, MemoryStore memoryStore,
+            SessionManager sessionManager, MemoryStore memoryStore,
             ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
             TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
             IntentClassifier intentClassifier) {
-        this(engineFactory, mockProvider, sessionManager, memoryStore, initialGateway,
+        this(engineFactory, sessionManager, memoryStore, initialGateway,
                 initialDisplayName, budget, scheduler, vehicleStateSource, registry,
                 intentClassifier, NoopAuditRepository.INSTANCE);
     }
@@ -158,7 +154,7 @@ public final class AgentRuntimeRepository {
      * <p>旧 3 个构造器链默认 NoopAuditRepository.INSTANCE,现有测试 0 回归。
      */
     public AgentRuntimeRepository(AgentEngineFactory engineFactory,
-            MockCapabilityProvider mockProvider, SessionManager sessionManager, MemoryStore memoryStore,
+            SessionManager sessionManager, MemoryStore memoryStore,
             ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
             TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
             IntentClassifier intentClassifier, AuditRepository auditRepository) {
@@ -167,7 +163,6 @@ public final class AgentRuntimeRepository {
         if (registry == null) throw new IllegalArgumentException("registry 不能为空");
         if (intentClassifier == null) throw new IllegalArgumentException("intentClassifier 不能为空");
         if (auditRepository == null) throw new IllegalArgumentException("auditRepository 不能为空");
-        this.mockProvider = mockProvider;
         this.sessionManager = sessionManager;
         AgentBudget safeBudget = budget == null ? new AgentBudget() : budget;
         this.scheduler = scheduler;
@@ -208,19 +203,19 @@ public final class AgentRuntimeRepository {
     }
 
     /**
-     * 语音入口。把 {@link VoiceAgentRequest} 的 VOICE 标记、语言、置信度、
-     * 音区贯通到 {@link AgentRequest};派生逻辑(sessionId/intent/epoch/zone/vehicleState)与文本入口
-     * 复用 {@link #newRequestBuilder},执行/取消/audit 路径复用 {@link #dispatch}。
+     * Executes a host-adapted invocation while task keeps ownership of all derived request state.
+     * The caller may be voice, touch, or a future Binder adapter; this class never imports those
+     * presentation/runtime packages.
      */
-    public AgentOutcome execute(VoiceAgentRequest voiceRequest) {
-        FinalTranscript transcript = voiceRequest.transcript();
-        CancellationToken token = voiceRequest.cancellationToken();
-        AgentRequest request = newRequestBuilder(transcript.text(), voiceRequest.actor(), token)
-                .inputSource(voiceRequest.inputSource())
-                .languageTag(transcript.languageTag())
-                .asrConfidence(transcript.confidence())
-                .confidenceAvailable(transcript.confidenceAvailable())
-                .audioZoneId(voiceRequest.audioZoneId())
+    public AgentOutcome execute(AgentInvocation invocation) {
+        if (invocation == null) throw new IllegalArgumentException("invocation 不能为空");
+        CancellationToken token = invocation.cancellationToken();
+        AgentRequest request = newRequestBuilder(invocation.text(), invocation.actor(), token)
+                .inputSource(invocation.inputSource())
+                .languageTag(invocation.languageTag())
+                .asrConfidence(invocation.confidence())
+                .confidenceAvailable(invocation.confidenceAvailable())
+                .audioZoneId(invocation.audioZoneId())
                 .build();
         return dispatch(request, token);
     }
@@ -282,10 +277,6 @@ public final class AgentRuntimeRepository {
         return java.util.Collections.unmodifiableMap(result);
     }
 
-    /** Provider-facing observed state is diagnostics only; it is never PolicyEngine telemetry. */
-    public Map<String, Object> getObservedCapabilityState() {
-        return mockProvider.snapshotVehicleState();
-    }
     public Map<String, List<String>> getSessionTurns() { return sessionManager.snapshotTurns(); }
 
     /**
@@ -365,8 +356,7 @@ public final class AgentRuntimeRepository {
      *
      * <p>已落地 MemoryStore 单一权威 epoch(见 §16),也已落地"epoch 自增 + clear×2"
      * 原子操作(MemoryStore.clearUserDataAndBump,见 §17)——杜绝 check-then-act race。
-     * Steer / Tool 回写 epoch gate(让旧 epoch 的 Steer / 异步结果被拒绝)仍推迟到后续版本,
-     * 见 MatrixAgent-V0.5.0-Code-Review.md §16 / §17 跟进点。
+     * Steer 与记忆异步写回均带 epoch gate；清空后的旧 generation 不能重新写回用户域。
      */
     public void clearUserData() {
         clearUserDataDetailed();

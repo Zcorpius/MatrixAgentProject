@@ -1,7 +1,8 @@
 package com.matrix.agent.ondevice;
 
 /**
- * {@link OnDeviceLlm} 工厂。:app 的 {@code ModelGatewayRepository} 用它创建端侧 gateway。
+ * {@link OnDeviceLlm} 工厂。:matrix-agent-service 的 {@code ModelGatewayRepository} 用它创建
+ * 端侧 gateway。
  *
  * <p>创建含模型加载（耗时，几秒~几十秒），调用方必须在 worker 线程调用，
  * 完成后再热切换进 AgentRuntimeRepository（不能阻塞启动/UI）。

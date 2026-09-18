@@ -1,14 +1,15 @@
 package com.matrix.agent.ondevice;
 
 /**
- * 端侧 LLM 推理接口（:ondevice 对外的纯接口，<b>不依赖 {@code core.agent}</b>）。
+ * 端侧 LLM 推理接口（:ondevice 对外的纯接口，<b>不依赖 Host 业务实现</b>）。
  *
  * <p>实现方（{@code MnnOnDeviceLlm}）负责加载本地 MNN 模型，把 structured messages+tools JSON
  * 套进模型 chat template 并推理。{@link #generate} 是<b>同步阻塞</b>调用——调用方
  * （{@code OnDeviceModelGateway}）负责串行化（MNN session 不能并发生成）与线程调度。
  *
  * <p>生命周期：{@link #close()} 释放 native session（GB 级资源）；<b>必须等在途 generate 返回后才能调</b>，
- * 否则 use-after-free。由 {@code :app} 的 GatewayLifecycleManager 在 lease 引用归零后调用。
+ * 否则 use-after-free。由 {@code :matrix-agent-service} 的 GatewayLifecycleManager 在 lease
+ * 引用归零后调用。
  */
 public interface OnDeviceLlm {
 

@@ -24,7 +24,7 @@ public class DownloadInputValidationTest {
     }
 
     @Test
-    public void downloadUrlEscapesTheFilePathAndRejectsInvalidRepository() {
+    public void downloadUrlEscapesTheFilePathAndRejectsInvalidRepository() throws Exception {
         String url = ModelScopeClient.downloadUrl("MNN/Qwen3-0.6B-MNN", "tokenizer files/a.json");
         assertTrue(url.contains("FilePath=tokenizer+files%2Fa.json"));
         try {
@@ -33,6 +33,23 @@ public class DownloadInputValidationTest {
         } catch (IllegalArgumentException expected) {
             // Expected.
         }
+        try {
+            ModelScopeClient.listFiles("MNN/../../other", new okhttp3.OkHttpClient());
+            fail("listing must reject invalid repository before opening a connection");
+        } catch (IllegalArgumentException expected) {
+            // Expected.
+        }
+    }
+
+    @Test
+    public void metadataEndpointsMustBeExactHttpsHostsWithoutRedirectIndirection() throws Exception {
+        assertEquals("meta.alicdn.com", TrustedHttpsJson.requireEndpoint(
+                "https://meta.alicdn.com/data/mnn/apis/model_market.json", "meta.alicdn.com")
+                .getHost());
+        assertUntrustedEndpoint("http://meta.alicdn.com/market.json");
+        assertUntrustedEndpoint("https://evil.example/market.json");
+        assertUntrustedEndpoint("https://user@meta.alicdn.com/market.json");
+        assertUntrustedEndpoint("https://meta.alicdn.com:443/market.json");
     }
 
     @Test
@@ -50,6 +67,17 @@ public class DownloadInputValidationTest {
             fail("invalid remote metadata must be rejected");
         } catch (IOException expected) {
             // Expected.
+        }
+    }
+
+    private static void assertUntrustedEndpoint(String endpoint) {
+        try {
+            TrustedHttpsJson.requireEndpoint(endpoint, "meta.alicdn.com");
+            fail("endpoint must be rejected: " + endpoint);
+        } catch (IllegalArgumentException expected) {
+            // Expected.
+        } catch (Exception other) {
+            throw new AssertionError(other);
         }
     }
 }

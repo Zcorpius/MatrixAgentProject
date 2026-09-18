@@ -34,9 +34,9 @@ public interface ModelGateway {
     /**
      * 返回可取消的 ModelCall 包装。
      *
-     * <p>默认实现不挂真传输层 abort——call() 直接调 {@link #decide},abort() 仅记录 intent。
-     * 真正生效需要实现方覆盖本方法,返回带 abort 能力的 {@link CancellableModelCall}
-     * (如 LlmModelGateway 在后续版本接 OkHttp 时挂 Call.cancel)。
+     * <p>默认实现只包装 call。远端模型把同一个 request token 传给 OkHttp transport，
+     * transport 自行把 {@code Call.cancel()} 注册成 abort hook；本地或未来 Provider 若需要
+     * 额外资源终止，可覆盖本方法提供自己的 {@link CancellableModelCall}。
      *
      * <p>{@link ModelCallExecutor#decide} 优先调本方法,把 CancellableModelCall.abort 注册到
      * CancellationToken 的 abort hook,让 cancel 触发时立即调用传输层 abort。
@@ -50,7 +50,7 @@ public interface ModelGateway {
 
             @Override
             public void abort() {
-                // 默认无传输层 abort——后续版本接 OkHttp 时由 LlmModelGateway 覆盖
+                // Remote transport owns its token hook; local gateways may override if needed.
             }
         };
     }

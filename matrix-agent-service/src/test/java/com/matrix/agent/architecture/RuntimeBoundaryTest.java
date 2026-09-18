@@ -37,9 +37,46 @@ public final class RuntimeBoundaryTest {
     }
 
     @Test
+    public void taskRuntimeConsumesHostAdaptedInputNotVoiceOrMockTypes() throws IOException {
+        String repository = source("com/matrix/agent/task/AgentRuntimeRepository.java");
+        assertTrue("task runtime must expose its own input contract",
+                repository.contains("AgentInvocation"));
+        assertFalse("task must not import voice DTOs", repository.contains("com.matrix.agent.voice."));
+        assertFalse("a demo provider must not leak into the repository API",
+                repository.contains("MockCapabilityProvider"));
+
+        String graph = source("com/matrix/agent/host/TaskRuntimeGraph.java");
+        assertTrue("host graph must depend on the capability abstraction",
+                graph.contains("CapabilityProvider provider"));
+        assertFalse("host graph must not encode the demo provider type",
+                graph.contains("MockCapabilityProvider provider"));
+    }
+
+    @Test
+    public void androidEntryPointsDependOnDomainRuntimeContractsNotHostImplementations()
+            throws IOException {
+        String[] downloadEntryPoints = {
+                "com/matrix/agent/download/DownloadService.java",
+                "com/matrix/agent/download/ModelDownloadStartWorker.java",
+        };
+        for (String path : downloadEntryPoints) {
+            String source = source(path);
+            assertTrue("download entry point must use its domain runtime contract: " + path,
+                    source.contains("DownloadRuntimeProvider"));
+            assertFalse("download must not import Host implementation: " + path,
+                    source.contains("com.matrix.agent.host."));
+        }
+        String voiceOwner = source("com/matrix/agent/voice/system/SystemVoiceRuntimeOwner.java");
+        assertTrue("voice owner must use its domain runtime contract",
+                voiceOwner.contains("VoiceRuntimeProvider"));
+        assertFalse("voice system entry must not import Host implementation",
+                voiceOwner.contains("com.matrix.agent.host."));
+    }
+
+    @Test
     public void modelProtocolClientDoesNotOwnHttpConnectionLifecycle() throws IOException {
         String source = source("com/matrix/agent/model/ModelApiClient.java");
-        assertTrue("ModelApiClient must delegate to transport", source.contains("HTTP_TRANSPORT.post"));
+        assertTrue("ModelApiClient must delegate to transport", source.contains("httpTransport.post"));
         assertFalse("HTTP lifecycle belongs in JsonHttpTransport",
                 source.contains("HttpURLConnection"));
         assertTrue("OpenAI wire encoding belongs in its protocol adapter",
@@ -50,6 +87,55 @@ public final class RuntimeBoundaryTest {
                 source.contains("GeminiToolProtocol."));
         assertFalse("provider legacy implementations must not remain in the facade",
                 source.contains("ResponseLegacy"));
+    }
+
+    @Test
+    public void productionNetworkCodeUsesTheHostControlledOkHttpBoundary() throws IOException {
+        String[] paths = {
+                "com/matrix/agent/model/JsonHttpTransport.java",
+                "com/matrix/agent/download/TrustedHttpsJson.java",
+                "com/matrix/agent/download/ModelDownloadManager.java",
+                "com/matrix/agent/voice/VoskModelDownloader.java",
+        };
+        for (String path : paths) {
+            String source = source(path);
+            assertFalse("legacy HttpURLConnection must not return: " + path,
+                    source.contains("HttpURLConnection"));
+            assertTrue("network boundary must use OkHttp: " + path,
+                    source.contains("okhttp3."));
+        }
+        String metadataTransport = source("com/matrix/agent/download/TrustedHttpsJson.java");
+        assertFalse("metadata transport must not create a hidden process client",
+                metadataTransport.contains("DEFAULT_CLIENT"));
+        String apiClient = source("com/matrix/agent/model/ModelApiClient.java");
+        assertFalse("ModelApiClient production construction requires injection",
+                apiClient.contains("public ModelApiClient()"));
+    }
+
+    @Test
+    public void modelDownloadWorkIsDurableAdmissionNotAHiddenDownloader() throws IOException {
+        String scheduler = source("com/matrix/agent/download/ModelDownloadWorkScheduler.java");
+        String worker = source("com/matrix/agent/download/ModelDownloadStartWorker.java");
+        String binder = source("com/matrix/agent/host/DownloadServiceStub.java");
+        String foregroundService = source("com/matrix/agent/download/DownloadService.java");
+
+        assertTrue("download admission must be represented by durable unique work",
+                scheduler.contains("enqueueUniqueWork"));
+        assertTrue("scheduler must admit the dedicated start worker",
+                scheduler.contains("new OneTimeWorkRequest.Builder(ModelDownloadStartWorker.class)"));
+        assertTrue("admission must wait for usable network", scheduler.contains("NetworkType.CONNECTED"));
+        assertTrue("admission must respect low-storage protection",
+                scheduler.contains("setRequiresStorageNotLow(true)"));
+        assertTrue("the worker may only launch the visible transfer service",
+                worker.contains("DownloadService.start("));
+        assertFalse("WorkManager must never own byte transfer", worker.contains("manager.download("));
+        assertFalse("WorkManager must never own an HTTP client", worker.contains("okhttp3."));
+        assertTrue("Binder download requests must enter the durable admission path",
+                binder.contains("workScheduler.enqueue("));
+        assertFalse("Binder must not bypass WorkManager to start the FGS",
+                binder.contains("DownloadService.start("));
+        assertTrue("only DownloadService owns foreground-service startup",
+                foregroundService.contains("ContextCompat.startForegroundService"));
     }
 
     @Test

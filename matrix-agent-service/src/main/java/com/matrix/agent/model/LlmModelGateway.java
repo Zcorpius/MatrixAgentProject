@@ -71,8 +71,7 @@ public final class LlmModelGateway implements ModelGateway {
 
     @Override
     public ModelTurn decide(ModelTurnRequest request) {
-        // per-request zone 投影——主驾/副驾看到不同 tool 列表,
-        // 早期加的 toToolDefinitions(VehicleZone) 在后续版本才真正接入。
+        // Per-request zone projection: driver and passenger receive distinct allowed tools.
         java.util.List<ToolDefinition> tools = registry.toToolDefinitions(
                 request.getAgentRequest().getOccupantZone());
         Log.d(TAG, "[LlmGateway] decide req=" + request.getAgentRequest().getRequestId()

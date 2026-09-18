@@ -5,6 +5,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -49,15 +50,28 @@ public final class TrustedHostBinderInstrumentedTest {
             assertNotNull(agent.getModelManager());
             assertNotNull(agent.getDownloadManager());
             assertNotNull(agent.getVoiceManager());
-            AgentTaskHandle handle = manager.submit(new AgentRequest(UUID.randomUUID().toString(),
-                    "cross-apk", "状态检查", AgentRequest.INPUT_TEXT,
-                    Locale.getDefault().toLanguageTag()), event -> { });
+            AgentRequest request = new AgentRequest(UUID.randomUUID().toString(), "cross-apk",
+                    "状态检查", AgentRequest.INPUT_TEXT, Locale.getDefault().toLanguageTag());
+            AgentTaskHandle handle = awaitDurableTaskAdmission(manager, request);
             assertNotNull(handle);
             assertTrue(handle.errorCode == MatrixErrorCode.SUCCESS
                     || handle.errorCode == MatrixErrorCode.PERSISTENCE_UNAVAILABLE);
         } finally {
             agent.release();
         }
+    }
+
+    /** Recovery is fail-closed after a process replacement; retry uses one idempotency key. */
+    private static AgentTaskHandle awaitDurableTaskAdmission(MatrixAgentManager manager,
+            AgentRequest request) {
+        long deadline = SystemClock.elapsedRealtime() + 4_000L;
+        AgentTaskHandle handle;
+        do {
+            handle = manager.submit(request, event -> { });
+            if (handle != null && handle.errorCode != MatrixErrorCode.SERVICE_NOT_READY) return handle;
+            SystemClock.sleep(100L);
+        } while (SystemClock.elapsedRealtime() < deadline);
+        return handle;
     }
 
     @Test public void trustedClientReadsAndUnsubscribesVoiceStatus() throws Exception {

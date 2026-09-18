@@ -87,7 +87,7 @@ public final class SystemVoiceRuntimeOwnerTest {
     }
 
     private static AgentRuntimeRepository repo() {
-        return new AgentRuntimeRepository(gw -> null, null, null, null,
+        return new AgentRuntimeRepository(gw -> null, null, null,
                 req -> com.matrix.agent.task.ModelTurn.directAnswer("done"),
                 "owner-test", null, new TaskScheduler(1, new SessionLockManager()),
                 new MockVehicleStateSource(), CapabilityRegistry.createDemoRegistry(),

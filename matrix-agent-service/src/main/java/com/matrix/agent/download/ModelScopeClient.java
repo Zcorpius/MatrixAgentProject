@@ -3,14 +3,12 @@ package com.matrix.agent.download;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
+
+import okhttp3.OkHttpClient;
 
 /**
  * ModelScope API 客户端——列仓库文件 + 构造下载 URL。
@@ -18,23 +16,18 @@ import java.util.List;
  */
 public final class ModelScopeClient {
     private static final String BASE = "https://modelscope.cn/api/v1/models";
+    private static final String HOST = "modelscope.cn";
+    private static final int MAX_FILE_LIST_BYTES = 2 * 1024 * 1024;
 
-    /** 列出 owner/repo 仓库的所有文件（Recursive）。返回 List<FileInfo>（name/path/size）。 */
-    public static List<FileInfo> listFiles(String ownerRepo) throws Exception {
-        URL url = new URL(BASE + "/" + ownerRepo + "/repo/files?Recursive=1");
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestProperty("Accept", "application/json");
-        conn.setRequestProperty("User-Agent", "MatrixAgent/1.0");
-        conn.setConnectTimeout(15000);
-        conn.setReadTimeout(30000);
-        try {
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(conn.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
-            }
-            JSONObject root = new JSONObject(sb.toString());
+    /** Host download path injects its shared controlled client. */
+    public static List<FileInfo> listFiles(String ownerRepo, OkHttpClient httpClient) throws Exception {
+        requireRepository(ownerRepo);
+        if (httpClient == null) throw new IllegalArgumentException("httpClient 不能为空");
+        String endpoint = BASE + "/" + ownerRepo + "/repo/files?Recursive=1";
+        String response = TrustedHttpsJson.get(endpoint, HOST, "MatrixAgent/0.6", MAX_FILE_LIST_BYTES,
+                httpClient);
+        {
+            JSONObject root = new JSONObject(response);
             JSONObject data = root.optJSONObject("Data");
             JSONArray files = data != null ? data.optJSONArray("Files") : null;
             List<FileInfo> result = new ArrayList<>();
@@ -51,16 +44,12 @@ public final class ModelScopeClient {
                 }
             }
             return result;
-        } finally {
-            conn.disconnect();
         }
     }
 
     /** 构造单文件下载 URL（支持 Range）。 */
     public static String downloadUrl(String ownerRepo, String filePath) {
-        if (ownerRepo == null || !ownerRepo.matches("[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,120}")) {
-            throw new IllegalArgumentException("invalid ModelScope repository");
-        }
+        requireRepository(ownerRepo);
         if (filePath == null || filePath.isEmpty()) {
             throw new IllegalArgumentException("empty ModelScope file path");
         }
@@ -78,6 +67,13 @@ public final class ModelScopeClient {
             return URLEncoder.encode(value, "UTF-8");
         } catch (UnsupportedEncodingException impossible) {
             throw new AssertionError("UTF-8 is required by the Java runtime", impossible);
+        }
+    }
+
+    private static void requireRepository(String ownerRepo) {
+        if (ownerRepo == null
+                || !ownerRepo.matches("[A-Za-z0-9._-]{1,80}/[A-Za-z0-9._-]{1,120}")) {
+            throw new IllegalArgumentException("invalid ModelScope repository");
         }
     }
 

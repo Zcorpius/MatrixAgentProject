@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * SDK 门面生命周期 instrumentation（审计 A-116）。
  * 本类覆盖"无服务部署"环境下的可验证语义；跨 APK death/重订阅/trusted-untrusted
- * 场景由 :matrix-agent-test 承担（阶段 B 随 Host Service 落地）。
+ * 场景由 :matrix-agent-test 承担。
  * 真实执行需设备/模拟器（connectedDebugAndroidTest），CI 镜像就绪前以编译验证。
  */
 @RunWith(AndroidJUnit4.class)

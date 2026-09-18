@@ -14,6 +14,8 @@ import com.matrix.agent.voice.VoiceSessionListener;
 import com.matrix.agent.voice.VoiceSessionState;
 import com.matrix.agent.voice.WakeEvent;
 import com.matrix.agent.task.AgentRuntimeRepository;
+import com.matrix.agent.task.AgentInvocation;
+import com.matrix.agent.task.identity.InputSource;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,7 +29,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>统一持有 voice 生命周期基础设施(5 个 executor / 生命周期锁 / 前后台 / 采音恢复治理),
  * 引擎特定部分(模型下载/端口装配/native 回收)经 {@link VoiceAssemblyFactory} 注入——
- * debug 为 Vosk 工厂，阶段 3 系统入口与 JVM 测试注入各自实现。系统级语音入口
+ * release 为 Vosk 工厂，系统入口与 JVM 测试注入各自实现。系统级语音入口
  * (阶段 3 OEM/System Wake)可直接持有本对象，不依赖 Fragment。
  *
  * <p><b>生命周期锁</b>:{@link #lifecycleLock} 保护"装配+启动"与"销毁"(shutdown)互斥。
@@ -71,7 +73,12 @@ public final class VoiceRuntime {
     private final VoiceAssemblyFactory.AssemblyContext assemblyContext =
             new VoiceAssemblyFactory.AssemblyContext() {
                 @Override public Context appContext() { return app.getApplicationContext(); }
-                @Override public AgentRunner runner() { return req -> repository.execute(req); }
+                @Override public AgentRunner runner() {
+                    return req -> repository.execute(new AgentInvocation(
+                            req.transcript().text(), req.actor(), req.audioZoneId(), InputSource.VOICE,
+                            req.transcript().languageTag(), req.transcript().confidence(),
+                            req.transcript().confidenceAvailable(), req.cancellationToken()));
+                }
                 @Override public ExecutorService stateExecutor() { return VoiceRuntime.this.stateExecutor; }
                 @Override public ExecutorService agentExecutor() { return VoiceRuntime.this.agentExecutor; }
                 @Override public ScheduledExecutorService timeoutScheduler() { return VoiceRuntime.this.timeoutScheduler; }

@@ -55,6 +55,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    lint {
+        // API 36 is the project-wide approved Android baseline. Moving to a newer target
+        // requires a coordinated platform/compatibility review, not a Launcher-only bump.
+        disable += "OldTargetApi"
+    }
 }
 
 dependencies {

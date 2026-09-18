@@ -18,12 +18,15 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.function.BooleanSupplier;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 /**
  * Vosk 模型下载器。
@@ -53,22 +56,32 @@ public final class VoskModelDownloader {
     private static final int PROGRESS_THRESHOLD = 512 * 1024;
     /** 解压内层读循环取消检查间隔(大单文件 final.mdl/graph.bin 可及时停)。 */
     private static final long UNZIP_CANCEL_BYTES = 1024 * 1024;
+    /**
+     * Unknown-size specs are supported for compatibility, but must still have a hard streaming
+     * ceiling.  Otherwise a server which omits Content-Length can fill app storage before the
+     * later ZIP/SHA checks get a chance to reject it.
+     */
+    private static final long MAX_UNKNOWN_ZIP_BYTES = 1024L * 1024L * 1024L;
     /** 唯一事务目录序号(跨实例),防并发安装撞固定 .tmp 目录名。 */
     private static final java.util.concurrent.atomic.AtomicLong uidSeq = new java.util.concurrent.atomic.AtomicLong();
-    private static final int CONNECT_TIMEOUT = 15_000;
-    private static final int READ_TIMEOUT = 30_000;
 
     private final ModelDownloadDao dao; // 可空
     private final Context appContext; // 可空仅为保留纯 JVM downloader 测试构造器
+    private final OkHttpClient httpClient;
 
     public VoskModelDownloader(ModelDownloadDao dao) {
-        this(null, dao);
+        this(null, dao, new com.matrix.agent.platform.MatrixHttpClient().download());
     }
 
     /** Production constructor: supplies Android's allocatable-space service to preflight. */
     public VoskModelDownloader(Context context, ModelDownloadDao dao) {
+        this(context, dao, new com.matrix.agent.platform.MatrixHttpClient().download());
+    }
+
+    public VoskModelDownloader(Context context, ModelDownloadDao dao, OkHttpClient httpClient) {
         this.appContext = context == null ? null : context.getApplicationContext();
         this.dao = dao;
+        this.httpClient = httpClient;
     }
 
     /** active 版本目录存在且 marker 就绪。 */
@@ -222,33 +235,47 @@ public final class VoskModelDownloader {
 
     private void downloadZip(VoskModelSpec spec, File tmpZip, BooleanSupplier cancelled) throws IOException {
         checkCancelled(cancelled);
-        HttpURLConnection conn = (HttpURLConnection) new URL(spec.zipUrl).openConnection();
-        conn.setConnectTimeout(CONNECT_TIMEOUT);
-        conn.setReadTimeout(READ_TIMEOUT);
-        try {
-            long existing = tmpZip.exists() ? tmpZip.length() : 0;
-            if (existing > 0) conn.setRequestProperty("Range", "bytes=" + existing + "-");
-            int code = conn.getResponseCode();
+        long maxZipBytes = maxZipBytes(spec);
+        Request.Builder request = new Request.Builder().url(spec.zipUrl).get();
+        long existing = tmpZip.exists() ? tmpZip.length() : 0;
+            if (existing > maxZipBytes) {
+                throw new IOException("ZIP_TOO_LARGE: " + spec.name);
+            }
+            if (existing > 0) request.header("Range", "bytes=" + existing + "-");
+            Call call = httpClient.newCall(request.build());
+            try (Response response = call.execute()) {
+            int code = response.code();
             // P1-2: 仅 200/206 进入写文件;其他(429/408/5xx/4xx)抛 HTTP_<code>(不删 tmpZip,
             // 由 catch 按 isTransientNetwork 决定 PAUSED 保断点 vs FAILED 删)。
-            if (code != HttpURLConnection.HTTP_OK && code != 206) {
+            if (code != 200 && code != 206) {
                 throw new IOException("HTTP_" + code + ": " + spec.name);
             }
             boolean append = code == 206 && existing > 0;
             if (!append && tmpZip.exists() && !tmpZip.delete()) {
                 throw new IOException("TMP_DELETE_FAILED: " + spec.name);
             }
-            long contentLen = conn.getContentLength();
-            long fullTotal = append && contentLen > 0 ? existing + contentLen : contentLen;
+            long contentLen = response.body() == null ? 0 : response.body().contentLength();
             long downloaded = append ? existing : 0;
+            // Check the advertised length before opening the output file, but do not trust it:
+            // the streaming loop below performs the same bound for chunked/misreported bodies.
+            if (contentLen > 0 && contentLen > maxZipBytes - downloaded) {
+                throw new IOException("ZIP_TOO_LARGE: " + spec.name);
+            }
+            long fullTotal = append && contentLen > 0 ? safeAdd(existing, contentLen) : contentLen;
             setStatus(spec, "DOWNLOADING", downloaded, fullTotal);
-            try (InputStream in = conn.getInputStream();
+            if (response.body() == null) {
+                throw new IOException("EMPTY_RESPONSE: " + spec.name);
+            }
+            try (InputStream in = response.body().byteStream();
                  FileOutputStream out = new FileOutputStream(tmpZip, append)) {
                 byte[] buf = new byte[8192];
                 int n;
                 long lastReported = downloaded;
                 while ((n = in.read(buf)) > 0) {
                     if (cancelled.getAsBoolean()) throw new DownloadCancelledException();
+                    if (downloaded > maxZipBytes - n) {
+                        throw new IOException("ZIP_TOO_LARGE: " + spec.name);
+                    }
                     out.write(buf, 0, n);
                     downloaded += n;
                     if (downloaded - lastReported >= PROGRESS_THRESHOLD) {
@@ -257,9 +284,17 @@ public final class VoskModelDownloader {
                     }
                 }
             }
-        } finally {
-            conn.disconnect();
-        }
+            } finally {
+                call.cancel();
+            }
+    }
+
+    private static long maxZipBytes(VoskModelSpec spec) {
+        return spec.sizeBytes > 0 ? spec.sizeBytes : MAX_UNKNOWN_ZIP_BYTES;
+    }
+
+    private static long safeAdd(long left, long right) {
+        return left > Long.MAX_VALUE - right ? Long.MAX_VALUE : left + right;
     }
 
     /** 解压并 flatten(去顶层目录)。内层读循环检查取消(每 1MB)+ 解压大小上限(zip bomb 防护)。 */
@@ -268,7 +303,10 @@ public final class VoskModelDownloader {
             throw new IOException("UNZIP_DIR_FAILED: " + spec.name);
         }
         String base = destDir.getCanonicalPath();
-        long cap = spec.installSizeBytes > 0 ? spec.installSizeBytes * 2 : 0;
+        long cap = spec.installSizeBytes > 0
+                ? (spec.installSizeBytes > Long.MAX_VALUE / 2L
+                        ? Long.MAX_VALUE : spec.installSizeBytes * 2L)
+                : 0;
         long totalWritten = 0;
         long lastCancelCheck = 0;
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))) {

@@ -24,10 +24,13 @@ import com.matrix.agent.voice.VoiceSessionController;
 import java.io.File;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BooleanSupplier;
 
+import okhttp3.OkHttpClient;
+
 /**
- * Vosk 引擎装配工厂(仅 debug 源集;阶段 3 批 A 从 {@code VoiceRuntime.buildAndStart} 收敛而来)。
+ * Vosk 引擎装配工厂（release 主源集；从 {@code VoiceRuntime.buildAndStart} 收敛而来）。
  *
  * <p>{@link #prepare}:模型就绪(官方 zip 下载/SHA-256 校验/统一模型锁),锁竞争
  * (LockBusy)60s 有界退避自行接管缺失模型——对齐 follow-up1~13 的既有语义。
@@ -40,11 +43,31 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
 
     private final Application app;
     private final VoskModelDownloader downloader;
+    private final ThreadFactory captureThreadFactory;
 
     public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao) {
+        this(app, dao, runnable -> {
+            Thread thread = new Thread(runnable, "voice-capture-standalone");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /** Production Host path supplies the registry-owned capture-loop factory. */
+    public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao,
+            ThreadFactory captureThreadFactory) {
+        this(app, dao, captureThreadFactory,
+                new com.matrix.agent.platform.MatrixHttpClient().download());
+    }
+
+    /** Production Host injects its process-owned download client. */
+    public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao,
+            ThreadFactory captureThreadFactory, OkHttpClient httpClient) {
         if (app == null) throw new IllegalArgumentException("app 不能为空");
+        if (captureThreadFactory == null) throw new IllegalArgumentException("captureThreadFactory 不能为空");
         this.app = app;
-        this.downloader = new VoskModelDownloader(app, dao); // dao 可空:数据库降级时进度降级
+        this.downloader = new VoskModelDownloader(app, dao, httpClient); // dao 可空:数据库降级时进度降级
+        this.captureThreadFactory = captureThreadFactory;
     }
 
     @Override
@@ -125,7 +148,7 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
                     VoicePolicyConfig.defaults(), context.stateExecutor(), context.agentExecutor(),
                     context.timeoutScheduler(), NoopVoiceMetrics.INSTANCE);
             VoiceCaptureController capture = new VoiceCaptureController(controller, wake, asr,
-                    VoicePolicyConfig.defaults(), context.appContext());
+                    VoicePolicyConfig.defaults(), context.appContext(), captureThreadFactory);
             return new VoskAssembly(controller, capture, wake, asr, tts, holder);
         } catch (Exception e) {
             if (wake != null) try { wake.stop(); } catch (Exception ignored) { } // recognizer 先

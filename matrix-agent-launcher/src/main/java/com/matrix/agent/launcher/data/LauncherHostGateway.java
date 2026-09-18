@@ -122,6 +122,11 @@ public final class LauncherHostGateway {
         return polling.scheduleWithFixedDelay(task, delay, delay, unit);
     }
 
+    /** Schedules a bounded one-shot client retry; repository code must retain/cancel the future. */
+    public ScheduledFuture<?> schedule(@NonNull Runnable task, long delay, @NonNull TimeUnit unit) {
+        return polling.schedule(task, delay, unit);
+    }
+
     /**
      * Normalizes every SDK callback onto the Launcher main thread.
      *

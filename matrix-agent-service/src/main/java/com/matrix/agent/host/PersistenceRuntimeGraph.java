@@ -10,14 +10,15 @@ import com.matrix.agent.platform.AndroidKeyStoreMasterKeyProvider;
 import com.matrix.agent.platform.MasterKeyProvider;
 
 /**
- * Owns only the SQLCipher database boundary. Download lifecycle belongs to {@link DownloadGraph};
+ * Owns only the SQLCipher database boundary. Download lifecycle belongs to
+ * {@link DownloadRuntimeGraph};
  * this graph intentionally exposes no domain manager.
  */
-final class PersistenceGraph {
+final class PersistenceRuntimeGraph {
     private static final String TAG = "MatrixAgent";
     @Nullable private final MatrixDatabase database;
 
-    PersistenceGraph(Context appContext) {
+    PersistenceRuntimeGraph(Context appContext) {
         database = createDatabaseSafely(appContext);
     }
 
@@ -30,7 +31,7 @@ final class PersistenceGraph {
             MasterKeyProvider keyProvider = new AndroidKeyStoreMasterKeyProvider(appContext);
             return MatrixDatabase.getInstance(appContext, keyProvider);
         } catch (Exception error) {
-            Log.e(TAG, "[PersistenceGraph] encrypted database unavailable; dependent domains "
+            Log.e(TAG, "[PersistenceRuntimeGraph] encrypted database unavailable; dependent domains "
                     + "stay fail-closed", error);
             return null;
         }

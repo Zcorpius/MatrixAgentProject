@@ -20,6 +20,7 @@ import com.matrix.agent.model.ModelConfig;
 import com.matrix.agent.model.ModelGatewayRepository;
 import com.matrix.agent.model.ModelProviderPreset;
 import com.matrix.agent.task.AgentRuntimeRepository;
+import com.matrix.agent.task.identity.CancellationToken;
 import com.matrix.agent.data.db.ModelDownloadDao;
 
 import java.util.ArrayList;
@@ -98,8 +99,24 @@ final class ModelServiceStub extends IModelService.Stub {
             // Native probing may map a multi-GB model.  It must not occupy the catalog/download
             // lane, nor race an activation of the same native runtime.
             ExecutorService executor = config.protocol == ApiProtocol.ON_DEVICE ? localModel : io;
-            executor.submit(() -> models.testConnection(config))
-                    .get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            CancellationToken cancellationToken = new CancellationToken();
+            java.util.concurrent.Future<String> probe = executor.submit(
+                    () -> models.testConnection(config, cancellationToken));
+            try {
+                probe.get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException timeout) {
+                // Future.get timeout alone abandons the Binder caller but leaves a transport or
+                // MNN load running on its scarce lane.  Cancel through the domain token first
+                // (disconnect / nativeCancel), then interrupt as a secondary escape hatch.
+                cancellationToken.cancel();
+                probe.cancel(true);
+                throw timeout;
+            } catch (InterruptedException interrupted) {
+                cancellationToken.cancel();
+                probe.cancel(true);
+                Thread.currentThread().interrupt();
+                throw interrupted;
+            }
             return new ConnectionTestResult(true, android.os.SystemClock.elapsedRealtime() - started,
                     MatrixErrorCode.SUCCESS, "connection verified");
         } catch (java.util.concurrent.TimeoutException timeout) {
@@ -137,8 +154,13 @@ final class ModelServiceStub extends IModelService.Stub {
                             provisioning.provider.name, provisioning.provider.protocol,
                             provisioning.endpoint, provisioning.modelId, value,
                             provisioning.provider.apiKeyRequired);
-                    config.validate();
-                    models.save(config);
+                    // A saved configuration is also the active configuration exposed through
+                    // list/status. Build runtime dependencies before persisting, then publish
+                    // them under the same mutation lock used by selection and boot recovery.
+                    models.withModelMutationLock(() -> {
+                        activateSelectedModel(config);
+                        return null;
+                    });
                     completed = new ModelOperationHandle(safeOperation, safeProvider,
                             ModelOperationHandle.STATE_SUCCEEDED);
                 } catch (Exception error) {
@@ -177,14 +199,18 @@ final class ModelServiceStub extends IModelService.Stub {
                 int code = MatrixErrorCode.SUCCESS;
                 ModelOperationHandle finalHandle;
                 try {
-                    ModelConfig selected = configForModel(safeModel);
-                    com.matrix.agent.task.ModelGateway gateway =
-                            models.createModelGateway(selected);
-                    com.matrix.agent.task.identity.IntentClassifier classifier =
-                            models.buildIntentClassifier(selected);
-                    models.save(selected);
-                    runtime.setModelGateway(gateway, models.displayName(selected));
-                    runtime.setIntentClassifier(classifier);
+                ModelConfig selected = configForModel(safeModel);
+                    models.withModelMutationLock(() -> {
+                        if (selected.protocol == ApiProtocol.ON_DEVICE) {
+                            models.withOnDeviceMutationLock(() -> {
+                                activateSelectedModel(selected);
+                                return null;
+                            });
+                        } else {
+                            activateSelectedModel(selected);
+                        }
+                        return null;
+                    });
                     finalHandle = new ModelOperationHandle(safeOperation, safeModel,
                             ModelOperationHandle.STATE_SUCCEEDED);
                 } catch (Exception ignored) {
@@ -211,6 +237,15 @@ final class ModelServiceStub extends IModelService.Stub {
             throw new IllegalArgumentException("provider is not provisioned by host");
         }
         return current;
+    }
+
+    private void activateSelectedModel(ModelConfig selected) throws Exception {
+        com.matrix.agent.task.ModelGateway gateway = models.createModelGateway(selected);
+        com.matrix.agent.task.identity.IntentClassifier classifier =
+                models.buildIntentClassifier(selected);
+        models.save(selected);
+        runtime.setModelGateway(gateway, models.displayName(selected));
+        runtime.setIntentClassifier(classifier);
     }
 
     private ModelConfig configForModel(String modelId) {

@@ -2,7 +2,10 @@ package com.matrix.agent.client;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -35,5 +38,17 @@ public final class ConnectionPolicyTest {
         assertFalse(ContractNegotiationPolicy.isCompatible(1, 2, 4, null, 1, 3, "abc"));
         assertFalse(ContractNegotiationPolicy.isCompatible(2, 2, 4, "abc", 1, 3, "abc"));
         assertFalse(ContractNegotiationPolicy.isCompatible(1, 2, 4, "abc", 1, 5, "abc"));
+    }
+
+    @Test public void credentialUtf8EncodingDoesNotRequireImmutableSecretString() throws Exception {
+        char[] secret = new char[] {'密', '钥', 'A'};
+        byte[] encoded = ModelManager.encodeUtf8Secret(secret);
+        try {
+            assertArrayEquals("UTF-8 bytes must be preserved for the Host pipe",
+                    "密钥A".getBytes(StandardCharsets.UTF_8), encoded);
+        } finally {
+            java.util.Arrays.fill(encoded, (byte) 0);
+            java.util.Arrays.fill(secret, '\0');
+        }
     }
 }

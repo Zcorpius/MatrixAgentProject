@@ -33,7 +33,7 @@ final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
         acquirePermit();
         ReleaseGate gate = new ReleaseGate(permits);
         try {
-            return new PermitReleasingFuture(super.schedule(() -> {
+            return new PermitReleasingFuture<>(super.schedule(() -> {
                 try {
                     command.run();
                 } finally {
@@ -51,7 +51,7 @@ final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
         acquirePermit();
         ReleaseGate gate = new ReleaseGate(permits);
         try {
-            return new PermitReleasingFuture(super.schedule(() -> {
+            return new PermitReleasingFuture<>(super.schedule(() -> {
                 try {
                     return callable.call();
                 } finally {
@@ -72,7 +72,7 @@ final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
         try {
             // Preserve the interface method for callers while deliberately avoiding catch-up
             // bursts after a cached process resumes. Host periodic work is serial by design.
-            return new PermitReleasingFuture(super.scheduleWithFixedDelay(command, initialDelay,
+            return new PermitReleasingFuture<>(super.scheduleWithFixedDelay(command, initialDelay,
                     period, unit), gate);
         } catch (RuntimeException error) {
             gate.release();
@@ -86,7 +86,7 @@ final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
         acquirePermit();
         ReleaseGate gate = new ReleaseGate(permits);
         try {
-            return new PermitReleasingFuture(super.scheduleWithFixedDelay(command, initialDelay,
+            return new PermitReleasingFuture<>(super.scheduleWithFixedDelay(command, initialDelay,
                     delay, unit), gate);
         } catch (RuntimeException error) {
             gate.release();

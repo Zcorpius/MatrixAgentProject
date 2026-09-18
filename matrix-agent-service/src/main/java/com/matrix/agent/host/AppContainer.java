@@ -14,6 +14,7 @@ import com.matrix.agent.task.token.CharFallbackTokenizer;
 import com.matrix.agent.task.token.JtokkitTokenizer;
 import com.matrix.agent.task.token.Tokenizer;
 import com.matrix.agent.task.capability.CapabilityRegistry;
+import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.identity.DefaultVehicleStateSource;
 import com.matrix.agent.task.identity.ActorUsers;
 import com.matrix.agent.task.identity.IntentClassifier;
@@ -33,11 +34,14 @@ import com.matrix.agent.data.audit.AuditRepository;
 import com.matrix.agent.data.db.MatrixDatabase;
 import com.matrix.agent.data.db.ModelDownloadDao;
 import com.matrix.agent.download.ModelDownloadManager;
+import com.matrix.agent.download.ModelDownloadWorkScheduler;
+import com.matrix.agent.download.DownloadRuntime;
 import com.matrix.agent.model.ModelApiClient;
 import com.matrix.agent.model.SecureModelConfigStore;
+import com.matrix.agent.platform.MatrixHttpClient;
 
 /** Explicit composition root for replaceable runtime and platform dependencies. */
-public final class AppContainer {
+public final class AppContainer implements DownloadRuntime {
     private static final String TAG = "MatrixAgent";
     private final AgentRuntimeRepository agentRuntimeRepository;
     private final ModelGatewayRepository modelGatewayRepository;
@@ -53,8 +57,9 @@ public final class AppContainer {
      */
     private final MatrixExecutorRegistry executorRegistry;
     /** SQLCipher/database/download subgraph; separates persistence ownership from runtime wiring. */
-    private final PersistenceGraph persistenceGraph;
-    private final DownloadGraph downloadGraph;
+    private final PersistenceRuntimeGraph persistenceGraph;
+    private final DownloadRuntimeGraph downloadGraph;
+    private final MatrixHttpClient httpClient;
     /**
      * 端侧 gateway lifecycle 持有——AppContainer.shutdown 统一关闭其 drain executor。
      */
@@ -77,6 +82,7 @@ public final class AppContainer {
         // Request scheduling and model/tool I/O are different bounded pools, so nested waits remain
         // deadlock-free while every production worker has one lifecycle owner.
         this.executorRegistry = new MatrixExecutorRegistry();
+        this.httpClient = new MatrixHttpClient();
         CapabilityRegistry registry = CapabilityRegistry.createDemoRegistry();
         PolicyEngine policyEngine = new PolicyEngine(registry);
         SessionManager sessionManager = new SessionManager();
@@ -91,9 +97,10 @@ public final class AppContainer {
         vehicleStateSource = new DefaultVehicleStateSource();
         // MatrixDatabase 提前装配——audit + memory 共用同一 SQLCipher 实例
         // (getInstance 单例,keyProvider 失败 → database=null → audit/memory 均进入显式降级)。
-        this.persistenceGraph = new PersistenceGraph(appContext);
+        this.persistenceGraph = new PersistenceRuntimeGraph(appContext);
         MatrixDatabase database = persistenceGraph.database();
-        this.downloadGraph = new DownloadGraph(appContext, database);
+        this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
+                httpClient);
         // Memory graph owns the legacy migration plus the encrypted/volatile fallback boundary.
         // It is assembled before models because prompt construction needs the recaller.
         MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(appContext, database, sessionManager,
@@ -104,9 +111,9 @@ public final class AppContainer {
         if (memoryGraph.isDegraded()) {
             Log.w(TAG, "[App] volatile memory fallback active; persistent Binder writes stay gated");
         }
-        MockCapabilityProvider provider = new MockCapabilityProvider(memoryStore, memoryWriter);
+        CapabilityProvider provider = new MockCapabilityProvider(memoryStore, memoryWriter);
         ModelRuntimeGraph modelGraph = new ModelRuntimeGraph(appContext, registry, memoryStore,
-                memoryRecaller);
+                memoryRecaller, executorRegistry.modelRetirementScheduler(), httpClient);
         modelGatewayRepository = modelGraph.repository();
         ModelApiClient modelClient = modelGraph.client();
         SecureModelConfigStore configStore = modelGraph.configStore();
@@ -190,6 +197,20 @@ public final class AppContainer {
     /** 模型下载 DAO（database=null 时为 null）。 */
     @androidx.annotation.Nullable
     public ModelDownloadDao getModelDownloadDao() { return downloadGraph.dao(); }
+    /** True only after the on-disk/DAO reconciliation transaction completes. */
+    public boolean isDownloadRecoveryComplete() { return downloadGraph.isReady(); }
+    @Override public ModelDownloadManager modelDownloadManager() { return getModelDownloadManager(); }
+    @Override public ModelDownloadDao modelDownloadDao() { return getModelDownloadDao(); }
+    @Override public java.util.concurrent.ExecutorService downloadExecutor() {
+        return executorRegistry.networkExecutor();
+    }
+    @Override public java.util.concurrent.ScheduledExecutorService timerExecutor() {
+        return executorRegistry.timerScheduler();
+    }
+    /** WorkManager admission scheduler; transfer execution remains in DownloadService. */
+    public ModelDownloadWorkScheduler getModelDownloadWorkScheduler() {
+        return downloadGraph.workScheduler();
+    }
 
     /**
      * 统一关闭——Repository(取消在途)→ executor registry → auditEventRecorder。
@@ -200,6 +221,8 @@ public final class AppContainer {
      */
     /** 全局线程预算登记处；download/voice 等域统一取池，不自建。 */
     public MatrixExecutorRegistry getExecutorRegistry() { return executorRegistry; }
+    /** Process-owned network client family; only Host graphs may consume this dependency. */
+    public MatrixHttpClient getHttpClient() { return httpClient; }
 
     public void shutdown() {
         Log.i(TAG, "[App] shutdown begin");

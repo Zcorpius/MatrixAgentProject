@@ -6,6 +6,7 @@ import com.matrix.agent.task.AgentMessage;
 import com.matrix.agent.task.ModelTurn;
 import com.matrix.agent.task.capability.ToolDefinition;
 import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.platform.MatrixHttpClient;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -19,7 +20,7 @@ import java.util.List;
  */
 public final class ModelApiClient implements LlmClient {
     private static final String TAG = "MatrixAgent";
-    private static final JsonHttpTransport HTTP_TRANSPORT = new JsonHttpTransport();
+    private final JsonHttpTransport httpTransport;
 
     /**
      * 重试策略——对 RateLimitException(429)/ ServerException(5xx)
@@ -29,6 +30,17 @@ public final class ModelApiClient implements LlmClient {
      * 通过 {@link #invokeWithRetry(RetryPolicy.CallableWithRetry)} 包装。
      */
     private final RetryPolicy retryPolicy = new RetryPolicy();
+
+    /** Host composition injects its process-owned transport. */
+    public ModelApiClient(okhttp3.OkHttpClient client) {
+        if (client == null) throw new IllegalArgumentException("client 不能为空");
+        httpTransport = new JsonHttpTransport(client);
+    }
+
+    /** Convenience factory for isolated JVM tests; production must receive the Host-owned client. */
+    public static ModelApiClient forTesting() {
+        return new ModelApiClient(new MatrixHttpClient().provider());
+    }
 
     /** 测试可见——暴露当前 RetryPolicy(只读,不替换)。 */
     RetryPolicy getRetryPolicy() {
@@ -403,7 +415,7 @@ public final class ModelApiClient implements LlmClient {
         return new JSONObject().put("role", role).put("content", content);
     }
 
-    private static JSONObject post(String endpoint, JSONObject body,
+    private JSONObject post(String endpoint, JSONObject body,
             String header1, String value1, String header2, String value2) throws Exception {
         return post(endpoint, body, header1, value1, header2, value2, null);
     }
@@ -416,10 +428,10 @@ public final class ModelApiClient implements LlmClient {
      * 现在把 connection.disconnect 注册到 token.abortHook,token.cancel() 触发后立即断开 socket,
      * read 抛 IOException 提前出 finally。
      */
-    static JSONObject post(String endpoint, JSONObject body,
+    JSONObject post(String endpoint, JSONObject body,
             String header1, String value1, String header2, String value2,
             com.matrix.agent.task.identity.CancellationToken token) throws Exception {
-        return HTTP_TRANSPORT.post(endpoint, body, header1, value1, header2, value2, token);
+        return httpTransport.post(endpoint, body, header1, value1, header2, value2, token);
     }
 
 }

@@ -33,8 +33,6 @@ import com.matrix.agent.data.session.SessionLockManager;
 import com.matrix.agent.data.session.SessionManager;
 import com.matrix.agent.task.tool.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
-import com.matrix.agent.voice.FinalTranscript;
-import com.matrix.agent.voice.VoiceAgentRequest;
 import com.matrix.agent.data.audit.AuditRecord;
 import com.matrix.agent.data.audit.AuditRepository;
 
@@ -44,7 +42,7 @@ import com.matrix.agent.data.audit.AuditRepository;
  * <p>用捕获型 {@link AuditRepository} 截获 {@code AgentRuntimeRepository.dispatch} 末尾
  * {@code persist(outcome, request)} 的 {@link AgentRequest},断言:
  * <ul>
- *   <li>语音入口(execute(VoiceAgentRequest))→ inputSource=VOICE / confidenceAvailable=false /
+ *   <li>Host-adapted voice invocation → inputSource=VOICE / confidenceAvailable=false /
  *       confidence=0 / 语言与音区与输入一致;</li>
  *   <li>文本入口(execute(String,Actor,token))→ 仍 TOUCH / confidenceAvailable=true /
  *       asrConfidence=1.0(历史默认,守恒不退绿)。</li>
@@ -61,8 +59,8 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
         AgentRuntimeRepository repo = buildRepository(audit);
 
         CancellationToken token = new CancellationToken();
-        VoiceAgentRequest vreq = new VoiceAgentRequest(
-                new FinalTranscript("开空调", "zh-CN", 0f, false), token);
+        AgentInvocation vreq = new AgentInvocation("开空调", Actor.DRIVER, 0,
+                InputSource.VOICE, "zh-CN", 0f, false, token);
 
         AgentOutcome outcome = repo.execute(vreq);
         assertNotNull(outcome);
@@ -73,7 +71,7 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
         assertEquals(InputSource.VOICE, r.getInputSource());
         assertEquals("zh-CN", r.getLanguageTag());
         assertEquals(Actor.DRIVER, r.getActor());
-        assertEquals(VoiceAgentRequest.DEFAULT_DRIVER_ZONE, r.getAudioZoneId());
+        assertEquals(0, r.getAudioZoneId());
         // 核心:未知置信度绝不伪装成 1.0
         assertFalse(r.isConfidenceAvailable());
         assertEquals(0f, r.getAsrConfidence(), 0f);
@@ -113,7 +111,7 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gw -> new AgentEngine(
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox);
-        return new AgentRuntimeRepository(engineFactory, provider, sessionManager,
+        return new AgentRuntimeRepository(engineFactory, sessionManager,
                 new InMemoryMemoryStore(), gateway, "voice-meta-test", budget, scheduler,
                 stateSource, registry, KeywordIntentClassifier.INSTANCE, audit);
     }

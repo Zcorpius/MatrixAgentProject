@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.util.Log;
 
 /**
- * 系统语音入口(批 C,debug manifest 声明;release 启用等发布开关批 E):设为默认助手后,
+ * 系统语音入口（已在 release 主源集与 Manifest 声明；发布开关仍由批 E 管理）：设为默认助手后,
  * 系统侧触发(助手手势等)→ {@link #onGetSession} 会话 {@code onShow} → {@code SystemVisEntryAdapter}
  * → Coordinator → Runtime——不打开 MatrixAgent 自己的 UI、不按按钮(§6.6)。
  *

@@ -11,6 +11,7 @@ import com.matrix.agent.model.ModelConfig;
 import com.matrix.agent.model.ModelGatewayRepository;
 import com.matrix.agent.model.SecureModelConfigStore;
 import com.matrix.agent.ondevice.mnn.MnnOnDeviceLlmFactory;
+import com.matrix.agent.platform.MatrixHttpClient;
 import com.matrix.agent.task.AgentRuntimeRepository;
 import com.matrix.agent.task.capability.CapabilityRegistry;
 import com.matrix.agent.task.identity.FallbackIntentClassifier;
@@ -19,6 +20,7 @@ import com.matrix.agent.task.identity.KeywordIntentClassifier;
 import com.matrix.agent.task.identity.LlmIntentClassifier;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Model-domain composition root.
@@ -37,14 +39,15 @@ final class ModelRuntimeGraph {
     private final ModelConfig initialConfig;
 
     ModelRuntimeGraph(Context appContext, CapabilityRegistry registry, MemoryStore memoryStore,
-            MemoryRecaller memoryRecaller) {
-        client = new ModelApiClient();
+            MemoryRecaller memoryRecaller, ScheduledExecutorService deferredReleaseScheduler,
+            MatrixHttpClient httpClient) {
+        client = new ModelApiClient(httpClient.provider());
         configStore = new SecureModelConfigStore(appContext);
         // Decrypt once at startup. Both classification policy and gateway selection use this same
         // immutable snapshot; repository.load() remains the source of truth for later changes.
         initialConfig = configStore.load();
         repository = new ModelGatewayRepository(configStore, client, registry, memoryStore,
-                memoryRecaller, appContext, new MnnOnDeviceLlmFactory());
+                memoryRecaller, appContext, new MnnOnDeviceLlmFactory(deferredReleaseScheduler));
         intentClassifier = buildIntentClassifier(client, initialConfig);
     }
 
@@ -69,15 +72,22 @@ final class ModelRuntimeGraph {
         Log.i(TAG, "[ModelGraph] asynchronously loading saved on-device model");
         localModelExecutor.execute(() -> {
             try {
-                // A concurrent save wins. Never let an old startup load overwrite the user's
-                // newer model selection.
-                ModelConfig current = repository.load();
-                if (!sameModel(current, pending)) {
-                    Log.i(TAG, "[ModelGraph] saved config changed; dropping stale on-device load");
-                    return;
-                }
-                runtime.setModelGateway(repository.createModelGateway(pending),
-                        repository.displayName(pending));
+                // A concurrent provision/select wins. Recheck under the global configuration
+                // lock and then take the narrower model-file lock before native loading; an old
+                // boot task can never publish over a newer model choice.
+                repository.withModelMutationLock(() -> {
+                    repository.withOnDeviceMutationLock(() -> {
+                        ModelConfig current = repository.load();
+                        if (!sameModel(current, pending)) {
+                            Log.i(TAG, "[ModelGraph] saved config changed; dropping stale on-device load");
+                            return null;
+                        }
+                        runtime.setModelGateway(repository.createModelGateway(pending),
+                                repository.displayName(pending));
+                        return null;
+                    });
+                    return null;
+                });
                 Log.i(TAG, "[ModelGraph] on-device model loaded and activated");
             } catch (Exception error) {
                 Log.e(TAG, "[ModelGraph] on-device model load failed", error);

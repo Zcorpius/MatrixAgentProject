@@ -3,11 +3,9 @@ package com.matrix.agent.voice.system;
 import android.app.Application;
 import android.util.Log;
 
-import com.matrix.agent.host.MatrixAgentApplication;
 import com.matrix.agent.voice.WakeEvent;
 import com.matrix.agent.voice.VoiceRuntime;
 import com.matrix.agent.voice.VoiceRuntimeHolder;
-import com.matrix.agent.voice.vosk.VoskVoiceAssemblyFactory;
 
 import java.util.function.Supplier;
 
@@ -55,20 +53,13 @@ public final class SystemVoiceRuntimeOwner {
         return o;
     }
 
-    private static SystemVoiceRuntimeOwner legacyProduction(Application app) {
-        return new SystemVoiceRuntimeOwner(() -> productionRuntime(app));
-    }
-
-    /** 生产构造：executor 取自 Host 全局预算（审计 A-113），生命周期归 Registry。 */
+    /** Production construction is delegated to the Host through this domain-owned contract. */
     private static VoiceRuntime productionRuntime(Application app) {
-        com.matrix.agent.host.AppContainer container =
-                ((MatrixAgentApplication) app.getApplicationContext()).getContainer();
-        com.matrix.agent.host.MatrixExecutorRegistry registry = container.getExecutorRegistry();
-        return new VoiceRuntime(app, container.getAgentRuntimeRepository(),
-                new VoskVoiceAssemblyFactory(app, null),
-                registry.voiceDownloadExecutor(), registry.voiceStateExecutor(),
-                registry.voiceAgentExecutor(), registry.voiceLifecycleExecutor(),
-                registry.voiceTimeoutScheduler());
+        Object application = app.getApplicationContext();
+        if (!(application instanceof VoiceRuntimeProvider)) {
+            throw new IllegalStateException("application does not provide voice runtime");
+        }
+        return ((VoiceRuntimeProvider) application).createVoiceRuntime(app);
     }
 
     /**

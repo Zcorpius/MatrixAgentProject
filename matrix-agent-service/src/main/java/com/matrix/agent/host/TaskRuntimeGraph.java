@@ -28,6 +28,7 @@ import com.matrix.agent.task.SteerMailbox;
 import com.matrix.agent.task.SummaryProvider;
 import com.matrix.agent.task.TaskScheduler;
 import com.matrix.agent.task.capability.CapabilityRegistry;
+import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.identity.IntentClassifier;
 import com.matrix.agent.task.identity.KeywordMemoryIntentDetector;
 import com.matrix.agent.task.identity.VehicleStateSource;
@@ -35,7 +36,6 @@ import com.matrix.agent.task.policy.PolicyEngine;
 import com.matrix.agent.task.prompt.DefaultPromptBuilder;
 import com.matrix.agent.task.prompt.PromptContextAssembler;
 import com.matrix.agent.task.token.Tokenizer;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 
 /**
@@ -70,7 +70,7 @@ final class TaskRuntimeGraph {
                     new DefaultContextUpdater(), values.sessionLockManager, values.toolExecutor,
                     values.budget, values.steerMailbox, configuration);
         };
-        repository = new AgentRuntimeRepository(engineFactory, values.provider, values.sessionManager,
+        repository = new AgentRuntimeRepository(engineFactory, values.sessionManager,
                 values.memoryStore, new DemoModelGateway(), "离线 DemoModelGateway", values.budget,
                 values.scheduler, values.vehicleStateSource, values.registry, values.intentClassifier,
                 values.auditRepository);
@@ -90,7 +90,7 @@ final class TaskRuntimeGraph {
         ModelCallExecutor modelCallExecutor;
         PolicyEngine policyEngine;
         CapabilityRegistry registry;
-        MockCapabilityProvider provider;
+        CapabilityProvider provider;
         SessionManager sessionManager;
         SessionLockManager sessionLockManager;
         ToolExecutor toolExecutor;

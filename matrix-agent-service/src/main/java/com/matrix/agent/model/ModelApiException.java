@@ -17,6 +17,7 @@ package com.matrix.agent.model;
  *       (RetryPolicy 仅对已知临时故障重试,网络抖动按 TIMEOUT 处理走 LLM 转换终态);</li>
  *   <li>{@link TimeoutException}:OkHttp call timeout,不重试(超时通常是 prompt 太长 /
  *       Provider 慢,重试只会再次超时)。</li>
+ *   <li>{@link ResponseTooLargeException}:Provider 响应超过 Host 的内存边界，不重试。</li>
  * </ul>
  */
 public abstract class ModelApiException extends RuntimeException {
@@ -67,6 +68,13 @@ public abstract class ModelApiException extends RuntimeException {
     public static final class TimeoutException extends ModelApiException {
         public TimeoutException(String sanitizedEndpoint, Throwable cause) {
             super("timeout", 0, sanitizedEndpoint, cause);
+        }
+    }
+
+    /** Provider 响应超出受控解析上限；这是输入边界拒绝，不应重试。 */
+    public static final class ResponseTooLargeException extends ModelApiException {
+        public ResponseTooLargeException(String sanitizedEndpoint, Throwable cause) {
+            super("response-too-large", 0, sanitizedEndpoint, cause);
         }
     }
 

@@ -126,7 +126,7 @@ public final class AgentRuntimeRepositoryArbitrationSessionSplitTest {
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gw -> new AgentEngine(
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox);
-        AgentRuntimeRepository repo = new AgentRuntimeRepository(engineFactory, provider,
+        AgentRuntimeRepository repo = new AgentRuntimeRepository(engineFactory,
                 sessionManager, new InMemoryMemoryStore(), gateway, "test-gateway", budget,
                 scheduler, stateSource, registry);
         return repo;

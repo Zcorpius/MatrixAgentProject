@@ -19,8 +19,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 连接门面：只负责连接、版本协商、死亡恢复与 Manager 缓存，不承载业务。
@@ -48,6 +54,9 @@ public final class MatrixAgent {
     private final long waitTimeoutMs;
     private final ServiceLifecycleListener lifecycleListener;
     private final ServiceDiscovery serviceDiscovery;
+    /** SDK-owned lanes; never borrow a client application's main thread or Host workers. */
+    private final ExecutorService connectionExecutor = boundedExecutor("matrix-sdk-connect", 1, 1);
+    private final ExecutorService credentialPipeExecutor = boundedExecutor("matrix-sdk-credential", 1, 4);
 
     private final Object lock = new Object();
     private final Map<String, MatrixManagerBase> managerCache = new HashMap<>();
@@ -261,6 +270,8 @@ public final class MatrixAgent {
         synchronized (lock) {
             managerCache.clear();
         }
+        connectionExecutor.shutdownNow();
+        credentialPipeExecutor.shutdownNow();
         updateState(ConnectionState.DISCONNECTED);
     }
 
@@ -270,15 +281,40 @@ public final class MatrixAgent {
         if (released.get() || !connectionInFlight.compareAndSet(false, true)) {
             return;
         }
-        Thread t = new Thread(() -> {
+        try {
+            connectionExecutor.execute(() -> {
             try {
                 obtainServiceBinder();
             } finally {
                 connectionInFlight.set(false);
             }
-        }, "matrix-agent-connect");
-        t.setDaemon(true);
-        t.start();
+            });
+        } catch (RejectedExecutionException rejected) {
+            connectionInFlight.set(false);
+            if (!released.get()) updateState(ConnectionState.SERVICE_NOT_READY);
+        }
+    }
+
+    /** Runs a bounded secret-pipe writer; false means no reader was left waiting for bytes. */
+    boolean executeCredentialPipe(Runnable writer) {
+        if (released.get()) return false;
+        try {
+            credentialPipeExecutor.execute(writer);
+            return true;
+        } catch (RejectedExecutionException rejected) {
+            return false;
+        }
+    }
+
+    private static ExecutorService boundedExecutor(String name, int threads, int queueCapacity) {
+        AtomicInteger sequence = new AtomicInteger(1);
+        ThreadFactory factory = runnable -> {
+            Thread thread = new Thread(runnable, name + "-" + sequence.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        };
+        return new ThreadPoolExecutor(threads, threads, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(queueCapacity), factory, new ThreadPoolExecutor.AbortPolicy());
     }
 
     private void obtainServiceBinder() {

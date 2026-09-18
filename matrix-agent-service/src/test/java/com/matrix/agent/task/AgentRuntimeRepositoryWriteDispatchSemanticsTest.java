@@ -337,7 +337,7 @@ public final class AgentRuntimeRepositoryWriteDispatchSemanticsTest {
                 gw, modelCallExecutor, policyEngine, registry, engineProvider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox,
                 new AgentEngineConfiguration.Builder().auditSink(audit::persist).build());
-        return new AgentRuntimeRepository(engineFactory, snapshotProvider, sessionManager,
+        return new AgentRuntimeRepository(engineFactory, sessionManager,
                 new InMemoryMemoryStore(), gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
                 com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE, audit);

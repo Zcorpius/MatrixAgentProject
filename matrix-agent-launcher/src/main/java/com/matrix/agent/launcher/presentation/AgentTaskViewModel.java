@@ -24,6 +24,7 @@ public final class AgentTaskViewModel extends ViewModel {
     private final Object lock = new Object();
     private final OperationEpoch operations = new OperationEpoch();
     @Nullable private AutoCloseable subscription;
+    @Nullable private AutoCloseable pendingSubmit;
     private State current = State.initial();
 
     public AgentTaskViewModel(AgentTaskRepository repository) { this.repository = repository; }
@@ -33,10 +34,12 @@ public final class AgentTaskViewModel extends ViewModel {
     public void submit(@NonNull String text) {
         if (text.trim().isEmpty()) { update(current.withNotice(Notice.ENTER_TASK, 0)); return; }
         final long operation = operations.begin();
+        closePendingSubmit();
         closeSubscription();
         update(new State(null, 0L, null, Collections.emptyList(), Notice.SUBMITTING, 0));
-        repository.submit(text.trim(), result -> {
+        pendingSubmit = repository.submit(text.trim(), result -> {
             if (!operations.isCurrent(operation)) return;
+            closePendingSubmit();
             if (!result.isSuccess() || result.value == null) {
                 update(current.withNotice(Notice.SUBMIT_FAILED, 0));
                 return;
@@ -79,6 +82,7 @@ public final class AgentTaskViewModel extends ViewModel {
         String taskId = current.taskId;
         if (taskId == null) { update(current.withNotice(Notice.NO_ACTIVE_TASK, 0)); return; }
         final long operation = operations.begin();
+        closePendingSubmit();
         update(current.withNotice(Notice.CANCELLING, 0));
         repository.cancel(taskId, result -> {
             if (!operations.isCurrent(operation) || !taskId.equals(current.taskId)) return;
@@ -127,6 +131,11 @@ public final class AgentTaskViewModel extends ViewModel {
     private void update(@NonNull State next) { synchronized (lock) { updateLocked(next); } }
     private void updateLocked(@NonNull State next) { current = next; state.postValue(next); }
     private void closeSubscription() { synchronized (lock) { closeSubscriptionLocked(); } }
+    private void closePendingSubmit() {
+        AutoCloseable value = pendingSubmit;
+        pendingSubmit = null;
+        close(value);
+    }
     private void closeSubscriptionLocked() {
         if (subscription == null) return;
         try { subscription.close(); } catch (Exception ignored) { }
@@ -136,7 +145,7 @@ public final class AgentTaskViewModel extends ViewModel {
         if (value == null) return;
         try { value.close(); } catch (Exception ignored) { }
     }
-    @Override protected void onCleared() { closeSubscription(); }
+    @Override protected void onCleared() { closePendingSubmit(); closeSubscription(); }
 
     public enum Notice {
         IDLE, ENTER_TASK, SUBMITTING, SUBMIT_FAILED, REJECTED, ACCEPTED, SNAPSHOT,

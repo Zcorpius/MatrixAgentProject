@@ -17,7 +17,13 @@ import com.matrix.agent.api.common.MatrixErrorCode;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /** 模型域 Manager：选择与状态；下载传输走 DownloadManager。断线时返回稳定不可用结果。 */
 public final class ModelManager extends MatrixManagerBase {
@@ -92,30 +98,79 @@ public final class ModelManager extends MatrixManagerBase {
         };
         IModelService target = service;
         if (target == null) return unavailable(clientOperationId, input.providerId, bridge);
-        ParcelFileDescriptor[] pipe;
+        ParcelFileDescriptor readEnd = null;
+        ParcelFileDescriptor writeEnd = null;
+        byte[] bytes = null;
         try {
-            pipe = ParcelFileDescriptor.createPipe();
-            byte[] bytes = new String(secret).getBytes(StandardCharsets.UTF_8);
-            ModelOperationHandle handle = target.provisionCredential(input, pipe[0],
-                    clientOperationId, bridge);
-            pipe[0].close();
-            Thread writer = new Thread(() -> {
+            ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
+            readEnd = pipe[0];
+            writeEnd = pipe[1];
+            // Do not create new String(secret): that immutable copy cannot be wiped after the
+            // one-shot pipe write.  The temporary byte buffer has a clear ownership hand-off.
+            bytes = encodeUtf8Secret(secret);
+            ModelOperationHandle handle;
+            try {
+                handle = target.provisionCredential(input, readEnd, clientOperationId, bridge);
+            } finally {
+                closeQuietly(readEnd);
+                readEnd = null;
+            }
+            final ParcelFileDescriptor writerEnd = writeEnd;
+            final byte[] writerBytes = bytes;
+            Runnable writer = () -> {
                 try (java.io.FileOutputStream output = new java.io.FileOutputStream(
-                        pipe[1].getFileDescriptor())) {
-                    output.write(bytes);
+                        writerEnd.getFileDescriptor())) {
+                    output.write(writerBytes);
                     output.flush();
                 } catch (Exception ignored) {
                     // Host reports a bounded INVALID_ARGUMENT/TASK_FAILED callback if the pipe fails.
                 } finally {
-                    java.util.Arrays.fill(bytes, (byte) 0);
-                    try { pipe[1].close(); } catch (Exception ignored) { }
+                    Arrays.fill(writerBytes, (byte) 0);
+                    closeQuietly(writerEnd);
                 }
-            }, "matrix-credential-pipe");
-            writer.setDaemon(true);
-            writer.start();
+            };
+            if (!matrixAgent.executeCredentialPipe(writer)) {
+                Arrays.fill(writerBytes, (byte) 0);
+                closeQuietly(writerEnd);
+                return unavailable(clientOperationId, input.providerId, bridge);
+            }
+            // The bounded SDK lane owns both resources only after acceptance.  If it rejects,
+            // close/wipe synchronously so the Host's one-shot pipe reader observes EOF.
+            writeEnd = null;
+            bytes = null;
             return handle;
         } catch (Exception error) {
+            closeQuietly(readEnd);
+            closeQuietly(writeEnd);
+            if (bytes != null) Arrays.fill(bytes, (byte) 0);
             return unavailable(clientOperationId, input.providerId, bridge);
+        }
+    }
+
+    /** Encodes a credential without materialising its caller-owned char[] as an immutable String. */
+    static byte[] encodeUtf8Secret(char[] secret) throws CharacterCodingException {
+        CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        ByteBuffer encoded = null;
+        try {
+            encoded = encoder.encode(CharBuffer.wrap(secret));
+            byte[] copy = new byte[encoded.remaining()];
+            encoded.get(copy);
+            return copy;
+        } finally {
+            if (encoded != null && encoded.hasArray()) {
+                Arrays.fill(encoded.array(), (byte) 0);
+            }
+        }
+    }
+
+    private static void closeQuietly(ParcelFileDescriptor descriptor) {
+        if (descriptor == null) return;
+        try {
+            descriptor.close();
+        } catch (Exception ignored) {
+            // The opposite pipe end may already have been closed by Binder/Host.
         }
     }
 

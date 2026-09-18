@@ -227,6 +227,60 @@ public final class VoskModelDownloaderTest {
         }
     }
 
+    /** A server can omit Content-Length, so the downloader must enforce the size bound while streaming. */
+    @Test
+    public void download_chunkedBodyBeyondDeclaredSize_rejectedAndCleared() throws Exception {
+        ServerSocket server = startMiniBodyServer(new byte[101]);
+        try {
+            File root = Files.createTempDirectory("vosk-too-large").toFile();
+            VoskModelDownloader d = new VoskModelDownloader(null);
+            VoskModelSpec spec = new VoskModelSpec("test",
+                    "http://127.0.0.1:" + server.getLocalPort() + "/m.zip",
+                    new File(root, "model"), "conf/mfcc.conf", "test", "0.1", 100L, 100L, null);
+            try {
+                d.download(spec, () -> false);
+                fail("超过规格大小的无长度响应必须被拒绝");
+            } catch (IOException expected) {
+                assertTrue("应报告 ZIP_TOO_LARGE: " + expected.getMessage(),
+                        expected.getMessage().contains("ZIP_TOO_LARGE"));
+            }
+            assertFalse("超大下载不得保留可续传的损坏断点",
+                    new File(root, ".tmp_test_0.1.zip").exists());
+            assertFalse("超大下载不得产出模型", d.isDownloaded(spec));
+        } finally {
+            server.close();
+        }
+    }
+
+    /** Returns an HTTP/1.0 close-delimited body so HttpURLConnection reports an unknown length. */
+    private static ServerSocket startMiniBodyServer(byte[] body) throws IOException {
+        ServerSocket ss = new ServerSocket();
+        ss.bind(new InetSocketAddress("127.0.0.1", 0));
+        Thread t = new Thread(() -> {
+            try (Socket s = ss.accept()) {
+                InputStream in = s.getInputStream();
+                int previous = -1;
+                int current;
+                int newlines = 0;
+                while ((current = in.read()) != -1) {
+                    if (previous == '\r' && current == '\n') {
+                        if (++newlines == 2) break;
+                    } else if (current != '\r') {
+                        newlines = 0;
+                    }
+                    previous = current;
+                }
+                OutputStream out = s.getOutputStream();
+                out.write("HTTP/1.0 200 OK\r\n\r\n".getBytes("UTF-8"));
+                out.write(body);
+                out.flush();
+            } catch (IOException ignored) { }
+        });
+        t.setDaemon(true);
+        t.start();
+        return ss;
+    }
+
     /** accept 后立即关闭连接(不读不写)→ 客户端 read 抛 SocketException/EOFException(Connection reset)。 */
     private static ServerSocket startMiniDisconnectServer(java.util.concurrent.CountDownLatch accepted) throws IOException {
         ServerSocket ss = new ServerSocket();

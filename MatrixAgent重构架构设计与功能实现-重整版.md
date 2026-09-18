@@ -1,6 +1,7 @@
 # MatrixAgent 重构架构设计与功能实现（重整版）
 
-> 本文描述目标架构；当前代码现状见同目录《MatrixAgent当前架构与功能实现》。
+> 本文描述目标与实现边界；已落地项、架构校正与剩余风险见同目录
+> 《matrix-agent-service代码架构评审》。
 >
 > 架构参考：`/Users/zhangyongbin/Desktop/Old File/nio_packages_services_panocinema` 的 PanoCinema/service-lib/PanoBox 实现。
 
@@ -8,23 +9,25 @@
 
 ### 1.1 目标
 
-MatrixAgent 最终由四个交付物组成：
+MatrixAgent 由五个模块/交付物组成：
 
 ```text
 Service APK       com.matrix.agent
 Launcher APK      com.matrix.agent.launcher
 Binder Test APK   com.matrix.agent.test
 Maven 接口库       matrix-agent-service-lib.aar
+端侧推理库         ondevice.aar
 ```
 
-服务 APK 内有四个 Android Service，四个 AIDL，四个 Maven Manager：
+服务 APK 通过一个受签名权限保护的 Android Manager Service 发布根 Binder；根 Binder
+下有四个 AIDL 业务域与四个 Maven Manager：
 
-| Service | AIDL | 客户端 Manager | 职责 |
+| Binder 域 | AIDL | 客户端 Manager | 职责 |
 |---|---|---|---|
-| Agent Manager Service | `IMatrixAgentManager` | `MatrixAgentManager` | Agent 任务、服务发现、身份与恢复。 |
-| Model Service | `IModelService` | `ModelManager` | 模型配置、选择、端侧运行状态。 |
-| Voice Service | `IVoiceService` | `VoiceManager` | 受控语音会话与系统语音入口协调。 |
-| Download Service | `IDownloadService` | `DownloadManager` | 模型市场、下载与模型文件生命周期。 |
+| Agent Manager | `IMatrixAgentManager` | `MatrixAgentManager` | Agent 任务、服务发现、身份与恢复。 |
+| Model | `IModelService` | `ModelManager` | 模型配置、选择、端侧运行状态。 |
+| Voice | `IVoiceService` | `VoiceManager` | 受控语音会话与系统语音入口协调。 |
+| Download | `IDownloadService` | `DownloadManager` | 模型市场、下载与模型文件生命周期。 |
 
 Launcher、MatrixAgent Test 和其它获准客户端只依赖 Maven service-lib；不依赖 Service APK 的代码实现。
 
@@ -34,7 +37,9 @@ Launcher、MatrixAgent Test 和其它获准客户端只依赖 Maven service-lib�
 - 不做插件化；这是一个预装服务 APK 加独立 Launcher APK；
 - 不让 Launcher 直接使用 `AppContainer`、Room、MNN、Keystore、Provider 或内部 Android Service；
 - 第一阶段允许 `MockCapabilityProvider` 留在 main/release，支撑无 VHAL 的功能闭环：它只修改进程内模拟状态，没有真实车控副作用；真实车控接入前不得将其表述为车辆执行成功；
-- 服务 APK 内四个 Service 第一阶段同进程，不声明 `android:process`；仅在 MNN 崩溃或内存隔离成为硬需求后再拆 Model 进程。
+- `MatrixAgentManagerService` 是根 Android Service；下载 FGS 与系统语音 Android Service
+  只承载各自平台生命周期，业务 API 始终经根 Binder 获得。所有组件第一阶段同进程，
+  不声明 `android:process`；仅在 MNN 崩溃或内存隔离成为硬需求后再拆 Model 进程。
 
 ## 2. 服务整体架构
 
@@ -42,7 +47,7 @@ Launcher、MatrixAgent Test 和其它获准客户端只依赖 Maven service-lib�
 
 | 产物/模块 | namespace/applicationId | 职责 |
 |---|---|---|
-| Service APK | `com.matrix.agent` | 四个 Service、业务核心、SQLCipher 数据库、模型文件。 |
+| Service APK | `com.matrix.agent` | 根 Manager Service、四个 Binder 域、业务核心、SQLCipher 数据库、模型文件。 |
 | Launcher APK | `com.matrix.agent.launcher` | 独立 UI。 |
 | MatrixAgent Test APK | `com.matrix.agent.test` | 独立外部 Binder 测试客户端，只通过 service-lib 调用服务。 |
 | `:matrix-agent-service-lib` | `com.matrix.agent.service` | AIDL、Parcelable DTO、常量、`MatrixAgent`、四个 Manager、Java callback/listener 适配；发布 `matrix-agent-service-lib.aar`。 |
@@ -108,7 +113,7 @@ MatrixAgentManagerService
 
 `MatrixAgentManagerService` 既运行 Agent，又是其它三个 Service 的总入口。`Runtime` 只保留给内部执行实现，例如 `AgentRuntimeRepository`、TaskManager、executor；不作为对外 Service 名称。
 
-### 2.3 四个 Service 的现有迁移来源
+### 2.3 四个 Binder 域的迁移来源
 
 | 目标 Service | 复用当前源码 |
 |---|---|
@@ -136,18 +141,23 @@ MatrixAgentManagerService
 
 #### 2.4.1 Service 并发与任务模型
 
-线程资源由 Host 持有的 `MatrixExecutorRegistry` 统一登记，执行全局预算，四个 Service 不各自扩池：
+线程资源由 Host 持有的 `MatrixExecutorRegistry` 统一登记，执行全局预算，四个 Binder 域不各自扩池：
 
 | 用途 | 最大线程 | 队列 |
 |---|---|---|
 | Task Runtime | 2 | 32 |
 | Network / Download | 4 | 16 |
 | MNN Model | 1 | 2 |
-| Voice | 1 | 8 |
+| Host dispatch | 2 | 16 |
+| Voice pipeline | 4 + lifecycle 1 + capture 1 | 各串行队列 8/16；capture 为每 Runtime 至多一个受控实时线程 |
 | DB | 1 | 32 |
-| Timer / Retry | 1 | — |
+| Timer / Retry | 3 | Audit/catalog 32；Voice timeout 16；MNN retire 8，均有界 |
 
-Java worker 理论上限 10；MNN native 内部线程另行配置和统计。该预算作为 P0 骨架约束与后续 Perfetto 基线。在此预算内，Manager Service 持有任务协调器和定时线程池：
+有界业务 worker 为 15，另有 3 个单线程有界 scheduler 与 1 个会话专属实时采音线程，Java 线程理论上限
+为 19；MNN native 内部线程另行配置和统计。所有延迟队列由
+`BoundedScheduledExecutor` 限额；MNN native 调用取消后需要延迟释放时走独立的 MNN retire scheduler，
+不会被 Audit/catalog 重试挤占。该预算作为
+P0 骨架约束与后续 Perfetto 基线。在此预算内，Manager Service 持有任务协调器和定时线程池：
 
 ```java
 private final ExecutorService serviceExecutor;
@@ -203,7 +213,7 @@ Service APK 内提供一个进程级 `MatrixHttpClient`：它持有按用途配�
 
 #### 2.4.5 持久化降级
 
-Host 持有唯一的 `MatrixPersistenceGate`：SQLCipher 数据库或 Keystore 初始化失败后，四个 Service 经同一 gate 统一进入 `PERSISTENCE_UNAVAILABLE`/显式降级状态，对外返回稳定错误码；不允许 Task、Download、Audit 各自静默 fallback。可选的非权威内存缓存必须显式标记 volatile，不得用于任务、下载、确认、审计等权威状态（延续现状“显式降级、不静默改明文”的语义）。
+Host 持有唯一的 `PersistenceGate`：SQLCipher 数据库或 Keystore 初始化失败后，四个 Binder 域经同一 gate 统一进入 `PERSISTENCE_UNAVAILABLE`/显式降级状态，对外返回稳定错误码；不允许 Task、Download、Audit 各自静默 fallback。可选的非权威内存缓存必须显式标记 volatile，不得用于任务、下载、确认、审计等权威状态（延续现状“显式降级、不静默改明文”的语义）。
 
 ## 3. Binder 与对外接口
 
@@ -437,21 +447,19 @@ com.matrix.agent.client                                    客户端封装：Mat
 
 | 目标功能 | 当前目录/文件 | 重构后的归属 |
 |---|---|---|
-| Application 与组合根 | `/Users/zhangyongbin/Desktop/Learn/AI/MatrixAgent/app/src/main/java/com/matrix/agent/app/MatrixAgentApplication.java`；`app/src/main/java/com/matrix/agent/app/AppContainer.java` | Agent Manager Service 创建并持有。 |
-| Agent 请求入口、超时、取消、清数据 | `app/src/main/java/com/matrix/agent/data/AgentRuntimeRepository.java` | TaskManager 调用的核心 Runtime。 |
-| Agent 多轮循环 | `app/src/main/java/com/matrix/agent/core/agent/AgentEngine.java`；`core/agent/ModelCallExecutor.java`；`core/agent/SteerMailbox.java` | Agent Manager Service 内部执行器。 |
-| 调度与会话 | `app/src/main/java/com/matrix/agent/core/agent/TaskScheduler.java`；`core/session/` | Agent Manager Service 内部。 |
-| 能力、Schema、策略、工具 | `app/src/main/java/com/matrix/agent/core/capability/`；`core/policy/`；`core/tool/` | Agent Manager Service 内部；不发布给 Launcher。 |
-| 身份、意图、车辆状态 | `app/src/main/java/com/matrix/agent/core/identity/` | 用 CallerAuthorizer/ExecutionIdentity 替换 demo 身份来源。 |
-| 模型网关与模型配置 | `app/src/main/java/com/matrix/agent/data/ModelGatewayRepository.java`；`app/src/main/java/com/matrix/agent/platform/ModelApiClient.java`；`platform/LlmModelGateway.java`；`platform/SecureModelConfigStore.java` | Model Service。 |
-| 端侧 MNN 推理 | `app/src/main/java/com/matrix/agent/platform/OnDeviceModelGateway.java`；`/Users/zhangyongbin/Desktop/Learn/AI/MatrixAgent/ondevice/src/main/java/com/matrix/agent/ondevice/` | Model Service 私有实现。 |
-| 模型下载 | `app/src/main/java/com/matrix/agent/data/download/ModelDownloadManager.java`；`data/download/DownloadService.java`；`ModelMarketClient.java`；`ModelScopeClient.java` | Download Service。 |
-| 数据库与 DAO | `app/src/main/java/com/matrix/agent/data/db/MatrixDatabase.java`；`app/src/main/java/com/matrix/agent/data/db/` | Service APK 私有 SQLCipher Room；v4 升级 v5。 |
-| Memory | `app/src/main/java/com/matrix/agent/data/memory/`；`app/src/main/java/com/matrix/agent/core/memory/` | Agent Manager Service 内部，按 ExecutionIdentity 隔离。 |
-| Audit | `app/src/main/java/com/matrix/agent/data/audit/`；`app/src/main/java/com/matrix/agent/core/audit/` | Agent Manager Service 内部，向 Launcher 仅提供安全 snapshot。 |
-| 语音运行时 | `app/src/main/java/com/matrix/agent/data/voice/`；`app/src/main/java/com/matrix/agent/core/voice/`；`app/src/main/java/com/matrix/agent/platform/voice/` | Voice Service。 |
-| Vosk 与系统语音入口 | `matrix-agent-service/src/main/java/com/matrix/agent/voice/vosk/`；`voice/system/` | Voice Service 私有实现；release 同样受 Binder、权限与前台服务边界约束。 |
-| 当前 UI | `app/src/main/java/com/matrix/agent/MainActivity.java`；`app/src/main/java/com/matrix/agent/presentation/` | 迁移为独立 Launcher 的页面与 ViewModel，改为只调用 Manager。 |
+| Application 与组合根 | `matrix-agent-service/.../host/MatrixAgentApplication.java`；`host/AppContainer.java` | 根 Manager Service 创建并持有。 |
+| Agent 请求入口、超时、取消、清数据 | `matrix-agent-service/.../task/AgentRuntimeRepository.java` | `PersistentTaskManager` 调用的核心 Runtime。 |
+| Agent 多轮循环 | `matrix-agent-service/.../task/AgentEngine.java`；`task/ModelCallExecutor.java`；`task/SteerMailbox.java` | Agent Manager 内部执行器。 |
+| 调度与会话 | `matrix-agent-service/.../task/TaskScheduler.java`；`data/session/` | Agent Manager 内部。 |
+| 能力、Schema、策略、工具 | `matrix-agent-service/.../task/capability/`；`task/policy/`；`task/tool/` | Agent Manager 内部；不发布给 Launcher。 |
+| 身份、意图、车辆状态 | `matrix-agent-service/.../task/identity/`；`host/CallerContext.java` | 调用 UID 派生身份；OEM 再接入权威 occupant/VHAL 映射。 |
+| 模型网关与模型配置 | `matrix-agent-service/.../model/` | Model Binder 域。 |
+| 端侧 MNN 推理 | `matrix-agent-service/.../model/OnDeviceModelGateway.java`；`ondevice/src/main/java/...` | Model 域私有实现。 |
+| 模型下载 | `matrix-agent-service/.../download/`；`host/DownloadServiceStub.java` | Download Binder 域。 |
+| 数据库与 DAO | `matrix-agent-service/.../data/db/` | Service APK 私有 SQLCipher Room。 |
+| Memory / Audit | `matrix-agent-service/.../data/memory/`；`data/audit/` | Agent Manager 内部，按调用方/zone 作用域隔离。 |
+| 语音运行时 | `matrix-agent-service/.../voice/`；`host/VoiceServiceStub.java` | Voice Binder 域，release 受权限与前台服务边界约束。 |
+| UI | `matrix-agent-launcher/.../presentation/` | 独立 MVVM Launcher，仅依赖 service-lib。 |
 
 ### 4.1 Agent Manager：任务执行与持久化
 
@@ -636,7 +644,10 @@ matrix-agent-test/
 
 这样 Android Studio 中可分别选择 Service、Launcher、Test 的 Run/Instrumentation 配置；CI 也可按模块并行编译，而不是只能构建整个仓库。
 
-## 7. 实施时序
+## 7. 历史实施时序（已完成，仅作追溯）
+
+> 下列阶段记录的是本次重构的实施顺序，不代表当前待办。实际关闭状态和仍依赖
+> OEM/真机条件的验收项，以《matrix-agent-service代码架构评审》为准。
 
 ### 阶段 A：骨架与制品
 

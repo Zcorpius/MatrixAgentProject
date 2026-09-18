@@ -133,7 +133,7 @@ public final class AgentRuntimeRepositoryWriteOperationNotPreemptableTest {
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gw -> new AgentEngine(
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox);
-        return new AgentRuntimeRepository(engineFactory, provider, sessionManager,
+        return new AgentRuntimeRepository(engineFactory, sessionManager,
                 new InMemoryMemoryStore(), gateway, "test-gateway", budget, scheduler,
                 stateSource, registry);
     }

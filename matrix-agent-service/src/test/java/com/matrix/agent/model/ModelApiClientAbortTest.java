@@ -19,7 +19,7 @@ import com.matrix.agent.task.identity.CancellationToken;
  *
  * <p>旧实现 post 只检查 {@code Thread.currentThread().isInterrupted()},
  * HTTP 连接在 read 阻塞时无法被强制 abort,长响应取消后 socket 仍占用 read timeout(90s)。
- * 改为把 connection.disconnect 注册到 token.abortHook,cancel() 触发后立即断开 socket,
+ * 改为把 OkHttp Call.cancel 注册到 token.abortHook,cancel() 触发后立即断开 socket,
  * read 抛 IOException 提前出 finally。
  *
  * <p>测试:本地 ServerSocket accept 后阻塞(永不响应),post 在 read 阻塞;
@@ -58,7 +58,7 @@ public final class ModelApiClientAbortTest {
         final Throwable[] holder = new Throwable[1];
         Thread caller = new Thread(() -> {
             try {
-                ModelApiClient.post(endpoint, body, null, null, null, null, token);
+                ModelApiClient.forTesting().post(endpoint, body, null, null, null, null, token);
                 holder[0] = new AssertionError("post 应当被 abort,不该正常返回");
             } catch (Throwable error) {
                 holder[0] = error;
@@ -103,7 +103,7 @@ public final class ModelApiClientAbortTest {
         JSONObject body = new JSONObject().put("k", "v");
         Throwable thrown = null;
         try {
-            ModelApiClient.post("http://127.0.0.1:" + port + "/", body,
+            ModelApiClient.forTesting().post("http://127.0.0.1:" + port + "/", body,
                     null, null, null, null, null);
         } catch (Throwable t) {
             thrown = t;

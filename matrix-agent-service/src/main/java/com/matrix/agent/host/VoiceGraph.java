@@ -27,7 +27,8 @@ final class VoiceGraph {
      */
     private static void bootstrapRuntime(Application application) {
         if (VoiceRuntimeHolder.get() != null) return;
-        VoiceRuntime runtime = VoiceRuntimeBootstrap.getOrCreate(application);
-        if (runtime == null) throw new IllegalStateException("voice bootstrap returned null runtime");
+        if (VoiceRuntimeBootstrap.getOrCreate(application) == null) {
+            throw new IllegalStateException("voice bootstrap returned null runtime");
+        }
     }
 }

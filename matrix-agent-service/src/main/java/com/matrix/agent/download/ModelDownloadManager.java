@@ -15,8 +15,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +23,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 /**
  * 端侧 MNN 模型下载管理器——串行下载、断点续传、原子落盘。
@@ -66,8 +69,6 @@ public class ModelDownloadManager {
     private static final int BUFFER_SIZE = 8192;
     private static final long PROGRESS_UPDATE_THRESHOLD = 512L * 1024L; // 512KB
     private static final int MAX_ATTEMPTS = 3;
-    private static final int CONNECT_TIMEOUT_MS = 15000;
-    private static final int READ_TIMEOUT_MS = 30000;
     private static final String SAFE_MODEL_NAME = "[A-Za-z0-9][A-Za-z0-9._-]{0,119}";
     /** Remote metadata is input, not authority: keep one market entry bounded before disk I/O. */
     static final int MAX_FILES_PER_MODEL = 4_096;
@@ -77,9 +78,12 @@ public class ModelDownloadManager {
 
     private final Context appContext;
     private final ModelDownloadDao dao;
+    private final OkHttpClient httpClient;
 
     /** 每个模型一个取消标志；cancel() 置 true，下载循环检查后中断。 */
     private final ConcurrentHashMap<String, Boolean> cancelFlags = new ConcurrentHashMap<>();
+    /** Active transfer Call by model; cancellation closes a blocked socket immediately. */
+    private final ConcurrentHashMap<String, Call> activeCalls = new ConcurrentHashMap<>();
     /**
      * A restart/retry can be submitted while cancellation of the previous operation is still
      * being observed.  Serialising each model avoids a new download clearing the old run's cancel
@@ -88,8 +92,14 @@ public class ModelDownloadManager {
     private final ConcurrentHashMap<String, ReentrantLock> modelLocks = new ConcurrentHashMap<>();
 
     public ModelDownloadManager(@NonNull Context appContext, @NonNull ModelDownloadDao dao) {
+        this(appContext, dao, new com.matrix.agent.platform.MatrixHttpClient().download());
+    }
+
+    public ModelDownloadManager(@NonNull Context appContext, @NonNull ModelDownloadDao dao,
+            @NonNull OkHttpClient httpClient) {
         this.appContext = appContext.getApplicationContext();
         this.dao = dao;
+        this.httpClient = httpClient;
     }
 
     // ===== 公开 API =====
@@ -141,7 +151,7 @@ public class ModelDownloadManager {
             if (existed) dao.update(entity); else dao.upsert(entity);
 
             // 2. 列出仓库所有文件
-            List<ModelScopeClient.FileInfo> files = ModelScopeClient.listFiles(repo);
+            List<ModelScopeClient.FileInfo> files = ModelScopeClient.listFiles(repo, httpClient);
 
             // 3. Validate all remote metadata before creating or appending any model file.
             long totalBytes = checkedTotalBytes(files);
@@ -240,10 +250,10 @@ public class ModelDownloadManager {
      */
     public void cancel(@NonNull String modelName) {
         if (!isSafeModelName(modelName)) return;
-        Log.w("ModelDownload", "[cancel] CALLED modelName=" + modelName
-                + " thread=" + Thread.currentThread().getName()
-                + "\n" + android.util.Log.getStackTraceString(new Throwable()));
+        Log.i("ModelDownload", "[cancel] requested model=" + modelName);
         cancelFlags.put(modelName, Boolean.TRUE);
+        Call active = activeCalls.get(modelName);
+        if (active != null) active.cancel();
         // 不删 .tmp——保留断点供下次续传（之前 cancel 删 .tmp 导致从头下载）
         try {
             ModelDownloadEntity entity = dao.getByName(modelName);
@@ -432,16 +442,13 @@ public class ModelDownloadManager {
             }
             Log.i("ModelDownload", "[resume] file=" + tmpFile.getName()
                     + " existing=" + existing + " expected=" + expectedSize);
-            HttpURLConnection conn = (HttpURLConnection) new URL(downloadUrl).openConnection();
-            try {
-                conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-                conn.setReadTimeout(READ_TIMEOUT_MS);
-                conn.setRequestProperty("User-Agent", "MatrixAgent/1.0");
-                if (existing > 0) {
-                    conn.setRequestProperty("Range", "bytes=" + existing + "-");
-                }
-
-                int code = conn.getResponseCode();
+            Request.Builder request = new Request.Builder().url(downloadUrl)
+                    .header("User-Agent", "MatrixAgent/1.0");
+            if (existing > 0) request.header("Range", "bytes=" + existing + "-");
+            Call call = httpClient.newCall(request.build());
+            activeCalls.put(modelName, call);
+            try (Response response = call.execute()) {
+                int code = response.code();
                 Log.i("ModelDownload", "[resume] file=" + tmpFile.getName()
                         + " HTTP=" + code + " existing=" + existing
                         + (code == 206 ? " → APPEND(续传)" : code == 200 && existing > 0 ? " → OVERWRITE(服务端不支持Range!)" : ""));
@@ -459,12 +466,15 @@ public class ModelDownloadManager {
                 }
                 long remainingLimit = append ? fileLimit(expectedSize) - existing
                         : fileLimit(expectedSize);
-                long responseLength = conn.getContentLengthLong();
+                long responseLength = response.body() == null ? 0 : response.body().contentLength();
                 if (responseLength > remainingLimit) {
                     throw new IOException("response exceeds configured size limit: " + tmpFile.getName());
                 }
 
-                try (InputStream is = conn.getInputStream();
+                if (response.body() == null) {
+                    throw new IOException("download response has no body: " + tmpFile.getName());
+                }
+                try (InputStream is = response.body().byteStream();
                      FileOutputStream fos = new FileOutputStream(tmpFile, append)) {
                     byte[] buffer = new byte[BUFFER_SIZE];
                     int read;
@@ -508,7 +518,8 @@ public class ModelDownloadManager {
                 if (isCancelled(modelName)) throw e;
                 // 否则进入下一次重试（resume 从 tmpFile.length() 继续）
             } finally {
-                conn.disconnect();
+                activeCalls.remove(modelName, call);
+                call.cancel();
             }
         }
         throw last;

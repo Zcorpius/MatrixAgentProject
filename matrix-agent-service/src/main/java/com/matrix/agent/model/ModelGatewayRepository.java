@@ -9,6 +9,7 @@ import com.matrix.agent.task.identity.FallbackIntentClassifier;
 import com.matrix.agent.task.identity.IntentClassifier;
 import com.matrix.agent.task.identity.KeywordIntentClassifier;
 import com.matrix.agent.task.identity.LlmIntentClassifier;
+import com.matrix.agent.task.identity.CancellationToken;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.model.LlmModelGateway;
@@ -26,6 +27,7 @@ import android.content.Context;
 
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 public final class ModelGatewayRepository {
@@ -41,6 +43,16 @@ public final class ModelGatewayRepository {
     /** 端侧推理：appContext（模型目录 filesDir/models/mnn）+ 工厂；null 表示未装配端侧。 */
     private final Context appContext;
     private final OnDeviceLlmFactory onDeviceLlmFactory;
+    /** Serialises every persistent model-configuration transition, regardless of backend. */
+    private final ReentrantLock modelMutationLock = new ReentrantLock(true);
+    /** Serialises native model validation/activation with deletion of its backing directory. */
+    private final ReentrantLock onDeviceMutationLock = new ReentrantLock(true);
+
+    @FunctionalInterface
+    public interface OnDeviceMutation<T> { T run() throws Exception; }
+
+    @FunctionalInterface
+    public interface ModelMutation<T> { T run() throws Exception; }
 
     public ModelGatewayRepository(SecureModelConfigStore configStore,
             ModelApiClient modelClient, CapabilityRegistry registry) {
@@ -72,20 +84,33 @@ public final class ModelGatewayRepository {
         this.onDeviceLlmFactory = onDeviceLlmFactory;
     }
 
-    public String testConnection(ModelConfig config) throws Exception {
+    /**
+     * Probes a configured provider without persisting or activating it.  The caller owns the
+     * optional token: cancelling it interrupts a remote transport immediately and asks a native
+     * probe to stop before its temporary session is released.
+     */
+    public String testConnection(ModelConfig config, CancellationToken cancellationToken)
+            throws Exception {
         config.validate();
         if (config.protocol == ApiProtocol.ON_DEVICE) {
-            return testOnDevice(config);
+            return withOnDeviceMutationLock(() -> testOnDevice(config, cancellationToken));
         }
         Log.i(TAG, "[ModelRepo] testConnection provider=" + config.displayName
                 + " model=" + config.model + " protocol=" + config.protocol);
-        String reply = modelClient.complete(config, "你是连接测试助手。", "只回复 OK");
+        String reply = modelClient.complete(config, "你是连接测试助手。", "只回复 OK",
+                cancellationToken, Long.MAX_VALUE);
         Log.i(TAG, "[ModelRepo] testConnection OK replyChars=" + reply.length());
         return reply;
     }
 
+    /** Backwards-compatible convenience overload for local callers that do not need cancellation. */
+    public String testConnection(ModelConfig config) throws Exception {
+        return testConnection(config, null);
+    }
+
     /** 端侧测试：create(load 模型) → generate("OK") → close，验证模型可用。 */
-    private String testOnDevice(ModelConfig config) throws Exception {
+    private String testOnDevice(ModelConfig config, CancellationToken cancellationToken)
+            throws Exception {
         if (appContext == null || onDeviceLlmFactory == null) {
             throw new IllegalStateException("端侧推理未装配（缺 appContext/OnDeviceLlmFactory）");
         }
@@ -97,9 +122,12 @@ public final class ModelGatewayRepository {
         Log.i(TAG, "[ModelRepo] testOnDevice modelDir=" + modelDir);
         OnDeviceLlm llm = onDeviceLlmFactory.create(modelDir.getAbsolutePath(),
                 MnnLoadOptions.cpuDefaults());
+        Runnable abort = llm::cancel;
+        if (cancellationToken != null) cancellationToken.registerAbortHook(abort);
         try {
             com.matrix.agent.ondevice.GenerationResult r = llm.generate(
-                    "[{\"role\":\"user\",\"content\":\"只回复 OK\"}]", null, 64, () -> false);
+                    "[{\"role\":\"user\",\"content\":\"只回复 OK\"}]", null, 64,
+                    () -> cancellationToken != null && cancellationToken.isCancelled());
             if (r.finishReason == com.matrix.agent.ondevice.OnDeviceFinishReason.FAILED) {
                 throw new RuntimeException("端侧推理失败: " + r.nativeError);
             }
@@ -115,6 +143,7 @@ public final class ModelGatewayRepository {
             return "端侧加载成功 · genTokens=" + r.generatedTokens
                     + " prefillMs=" + (r.prefillUs / 1000) + " · " + text;
         } finally {
+            if (cancellationToken != null) cancellationToken.removeAbortHook(abort);
             llm.close();
         }
     }
@@ -146,6 +175,36 @@ public final class ModelGatewayRepository {
         return gateway;
     }
 
+    /**
+     * Makes state-changing operations on an on-device model atomic with its backing files.
+     * Callers must keep the critical section limited to validation/activation or deletion; native
+     * inference itself is protected by {@link OnDeviceModelGateway}'s lease protocol instead.
+     */
+    public <T> T withOnDeviceMutationLock(OnDeviceMutation<T> mutation) throws Exception {
+        if (mutation == null) throw new IllegalArgumentException("mutation required");
+        onDeviceMutationLock.lock();
+        try {
+            return mutation.run();
+        } finally {
+            onDeviceMutationLock.unlock();
+        }
+    }
+
+    /**
+     * Serialises configuration save/activation and startup recovery across cloud and on-device
+     * backends. File deletion takes this lock before the narrower on-device lock, establishing
+     * one lock order for all model lifecycle mutations.
+     */
+    public <T> T withModelMutationLock(ModelMutation<T> mutation) throws Exception {
+        if (mutation == null) throw new IllegalArgumentException("mutation required");
+        modelMutationLock.lock();
+        try {
+            return mutation.run();
+        } finally {
+            modelMutationLock.unlock();
+        }
+    }
+
     /** 端侧：model 目录 = filesDir/models/mnn/<config.model>。加载耗时，调用方须在 worker 线程。 */
     private ModelGateway createOnDeviceGateway(ModelConfig config) {
         if (appContext == null || onDeviceLlmFactory == null) {
@@ -175,9 +234,8 @@ public final class ModelGatewayRepository {
      * 用 {@link ModelConfig} 构建 {@link IntentClassifier}。
      *
      * <p>返回 {@link FallbackIntentClassifier}(LlmIntentClassifier 主路径,失败 / 低置信度退 Keyword)。
-     * 调用方({@code ModelApiViewModel.saveAndApply})在 setModelGateway 后调 setIntentClassifier,
-     * 让意图分类与新 Provider 同步切换——旧实现只切 Gateway,IntentClassifier 维持启动时的旧配置,
-     * 出现"已应用"但分类仍用 Keyword 的伪装状态。
+     * Host 的 {@code ModelServiceStub} 在同一模型变更事务内把这个分类器与 gateway 一起发布，
+     * 让意图分类与新 Provider 同步切换，避免“已应用”但分类仍使用旧配置的伪装状态。
      */
     public IntentClassifier buildIntentClassifier(ModelConfig config) {
         if (config.protocol == ApiProtocol.ON_DEVICE) {

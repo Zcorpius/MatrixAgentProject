@@ -14,8 +14,9 @@
 # 行为:
 #   1. 先在临时目录归档；全部构建成功后才替换 outputs/，失败时保留上一批产物
 #   2. 编译前先执行根级 gradle clean（已验证不会删除 ondevice/.cxx，MNN native 不重编）
-#   3. 归档文件名带版本与连续分钟时间戳，如 matrix-agent-service-debug-v0.6.0-6000-202609161730.apk
-#   4. Service/Launcher 的 debug、release 均走 platform 签名；Test 的 untrusted flavor 保留 debug 签名
+#   3. 归档文件名带版本与连续分钟时间戳
+#   4. 归档前用 apksigner 验证：Service/Launcher 与 trustedRelease Test 必须等于当前
+#      platform 证书；所有 Test debug 与 untrusted Test 必须不等于 platform 证书
 
 set -euo pipefail
 
@@ -32,6 +33,85 @@ read_version_property() {
         exit 1
     fi
     printf '%s' "$value"
+}
+
+require_file() {
+    local path="$1"
+    local description="$2"
+    if [[ ! -s "$path" ]]; then
+        echo "错误: 缺少或为空的${description}: $path" >&2
+        exit 1
+    fi
+}
+
+platform_cert_fingerprint() {
+    local certificate="$1"
+    require_file "$certificate" "platform 证书"
+    local result
+    result="$(openssl x509 -in "$certificate" -noout -fingerprint -sha256 2>/dev/null \
+        | awk -F= 'NF == 2 { gsub(":", "", $2); print tolower($2); exit }')"
+    if ! [[ "$result" =~ ^[0-9a-f]{64}$ ]]; then
+        echo "错误: 无法读取 platform 证书指纹: $certificate" >&2
+        exit 1
+    fi
+    printf '%s' "$result"
+}
+
+find_apksigner() {
+    local sdk_root=""
+    if [[ -f "$ROOT/local.properties" ]]; then
+        sdk_root="$(awk -F= '$1 == "sdk.dir" { print substr($0, index($0, "=") + 1); exit }' "$ROOT/local.properties")"
+    fi
+    sdk_root="${sdk_root:-${ANDROID_HOME:-}}"
+    if [[ -z "$sdk_root" ]]; then
+        echo "错误: 无法定位 Android SDK（需 local.properties sdk.dir 或 ANDROID_HOME）" >&2
+        exit 1
+    fi
+    local tool=""
+    local build_tools_dir
+    for build_tools_dir in "$sdk_root"/build-tools/*; do
+        if [[ -x "$build_tools_dir/apksigner" ]]; then
+            tool="$build_tools_dir/apksigner"
+        fi
+    done
+    if [[ -z "$tool" ]]; then
+        echo "错误: Android SDK 中没有可执行 apksigner" >&2
+        exit 1
+    fi
+    printf '%s' "$tool"
+}
+
+apk_cert_fingerprint() {
+    local apk="$1"
+    local result
+    result="$($APKSIGNER verify --verbose --print-certs "$apk" 2>/dev/null \
+        | awk -F: '/Signer #1 certificate SHA-256 digest:/{ gsub(/[[:space:]]/, "", $2); print tolower($2); exit }')"
+    if ! [[ "$result" =~ ^[0-9a-f]{64}$ ]]; then
+        echo "错误: APK 签名校验失败或无法读取证书: $apk" >&2
+        exit 1
+    fi
+    printf '%s' "$result"
+}
+
+verify_apk_signing() {
+    local module="$1"
+    local apk="$2"
+    local expected actual
+    expected="$(platform_cert_fingerprint "$ROOT/$module/tools/key/platform.x509.pem")"
+    actual="$(apk_cert_fingerprint "$apk")"
+    local requires_platform=true
+    if [[ "$module" == "matrix-agent-test" && ( "$apk" == *untrusted* || "$apk" == */debug/* ) ]]; then
+        requires_platform=false
+    fi
+    if [[ "$requires_platform" == false ]]; then
+        if [[ "$actual" == "$expected" ]]; then
+            echo "错误: 非可信 Test APK 意外使用了 platform 签名: $apk" >&2
+            exit 1
+        fi
+    elif [[ "$actual" != "$expected" ]]; then
+        echo "错误: APK 未使用当前模块的 platform 证书: $apk" >&2
+        exit 1
+    fi
 }
 
 usage() {
@@ -88,6 +168,13 @@ case "$target" in
     all) modules="matrix-agent-service matrix-agent-launcher matrix-agent-test" ;;
 esac
 
+for m in $modules; do
+    require_file "$ROOT/$m/tools/key/platform.p12" "platform 密钥库"
+    require_file "$ROOT/$m/tools/key/signing.properties" "platform 签名配置"
+    require_file "$ROOT/$m/tools/key/platform.x509.pem" "platform 证书"
+done
+APKSIGNER="$(find_apksigner)"
+
 # 同一次运行共享版本与连续分钟时间戳，标识同一批产物。
 VERSION_NAME="$(read_version_property MATRIX_VERSION_NAME)"
 VERSION_CODE="$(read_version_property MATRIX_VERSION_CODE)"
@@ -116,7 +203,7 @@ for m in $modules; do
     tasks="$tasks :$m:assemble$variant_cap"
 done
 echo
-echo "==> ./gradlew$tasks"
+echo "==> ./gradlew $tasks"
 ./gradlew $tasks
 
 # 3. 从各模块 build/outputs/apk 收集所选变体的 APK，先归档到临时目录。
@@ -131,6 +218,7 @@ collect_module() {
     while IFS= read -r -d '' apk; do
         local base
         base="$(basename "$apk" .apk)"
+        verify_apk_signing "$module" "$apk"
         cp "$apk" "$STAGE_DIR/${base}-${VERSION_TAG}-${STAMP}.apk"
         echo "    + ${base}-${VERSION_TAG}-${STAMP}.apk"
         count=$((count + 1))

@@ -1,5 +1,7 @@
 import java.security.MessageDigest
 
+private val matrixVersionName = providers.gradleProperty("MATRIX_VERSION_NAME").get()
+
 plugins {
     alias(libs.plugins.android.library)
     id("maven-publish")
@@ -38,14 +40,14 @@ tasks.withType<Jar>().configureEach {
     }
 }
 
-// Maven 坐标占位（com.matrix.agent:matrix-agent-service-lib），版本随 toml 统一管理；
+// Maven 坐标（com.matrix.agent:matrix-agent-service-lib）与三个 APK 使用同一个根版本；
 // 仓库地址与凭据经 gradle property 注入（不落明文），缺省仅 publishToMavenLocal。
 publishing {
     publications {
         create<MavenPublication>("release") {
             groupId = "com.matrix.agent"
             artifactId = "matrix-agent-service-lib"
-            version = libs.versions.matrixAgentServiceLib.get()
+            version = matrixVersionName
             afterEvaluate {
                 from(components["release"])
             }
@@ -55,7 +57,7 @@ publishing {
 
 // ── contractHash 生成（审计 A-105）─────────────────────────────────────────
 // 对 AIDL 与公开 api Java（Parcelable/常量）做确定性规范化（排序 + 去注释去空白）
-// 后取 SHA-256，生成 ContractVersion 常量类；服务端（阶段 B）以同一任务产物对齐。
+// 后取 SHA-256，生成 ContractVersion 常量类；Host 以同一任务产物对齐。
 // 内容变化 ⇒ hash 变化 ⇒ 协商拒绝，阻断 "major 相同、接口产物不一致" 的组合。
 val contractGenDir = layout.buildDirectory.dir("generated/contractVersion")
 val generateContractHash = tasks.register("generateContractHash") {
@@ -107,7 +109,7 @@ public final class ContractVersion {
 android {
     sourceSets {
         getByName("main") {
-            java.srcDir("$buildDir/generated/contractVersion")
+            java.directories.add(contractGenDir.get().asFile.absolutePath)
         }
     }
 }
@@ -124,7 +126,7 @@ tasks.register("verifyPublishedPom") {
     doLast {
         val group = "com/matrix/agent"
         val artifact = "matrix-agent-service-lib"
-        val version = libs.versions.matrixAgentServiceLib.get()
+        val version = matrixVersionName
         val base = System.getProperty("user.home") + "/.m2/repository/$group/$artifact/$version"
         for (fileName in listOf("$artifact-$version.pom", "$artifact-$version.module")) {
             val f = File(base, fileName)

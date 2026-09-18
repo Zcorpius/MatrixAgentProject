@@ -410,7 +410,7 @@ public final class VoiceRuntimeTest {
 
     /** repository 仅满足构造非空校验,恢复路径不触达(engine/gateway 仅占位,runner 不被调用)。 */
     private static AgentRuntimeRepository dummyRepository() {
-        return new AgentRuntimeRepository(gw -> null, null, null, null,
+        return new AgentRuntimeRepository(gw -> null, null, null,
                 req -> com.matrix.agent.task.ModelTurn.directAnswer("done"),
                 "runtime-recovery-test", null,
                 new TaskScheduler(1, new SessionLockManager()), new MockVehicleStateSource(),

@@ -15,23 +15,25 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
-import com.matrix.agent.host.AppContainer;
-import com.matrix.agent.host.MatrixAgentApplication;
 import com.matrix.agent.data.db.ModelDownloadDao;
 import com.matrix.agent.data.db.ModelDownloadEntity;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 端侧模型下载前台服务——在专用线程池跑 {@link ModelDownloadManager#download}，通知栏显示
  * 进度文字（百分比）。下载完成/失败后 {@link #stopSelf}。
  *
- * <p><b>线程模型</b>：下载线程与进度轮询线程跑在 Host 全局预算的
- * {@link MatrixExecutorRegistry#networkExecutor()}（network/download 4 线程/16 队列）上，
- * 与 Agent 的 task 池物理隔离；本 Service 不再自建池（审计 A-113 收敛）。
+ * <p><b>线程模型</b>：阻塞下载跑在 Host 全局 network/download 预算
+ * ({@link MatrixExecutorRegistry#networkExecutor()}，4 线程/16 队列)；进度观察复用 Host
+ * 有界 timer，不以 {@code sleep} 长时间占用网络 worker。本 Service 不自建线程（审计 A-113）。
  *
  * <p><b>foregroundServiceType</b>：manifest 已声明 {@code dataSync}，targetSdk 36 要求
  * startForeground 显式传 {@link ServiceInfo#FOREGROUND_SERVICE_TYPE_DATA_SYNC}（API 30+ 走
@@ -60,6 +62,17 @@ public final class DownloadService extends Service {
     private final AtomicLong nextRunId = new AtomicLong();
     @Nullable private volatile DownloadRun currentRun;
 
+    /** Shared entry point for the Binder and its constraint-aware WorkManager admission worker. */
+    public static void start(@NonNull Context context, @NonNull ModelMarketClient.ModelEntry entry) {
+        Intent intent = new Intent(context, DownloadService.class)
+                .setAction(ACTION_DOWNLOAD)
+                .putExtra(EXTRA_MODEL_NAME, entry.modelName)
+                .putExtra(EXTRA_MODEL_SCOPE_REPO, entry.modelScopeRepo)
+                .putExtra(EXTRA_DESCRIPTION, entry.description)
+                .putExtra(EXTRA_SIZE_GB, entry.sizeGb);
+        ContextCompat.startForegroundService(context, intent);
+    }
+
     @Nullable
     @Override
     public IBinder onBind(@Nullable Intent intent) {
@@ -85,9 +98,9 @@ public final class DownloadService extends Service {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
-        AppContainer container = appContainer();
-        ModelDownloadManager manager = container != null ? container.getModelDownloadManager() : null;
-        ModelDownloadDao dao = container != null ? container.getModelDownloadDao() : null;
+        DownloadRuntime runtime = downloadRuntime();
+        ModelDownloadManager manager = runtime != null ? runtime.modelDownloadManager() : null;
+        ModelDownloadDao dao = runtime != null ? runtime.modelDownloadDao() : null;
         if (manager == null || dao == null) {
             // database=null（SQLCipher/KeyStore 不可用）的降级路径——下载功能依赖 DAO 落进度。
             Log.w(TAG, "[DownloadService] manager/dao unavailable (DB degraded), stop");
@@ -116,7 +129,7 @@ public final class DownloadService extends Service {
 
         ExecutorService pool = workExecutor();
         try {
-            pool.execute(() -> pollProgress(run, dao));
+            scheduleProgressPoll(run, dao);
             pool.execute(() -> runDownload(run, entry, manager));
         } catch (java.util.concurrent.RejectedExecutionException e) {
             // network 池饱和（4 线程/16 队列满）：不向 Service 主线程冒泡崩溃，
@@ -129,29 +142,26 @@ public final class DownloadService extends Service {
         return START_NOT_STICKY;
     }
 
-    /** 周期性读 DAO 进度，更新通知文字。见到终态即退出。 */
-    private void pollProgress(@NonNull DownloadRun run, ModelDownloadDao dao) {
-        while (isCurrent(run)) {
+    /** Bounded timer polling; every run owns and cancels its own future. */
+    private void scheduleProgressPoll(@NonNull DownloadRun run, ModelDownloadDao dao) {
+        ScheduledFuture<?> future = progressScheduler().scheduleWithFixedDelay(() -> {
+            if (!isCurrent(run)) {
+                cancelProgressPoll(run);
+                return;
+            }
             try {
                 ModelDownloadEntity e = dao.getByName(run.modelName);
-                if (e != null) {
-                    int pct = computePct(e);
-                    notifyProgress(run.modelName, pct,
-                            subTextForStatus(e.status, run.modelName, pct));
-                    if (isTerminal(e.status)) {
-                        // The worker performs final notification/lifetime cleanup.  The poller
-                        // must not finish a run that could have been superseded meanwhile.
-                        break;
-                    }
-                }
-                Thread.sleep(POLL_INTERVAL_MS);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                return;
+                if (e == null) return;
+                int pct = computePct(e);
+                notifyProgress(run.modelName, pct, subTextForStatus(e.status, run.modelName, pct));
+                if (isTerminal(e.status)) cancelProgressPoll(run);
             } catch (Exception e) {
                 Log.w(TAG, "[DownloadService] poll error: " + e.getMessage());
             }
-        }
+        }, 0L, POLL_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> previous = run.progressPoll.getAndSet(future);
+        if (previous != null) previous.cancel(false);
+        if (!isCurrent(run)) cancelProgressPoll(run);
     }
 
     /** 实际下载任务——阻塞调 manager.download，结束后置终态通知 + stopSelf。 */
@@ -186,17 +196,18 @@ public final class DownloadService extends Service {
     public void onDestroy() {
         // 与首次启动失败路径（A-008）同一合规语义：服务被系统 stop（Android 15+ dataSync
         // 限制等）后，失去前台资格的分钟级下载不得在 Host 池中隐形续跑。
-        // cancel 会保留 .tmp 断点与 DAO 状态，用户可重新发起（WorkManager 编排为阶段 B 项）。
+        // cancel 会保留 .tmp 断点与 DAO 状态；WorkManager 仅负责编排下一次受约束的显式启动。
         DownloadRun run;
         synchronized (runLock) {
             run = currentRun;
             currentRun = null;
             if (run != null) run.active.set(false);
         }
+        if (run != null) cancelProgressPoll(run);
         if (run != null) {
-            AppContainer container = appContainer();
+            DownloadRuntime runtime = downloadRuntime();
             ModelDownloadManager manager =
-                    container != null ? container.getModelDownloadManager() : null;
+                    runtime != null ? runtime.modelDownloadManager() : null;
             if (manager != null) {
                 try {
                     manager.cancel(run.modelName);
@@ -221,7 +232,10 @@ public final class DownloadService extends Service {
         synchronized (runLock) {
             previous = currentRun;
             currentRun = next;
-            if (previous != null) previous.active.set(false);
+            if (previous != null) {
+                previous.active.set(false);
+                cancelProgressPoll(previous);
+            }
         }
         if (previous != null) {
             try {
@@ -245,6 +259,7 @@ public final class DownloadService extends Service {
             run.active.set(false);
             if (ownsRun) currentRun = null;
         }
+        cancelProgressPoll(run);
         if (ownsRun) {
             // Do not let an older start command stop a later start command.
             stopSelfResult(run.startId);
@@ -256,6 +271,7 @@ public final class DownloadService extends Service {
         final String modelName;
         final int startId;
         final AtomicBoolean active = new AtomicBoolean(true);
+        final AtomicReference<ScheduledFuture<?>> progressPoll = new AtomicReference<>();
 
         DownloadRun(long id, String modelName, int startId) {
             this.id = id;
@@ -320,9 +336,9 @@ public final class DownloadService extends Service {
     // ===== 辅助 =====
 
     @Nullable
-    private AppContainer appContainer() {
+    private DownloadRuntime downloadRuntime() {
         try {
-            return ((MatrixAgentApplication) getApplication()).getContainer();
+            return ((DownloadRuntimeProvider) getApplication()).downloadRuntime();
         } catch (ClassCastException e) {
             return null;
         }
@@ -330,8 +346,8 @@ public final class DownloadService extends Service {
 
     @Nullable
     private ModelDownloadDao getDaoSafely() {
-        AppContainer c = appContainer();
-        return c != null ? c.getModelDownloadDao() : null;
+        DownloadRuntime runtime = downloadRuntime();
+        return runtime != null ? runtime.modelDownloadDao() : null;
     }
 
     private static int computePct(ModelDownloadEntity e) {
@@ -363,10 +379,24 @@ public final class DownloadService extends Service {
     /** 下载执行池：Host 全局预算的 network/download 池（4/16），本 Service 不再自建池。 */
     @NonNull
     private ExecutorService workExecutor() {
-        AppContainer container = appContainer();
-        if (container == null || container.getExecutorRegistry() == null) {
-            throw new IllegalStateException("executor registry unavailable");
+        DownloadRuntime runtime = downloadRuntime();
+        if (runtime == null || runtime.downloadExecutor() == null) {
+            throw new IllegalStateException("download runtime unavailable");
         }
-        return container.getExecutorRegistry().networkExecutor();
+        return runtime.downloadExecutor();
+    }
+
+    @NonNull
+    private ScheduledExecutorService progressScheduler() {
+        DownloadRuntime runtime = downloadRuntime();
+        if (runtime == null || runtime.timerExecutor() == null) {
+            throw new IllegalStateException("download runtime unavailable");
+        }
+        return runtime.timerExecutor();
+    }
+
+    private static void cancelProgressPoll(@NonNull DownloadRun run) {
+        ScheduledFuture<?> future = run.progressPoll.getAndSet(null);
+        if (future != null) future.cancel(false);
     }
 }

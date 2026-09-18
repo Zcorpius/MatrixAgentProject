@@ -60,7 +60,7 @@ public final class ModelGatewayRepositoryIntentClassifierTest {
     private static ModelGatewayRepository newRepo() {
         return new ModelGatewayRepository(
                 /* configStore */ null,
-                new ModelApiClient(),
+                ModelApiClient.forTesting(),
                 CapabilityRegistry.createDemoRegistry(),
                 /* memoryStore */ null,
                 /* memoryRecaller */ null);

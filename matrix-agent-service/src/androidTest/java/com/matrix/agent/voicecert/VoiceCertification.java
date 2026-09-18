@@ -9,7 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
  * 与常规 {@code connectedDebugAndroidTest} 隔离——
  * <ul>
  *   <li>常规任务:本包测试经 {@link #enabled()} 判定后 {@code Assume} 跳过(保持默认任务可靠、无硬件前提全绿);</li>
- *   <li>{@code connectedVoiceCertificationAndroidTest}(app/build.gradle 定义):按包过滤 +
+ *   <li>{@code :matrix-agent-service:connectedVoiceCertificationAndroidTest}:按包过滤 +
  *       {@code -e voiceCert true} 执行,此时门禁<strong>失败即红</strong>(模型缺失/硬件能力不足不遮蔽)。</li>
  * </ul>
  *
@@ -37,6 +37,6 @@ final class VoiceCertification {
 
     /** 各测试统一前置:常规任务跳过并说明,认证任务放行(断言硬失败)。 */
     static String skipReason() {
-        return "语音认证门禁测试:请执行 ./gradlew :app:connectedVoiceCertificationAndroidTest(需模型预置/麦克风/TTS)";
+        return "语音认证门禁测试:请执行 ./gradlew :matrix-agent-service:connectedVoiceCertificationAndroidTest(需模型预置/麦克风/TTS)";
     }
 }

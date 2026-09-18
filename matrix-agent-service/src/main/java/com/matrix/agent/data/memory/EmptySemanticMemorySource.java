@@ -4,7 +4,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Semantic Memory 占位实现——引入 embedding 后替换。
+ * SQLCipher 不可用时的显式 semantic-memory 降级实现。
  */
 public final class EmptySemanticMemorySource implements SemanticMemorySource {
     @Override

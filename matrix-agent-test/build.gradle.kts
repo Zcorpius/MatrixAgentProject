@@ -74,6 +74,8 @@ dependencies {
     // 对 Service 的唯一编译期认识是 service-lib（重整版 §6）
     implementation(project(":matrix-agent-service-lib"))
 
+    testImplementation(libs.junit)
+
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.rules)

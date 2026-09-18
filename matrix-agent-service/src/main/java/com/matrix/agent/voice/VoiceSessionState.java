@@ -12,7 +12,7 @@ import android.util.Log;
  *
  * <p>并发: {@link #transit(VoiceEvent)} 与 {@link #current()} 均 {@code synchronized},参照
  * {@code core.session.SessionContext}。非法事件(当前态不接受)返回原态并记 warning,不抛异常——
- * 参照 {@code core.agent.AgentEngine} 的 checkpoint 容错,避免一个错事件炸掉整个会话。
+ * 参照 Host 任务引擎的 checkpoint 容错,避免一个错事件炸掉整个会话。
  *
  * <p>Demo 约束:{@link State#CONFIRMING} 在 Demo 不可达——遇到
  * {@link VoiceEvent.EventType#NEEDS_CONFIRM} 时 RECOGNIZING / THINKING 都直接回

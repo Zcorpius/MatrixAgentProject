@@ -49,9 +49,8 @@ public final class MatrixAgentManagerService extends Service {
         public IBinder getMatrixService(String serviceName) {
             CallerContext.capture(MatrixAgentManagerService.this).enforceTrusted(
                     MatrixAgentManagerService.this);
-            // Root Agent service is the only complete stage-B endpoint. Returning null for the
-            // other domains is intentional: clients receive SERVICE_NOT_READY rather than an
-            // insecure/direct UI implementation.
+            // The root Binder is the sole discovery and authorization boundary. Domain binders
+            // are Host-private facades obtained only after this trusted transaction succeeds.
             if (MatrixServiceConstants.MANAGER_SERVICE.equals(serviceName)) return binder;
             return MatrixServiceConstants.MODEL_SERVICE.equals(serviceName) ? modelServiceBinder()
                     : MatrixServiceConstants.DOWNLOAD_SERVICE.equals(serviceName) ? downloadServiceBinder()

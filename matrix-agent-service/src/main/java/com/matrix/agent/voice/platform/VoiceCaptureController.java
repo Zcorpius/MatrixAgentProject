@@ -19,6 +19,7 @@ import com.matrix.agent.voice.VoiceSessionController;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -48,6 +49,7 @@ public final class VoiceCaptureController implements VoiceCapturePort {
     private final AsrPort asrPort;
     private final BargeInDetector detector;
     private final Context context;
+    private final ThreadFactory captureThreadFactory;
 
     /** 当前会话(CAS 更新:start null→s;stop/finally s→null)。 */
     private final AtomicReference<Session> current = new AtomicReference<>();
@@ -65,16 +67,29 @@ public final class VoiceCaptureController implements VoiceCapturePort {
 
     public VoiceCaptureController(VoiceSessionController controller, WakeWordPort wakePort,
             AsrPort asrPort, VoicePolicyConfig policy, Context context) {
+        this(controller, wakePort, asrPort, policy, context, runnable -> {
+            Thread thread = new Thread(runnable, "voice-capture-test");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /** Production Host path supplies a registry-owned factory for the single real-time loop. */
+    public VoiceCaptureController(VoiceSessionController controller, WakeWordPort wakePort,
+            AsrPort asrPort, VoicePolicyConfig policy, Context context,
+            ThreadFactory captureThreadFactory) {
         if (controller == null) throw new IllegalArgumentException("controller 不能为空");
         if (wakePort == null) throw new IllegalArgumentException("wakePort 不能为空");
         if (asrPort == null) throw new IllegalArgumentException("asrPort 不能为空");
         if (policy == null) throw new IllegalArgumentException("policy 不能为空");
         if (context == null) throw new IllegalArgumentException("context 不能为空");
+        if (captureThreadFactory == null) throw new IllegalArgumentException("captureThreadFactory 不能为空");
         this.controller = controller;
         this.wakePort = wakePort;
         this.asrPort = asrPort;
         this.detector = new BargeInDetector(policy, controller::onBargeIn);
         this.context = context.getApplicationContext();
+        this.captureThreadFactory = captureThreadFactory;
     }
 
     /**
@@ -130,7 +145,8 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             long sid = sessionSeq.incrementAndGet();
             final Session session = new Session(ar, aec, sid);
             s = session;
-            Thread t = new Thread(() -> captureLoop(session), "voice-capture");
+            Thread t = captureThreadFactory.newThread(() -> captureLoop(session));
+            if (t == null) throw new IllegalStateException("captureThreadFactory returned null");
             session.thread = t;
             if (!current.compareAndSet(null, session)) {
                 session.release(); // 另一个 start 已占 current(starting 已防,双重保险),释放避免泄漏。

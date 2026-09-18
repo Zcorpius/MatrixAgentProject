@@ -5,6 +5,7 @@
         android:name=".LauncherApplication"
         android:icon="@drawable/ic_launcher_matrix"
         android:label="@string/app_name"
+        android:supportsRtl="true"
         android:theme="@style/Theme.MatrixLauncher">
         <activity android:name=".LauncherActivity" android:exported="true">
             <intent-filter>

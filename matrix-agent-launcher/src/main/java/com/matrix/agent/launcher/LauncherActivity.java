@@ -49,7 +49,8 @@ public final class LauncherActivity extends AppCompatActivity {
         downloadsIndicator = findViewById(R.id.nav_downloads_indicator);
         findViewById(R.id.menu_button).setOnClickListener(ignored -> drawer.openDrawer(GravityCompat.START));
         findViewById(R.id.drawer_close).setOnClickListener(ignored -> drawer.closeDrawer(GravityCompat.START));
-        ((TextView) findViewById(R.id.drawer_version)).setText("MATRIX AGENT · v" + versionName());
+        ((TextView) findViewById(R.id.drawer_version)).setText(
+                getString(R.string.launcher_version, versionName()));
         tasks.setOnClickListener(v -> show(new AgentTaskFragment(), tasks, R.string.nav_tasks));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
         downloads.setOnClickListener(v -> show(new DownloadFragment(), downloads, R.string.nav_downloads));
@@ -111,8 +112,8 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void updateConnection(int state) {
-        status.setText(state == ConnectionState.CONNECTED ? "● HOST ONLINE"
-                : "○ HOST CONNECTING");
+        status.setText(state == ConnectionState.CONNECTED ? R.string.launcher_host_online
+                : R.string.launcher_host_connecting);
     }
 
     public LauncherViewModelFactory viewModelFactory() { return viewModelFactory; }

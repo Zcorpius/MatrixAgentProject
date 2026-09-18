@@ -2,7 +2,14 @@ package com.matrix.agent.host;
 
 import android.app.Application;
 
-public final class MatrixAgentApplication extends Application {
+import com.matrix.agent.download.DownloadRuntime;
+import com.matrix.agent.download.DownloadRuntimeProvider;
+import com.matrix.agent.voice.VoiceRuntime;
+import com.matrix.agent.voice.system.VoiceRuntimeProvider;
+import com.matrix.agent.voice.vosk.VoskVoiceAssemblyFactory;
+
+public final class MatrixAgentApplication extends Application implements DownloadRuntimeProvider,
+        VoiceRuntimeProvider {
     /** 懒构建(双检 volatile)：系统入口拉起进程时不做全量装配，首个 Host Service 触达才构建。 */
     private volatile AppContainer container;
 
@@ -23,6 +30,23 @@ public final class MatrixAgentApplication extends Application {
             }
         }
         return c;
+    }
+
+    @Override
+    public DownloadRuntime downloadRuntime() {
+        return getContainer();
+    }
+
+    @Override
+    public VoiceRuntime createVoiceRuntime(Application application) {
+        AppContainer c = getContainer();
+        MatrixExecutorRegistry registry = c.getExecutorRegistry();
+        return new VoiceRuntime(application, c.getAgentRuntimeRepository(),
+                new VoskVoiceAssemblyFactory(application, null, registry.voiceCaptureThreadFactory(),
+                        c.getHttpClient().download()),
+                registry.voiceDownloadExecutor(), registry.voiceStateExecutor(),
+                registry.voiceAgentExecutor(), registry.voiceLifecycleExecutor(),
+                registry.voiceTimeoutScheduler());
     }
 
     /**

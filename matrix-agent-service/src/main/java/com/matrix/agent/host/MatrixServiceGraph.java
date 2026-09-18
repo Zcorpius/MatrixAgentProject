@@ -10,7 +10,7 @@ final class MatrixServiceGraph {
     private final PersistenceGate persistence;
     private final TaskGraph tasks;
     private final ModelGraph model;
-    private final DownloadServiceGraph download;
+    private final DownloadGraph download;
     private final VoiceGraph voice;
 
     MatrixServiceGraph(AppContainer container, ModelServiceStub.CallerResolver callers) {
@@ -20,7 +20,7 @@ final class MatrixServiceGraph {
                 container.getExecutorRegistry().hostDispatcherExecutor(),
                 container.getExecutorRegistry().dbExecutor());
         model = new ModelGraph(container, persistence, callers);
-        download = new DownloadServiceGraph(container, persistence, callers);
+        download = new DownloadGraph(container, persistence, callers);
         voice = new VoiceGraph((Application) container.getAppContext(), persistence, callers);
     }
 

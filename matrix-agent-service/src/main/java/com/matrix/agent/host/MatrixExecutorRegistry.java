@@ -14,12 +14,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Host 持有的全局线程预算登记处（重整版 §2.4.1）：所有长生命周期的业务线程池
  * 统一在此创建、命名与关停，业务域不得自行 {@code Executors.new*}。
  *
- * <p>预算（Java worker 上限 14）：
+ * <p>预算：15 个有界业务 worker、3 个单线程有界 scheduler 与 1 个实时采音线程，
+ * Java 线程总上限为 19（不含 MNN native 内部线程）：
  * <pre>
- * task 2/32 · network/download 4/16 · mnn 1/2 · db 1/32 · timer 1
- * voice 流水线 5（download/state/agent/lifecycle 四个串行单线程 + 超时 watchdog）：
+ * task 2/32 · network/download 4/16 · mnn 1/2 · db 1/32 · host-dispatch 2/16
+ * voice 流水线 5（download/state/agent/lifecycle/lifecycle 五个串行单线程）+ capture 1：
  *   五段是会话状态机的串行隔离边界，存在受控的跨段提交，合并为单 worker
  *   会引入嵌套等待死锁，故按域单独成池（2026-09-15 审计 A-113 收敛时修订）。
+ * timer/audit 1/32 · voice-timeout 1/16 · mnn-retire 1/8。
  * </pre>
  * 全部拒绝策略为 AbortPolicy：队列满时显式失败并产生可观察终态，不入无界队列。
  */
@@ -34,6 +36,7 @@ public final class MatrixExecutorRegistry {
     private final ExecutorService dbExecutor;
     private final ExecutorService hostDispatcherExecutor;
     private final ScheduledExecutorService timerScheduler;
+    private final ScheduledExecutorService modelRetirementScheduler;
 
     private final ExecutorService voiceDownloadExecutor;
     private final ExecutorService voiceStateExecutor;
@@ -41,6 +44,8 @@ public final class MatrixExecutorRegistry {
     private final ExecutorService voiceLifecycleExecutor;
     private final ExecutorService lifecycleExecutor;
     private final ScheduledExecutorService voiceTimeoutScheduler;
+    /** A VoiceCaptureController has at most one active session; its real-time read loop needs a Thread. */
+    private final ThreadFactory voiceCaptureThreadFactory;
 
     public MatrixExecutorRegistry() {
         taskExecutor = newBoundedPool("matrix-task", 2, 32);
@@ -50,12 +55,15 @@ public final class MatrixExecutorRegistry {
         // Host work waits for TaskScheduler futures, so it must never share the scheduler pool.
         hostDispatcherExecutor = newBoundedPool("matrix-host-dispatch", 2, 16);
         timerScheduler = newBoundedScheduler("matrix-timer", 32);
+        // Native release retry must not be starved by catalog/audit retry storms.
+        modelRetirementScheduler = newBoundedScheduler("matrix-model-retire", 8);
         allExecutors.add(taskExecutor);
         allExecutors.add(networkExecutor);
         allExecutors.add(modelExecutor);
         allExecutors.add(dbExecutor);
         allExecutors.add(hostDispatcherExecutor);
         allSchedulers.add(timerScheduler);
+        allSchedulers.add(modelRetirementScheduler);
 
         voiceDownloadExecutor = newSingleBounded("matrix-voice-dl", 16);
         voiceStateExecutor = newSingleBounded("matrix-voice-state", 16);
@@ -63,6 +71,7 @@ public final class MatrixExecutorRegistry {
         voiceLifecycleExecutor = newSingleBounded("matrix-voice-lifecycle", 8);
         lifecycleExecutor = newSingleBounded("matrix-lifecycle", 8);
         voiceTimeoutScheduler = newBoundedScheduler("matrix-voice-timeout", 16);
+        voiceCaptureThreadFactory = daemonFactory("matrix-voice-capture");
         allExecutors.add(voiceDownloadExecutor);
         allExecutors.add(voiceStateExecutor);
         allExecutors.add(voiceAgentExecutor);
@@ -101,6 +110,11 @@ public final class MatrixExecutorRegistry {
         return timerScheduler;
     }
 
+    /** Dedicated bounded retry lane for retiring a native model session after cancellation. */
+    public ScheduledExecutorService modelRetirementScheduler() {
+        return modelRetirementScheduler;
+    }
+
     public ExecutorService voiceDownloadExecutor() {
         return voiceDownloadExecutor;
     }
@@ -124,6 +138,11 @@ public final class MatrixExecutorRegistry {
 
     public ScheduledExecutorService voiceTimeoutScheduler() {
         return voiceTimeoutScheduler;
+    }
+
+    /** Factory for the one session-owned real-time capture loop; it is not a general worker pool. */
+    public ThreadFactory voiceCaptureThreadFactory() {
+        return voiceCaptureThreadFactory;
     }
 
     /** Host 销毁时统一关停；先排干任务再强制中断。 */

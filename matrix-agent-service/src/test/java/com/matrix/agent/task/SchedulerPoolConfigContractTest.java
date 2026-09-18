@@ -3,65 +3,53 @@ package com.matrix.agent.task;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.util.concurrent.RejectedExecutionHandler;
+import com.matrix.agent.host.MatrixExecutorRegistry;
+
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.junit.Test;
 
 /**
- * schedulerPool 与 ioPool 拒绝策略配置契约。
+ * Host task/network 执行器拒绝策略配置契约。
  *
- * <p>之前 AppContainer.schedulerPool 用 3 参默认 CallerRunsPolicy,
- * 与已经改成 AbortPolicy 的 ioPool 不一致——队列满时 caller 线程同步执行,
- * 让 TaskScheduler.submit catch 成死代码。
- *
- * <p>本测试验证生产配置契约:DynamicThreadPool 4 参重载 + AbortPolicy 的 handler
- * 确实是 AbortPolicy,与 ioPool 配置一致。AppContainer 自身需要 Context 不能 JVM 测,
- * 但配置契约在 DynamicThreadPool 层可验证;AppContainer 装配路径用相同 4 参重载。
+ * <p>验证真实的 {@link MatrixExecutorRegistry}，而不是仅验证已移至 test source 的旧
+ * DynamicThreadPool 测试夹具。task/network 两条生产 lane 都必须在饱和时显式拒绝，不能由
+ * Binder 或 scheduler 调用线程同步执行。
  */
 public final class SchedulerPoolConfigContractTest {
 
     /**
-     * schedulerPool 生产配置(core=2 / max=2 / queue=32 / AbortPolicy)的 handler
-     * 必须是 AbortPolicy,与 ioPool 一致。
+     * task lane 生产配置(core=2 / queue=32 / AbortPolicy)必须是真实 AbortPolicy。
      */
     @Test
-    public void schedulerPoolProductionConfigUsesAbortPolicy() {
-        DynamicThreadPool pool = new DynamicThreadPool(2, 2, 32,
-                new ThreadPoolExecutor.AbortPolicy());
+    public void taskExecutorProductionConfigUsesAbortPolicy() {
+        MatrixExecutorRegistry registry = new MatrixExecutorRegistry();
         try {
-            ThreadPoolExecutor executor = (ThreadPoolExecutor) pool.asExecutorService();
-            assertTrue("schedulerPool handler 必须是 AbortPolicy(与 ioPool 一致)",
+            ThreadPoolExecutor executor = (ThreadPoolExecutor) registry.taskExecutor();
+            assertTrue("task executor handler 必须是 AbortPolicy",
                     executor.getRejectedExecutionHandler() instanceof ThreadPoolExecutor.AbortPolicy);
             assertEquals(ThreadPoolExecutor.AbortPolicy.class,
                     executor.getRejectedExecutionHandler().getClass());
         } finally {
-            pool.shutdown();
+            registry.shutdown();
         }
     }
 
     /**
-     * schedulerPool 与 ioPool 用同一类 handler(AbortPolicy)。
-     * 两个 pool 独立实例,但 handler 类型相同,便于运维 / logcat 统一识别。
+     * task 与 network 生产 lane 使用同一类 handler(AbortPolicy)，便于统一将过载映射为
+     * 可观察的业务失败。
      */
     @Test
-    public void schedulerAndIoPoolsUseSameHandlerType() {
-        DynamicThreadPool schedulerPool = new DynamicThreadPool(2, 2, 32,
-                new ThreadPoolExecutor.AbortPolicy());
-        DynamicThreadPool ioPool = new DynamicThreadPool(2, 8, 32,
-                new ThreadPoolExecutor.AbortPolicy());
+    public void taskAndNetworkExecutorsUseSameHandlerType() {
+        MatrixExecutorRegistry registry = new MatrixExecutorRegistry();
         try {
-            ThreadPoolExecutor schedExecutor = (ThreadPoolExecutor) schedulerPool.asExecutorService();
-            ThreadPoolExecutor ioExecutor = (ThreadPoolExecutor) ioPool.asExecutorService();
-            Class<? extends RejectedExecutionHandler> schedHandlerClass =
-                    schedExecutor.getRejectedExecutionHandler().getClass();
-            Class<? extends RejectedExecutionHandler> ioHandlerClass =
-                    ioExecutor.getRejectedExecutionHandler().getClass();
-            assertEquals("schedulerPool / ioPool handler 类型必须一致(V0.5.3 P1-4)",
-                    ioHandlerClass, schedHandlerClass);
+            ThreadPoolExecutor task = (ThreadPoolExecutor) registry.taskExecutor();
+            ThreadPoolExecutor network = (ThreadPoolExecutor) registry.networkExecutor();
+            assertEquals("task/network handler 类型必须一致",
+                    network.getRejectedExecutionHandler().getClass(),
+                    task.getRejectedExecutionHandler().getClass());
         } finally {
-            schedulerPool.shutdown();
-            ioPool.shutdown();
+            registry.shutdown();
         }
     }
 }

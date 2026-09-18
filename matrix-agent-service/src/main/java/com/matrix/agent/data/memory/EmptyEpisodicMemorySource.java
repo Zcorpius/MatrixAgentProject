@@ -4,7 +4,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Episodic Memory 占位实现——接 SessionHistoryDao 后替换。
+ * SQLCipher 不可用时的显式 episodic-memory 降级实现。
  */
 public final class EmptyEpisodicMemorySource implements EpisodicMemorySource {
     @Override

@@ -8,23 +8,34 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * 默认 {@link OnDeviceLlmFactory}：创建 {@link MnnOnDeviceLlm}，并从 {@code llm_config.json}
  * 读取 {@code max_all_tokens}（默认 2048）用于 token 预算公式。
  *
  * <p>创建含 native 模型加载（耗时），调用方必须在 worker 线程调用。
- * {@code :app} 可直接用此工厂，或注入自定义实现。
+ * {@code :matrix-agent-service} 可直接用此工厂，或注入自定义实现。
  */
 public final class MnnOnDeviceLlmFactory implements OnDeviceLlmFactory {
     private static final int DEFAULT_MAX_ALL_TOKENS = 2048;
     private static final int MIN_MAX_ALL_TOKENS = 256;
     private static final int MAX_MAX_ALL_TOKENS = 131072;
+    private final ScheduledExecutorService deferredReleaseScheduler;
+
+    /** Standalone/test factory; production Host supplies its bounded scheduler explicitly. */
+    public MnnOnDeviceLlmFactory() {
+        this(null);
+    }
+
+    public MnnOnDeviceLlmFactory(ScheduledExecutorService deferredReleaseScheduler) {
+        this.deferredReleaseScheduler = deferredReleaseScheduler;
+    }
 
     @Override
     public OnDeviceLlm create(String modelDir, MnnLoadOptions options) throws Exception {
         MnnLoadOptions opts = options != null ? options : MnnLoadOptions.cpuDefaults();
-        MNNLlmSession session = MNNLlmSession.create(modelDir, opts);
+        MNNLlmSession session = MNNLlmSession.create(modelDir, opts, deferredReleaseScheduler);
         if (session == null) {
             throw new IllegalStateException("MNN 模型加载失败: " + modelDir
                     + "（检查 llm_config.json/llm.mnn 及子文件完整性）");

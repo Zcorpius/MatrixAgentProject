@@ -4,7 +4,7 @@ import android.app.Application;
 
 import com.matrix.agent.voice.VoiceRuntime;
 
-/** Debug-only bridge used by the Host Binder to construct (but not start) the Vosk runtime. */
+/** Release Host bridge that constructs (but never starts) the Vosk runtime. */
 public final class VoiceRuntimeBootstrap {
     private VoiceRuntimeBootstrap() { }
 

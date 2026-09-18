@@ -85,11 +85,10 @@ public final class DownloadFragment extends Fragment {
         switch (value.notice) {
             case HOST_UNAVAILABLE: notice.setText(R.string.host_not_connected); break;
             case CATALOG_READY: notice.setText(value.catalog.isEmpty()
-                    ? "还没有市场目录。点“刷新市场”获取可下载模型。"
-                    : "市场和本地库已同步；下载进度会自动更新。"); break;
-            case MARKET_REFRESHING: notice.setText("Host 正在刷新模型市场…"); break;
-            case MARKET_REFRESHED: notice.setText("模型市场已刷新，正在同步本地模型库。"); break;
-            case MARKET_REFRESH_FAILED: notice.setText("模型市场刷新失败，错误码=" + value.code + "；仍可使用上次缓存。"); break;
+                    ? R.string.download_catalog_empty_refresh : R.string.download_catalog_ready); break;
+            case MARKET_REFRESHING: notice.setText(R.string.download_market_refreshing); break;
+            case MARKET_REFRESHED: notice.setText(R.string.download_market_refreshed); break;
+            case MARKET_REFRESH_FAILED: notice.setText(getString(R.string.download_market_refresh_failed, value.code)); break;
             case PREPARING: notice.setText(getString(R.string.download_preparing, "")); break;
             case INSTALLED: notice.setText(getString(R.string.download_installed, "")); break;
             case INSTALL_FAILED: notice.setText(getString(R.string.download_install_failed, value.code)); break;
@@ -111,7 +110,7 @@ public final class DownloadFragment extends Fragment {
         card.setBackgroundResource(R.drawable.bg_card);
         card.setPadding(dp(16), dp(14), dp(16), dp(14));
         TextView source = new TextView(requireContext());
-        source.setText(item.installed ? "LOCAL LIBRARY" : "MNN MARKET");
+        source.setText(item.installed ? R.string.download_source_local : R.string.download_source_market);
         source.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_accent));
         source.setTextSize(10); source.setTypeface(Typeface.DEFAULT_BOLD); card.addView(source);
         TextView title = new TextView(requireContext());
@@ -138,9 +137,9 @@ public final class DownloadFragment extends Fragment {
         LinearLayout actions = new LinearLayout(requireContext()); actions.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)); actionsParams.topMargin = dp(11);
         if (item.installed || state(download) == ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED) {
-            Button use = new Button(requireContext()); use.setText("端侧选用"); use.setBackgroundResource(R.drawable.bg_primary); use.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white)); use.setEnabled(connected); use.setOnClickListener(v -> activity().showOnDeviceModel(item.catalogModelId));
+            Button use = new Button(requireContext()); use.setText(R.string.download_use_on_device); use.setBackgroundResource(R.drawable.bg_primary); use.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white)); use.setEnabled(connected); use.setOnClickListener(v -> activity().showOnDeviceModel(item.catalogModelId));
             actions.addView(use, new LinearLayout.LayoutParams(0, dp(44), 1));
-            Button remove = action(item, download); LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(0, dp(44), 1); removeParams.leftMargin = dp(8); actions.addView(remove, removeParams);
+            Button remove = action(item, download); LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(0, dp(44), 1); removeParams.setMarginStart(dp(8)); actions.addView(remove, removeParams);
         } else {
             actions.addView(action(item, download), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)));
         }
@@ -153,7 +152,7 @@ public final class DownloadFragment extends Fragment {
         Button action = new Button(requireContext());
         boolean installed = item.installed || state == ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED;
         if (installed) {
-            action.setText("删除");
+            action.setText(R.string.delete);
             action.setBackgroundResource(R.drawable.bg_outline);
             action.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_primary_dark));
             action.setOnClickListener(ignored -> confirmDelete(item));
