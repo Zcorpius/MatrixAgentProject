@@ -1,16 +1,24 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.demo.DemoModelGateway;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.FinishReason;
+
 import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.task.tool.ToolResult;
 import com.matrix.agent.data.audit.AuditRecord;
@@ -249,15 +257,16 @@ public final class AgentEngineAuditSinkTest {
         assertEquals(1, capture.outcome.getTrajectory().getIterations().size());
     }
 
-    private AgentEngine newEngine(ModelGateway gateway, AuditRepository audit) {
+    private AgentEngine newEngine(ModelGateway gateway, com.matrix.agent.task.port.TaskAuditSink audit) {
         return new AgentEngine(gateway, modelCallExecutor, new PolicyEngine(registry),
                 registry, provider, sessionManager, new DefaultContextUpdater(),
                 sessionLockManager, toolExecutor, new AgentBudget(), null,
-                new AgentEngineConfiguration.Builder().auditSink(audit::persist).build());
+                new AgentEngineConfiguration.Builder().auditSink(audit).build());
     }
 
     /** 简易 fake:捕获最近一次 persist(outcome, request),计数全部调用。 */
-    private static final class CapturingAuditRepository implements AuditRepository {
+    private static final class CapturingAuditRepository
+            implements com.matrix.agent.task.port.TaskAuditSink {
         final AtomicInteger persistCount = new AtomicInteger();
         volatile AuditCapture lastCapture;
 
@@ -267,16 +276,6 @@ public final class AgentEngineAuditSinkTest {
             lastCapture = new AuditCapture(outcome, request);
         }
 
-        @Override
-        public AuditRecord queryByRequest(String userId, String zone, String requestId) {
-            return null;
-        }
-
-        @Override
-        public List<AuditRecord> queryBySession(String userId, String zone,
-                String sessionId, int limit) {
-            return Collections.emptyList();
-        }
     }
 
     private static final class AuditCapture {

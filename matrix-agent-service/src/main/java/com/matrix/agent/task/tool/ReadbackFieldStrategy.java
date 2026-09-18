@@ -1,5 +1,6 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.contract.ToolCall;
 import java.util.function.Function;
 
 /**

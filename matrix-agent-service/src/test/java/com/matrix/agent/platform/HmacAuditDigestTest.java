@@ -1,11 +1,12 @@
 package com.matrix.agent.platform;
+import com.matrix.agent.task.redact.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.AuditDigest;
+import com.matrix.agent.platform.AuditDigest;
 
 import org.junit.Test;
 
@@ -107,7 +108,7 @@ public final class HmacAuditDigestTest {
     }
 
     /**
-     * 集成验证:配合 {@link com.matrix.agent.task.AuditRedactor#redactFreeText(String)}
+     * 集成验证:配合 {@link com.matrix.agent.task.redact.AuditRedactor#redactFreeText(String)}
      * 输出格式 {@code [redacted:chars=N,hmac=xxxxxxxxxxxxxxxx]}。
      */
     @Test

@@ -1,15 +1,17 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
 import android.util.Log;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.FinishReason;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.tool.ToolCall;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.capability.ToolParameterDefinition;
-import com.matrix.agent.task.capability.schema.SchemaJsonWriter;
-import com.matrix.agent.task.capability.schema.SchemaProjectionConfig;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.FinishReason;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.contract.ToolParameterDefinition;
+import com.matrix.agent.contract.schema.SchemaJsonWriter;
+import com.matrix.agent.contract.schema.SchemaProjectionConfig;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

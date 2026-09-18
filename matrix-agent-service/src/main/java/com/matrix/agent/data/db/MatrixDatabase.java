@@ -1,5 +1,7 @@
 package com.matrix.agent.data.db;
 
+import com.matrix.agent.identity.AgentRequest;
+
 import android.content.Context;
 import android.util.Log;
 

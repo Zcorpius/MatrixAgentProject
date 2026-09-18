@@ -1,5 +1,9 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ModelApiException;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -11,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 
 /**
  * ModelApiClient.complete 5 参重载 + RetryPolicy 新重载契约。

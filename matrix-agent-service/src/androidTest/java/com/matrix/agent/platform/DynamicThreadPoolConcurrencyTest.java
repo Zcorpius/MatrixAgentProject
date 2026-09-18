@@ -1,4 +1,6 @@
 package com.matrix.agent.platform;
+import com.matrix.agent.host.di.*;
+import com.matrix.agent.task.scheduler.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -10,7 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.matrix.agent.task.DynamicThreadPool;
 import com.matrix.agent.task.ModelCallExecutor;
 import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.tool.ToolExecutor;
 
 import org.junit.Test;

@@ -1,16 +1,24 @@
 package com.matrix.agent.task;
 
-import com.matrix.agent.data.memory.MemoryWriter;
+import com.matrix.agent.demo.DemoModelGateway;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.FinishReason;
+
+import com.matrix.agent.task.port.TaskMemoryWriter;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.audit.AuditRecord;
 import com.matrix.agent.data.audit.AuditRepository;
@@ -120,16 +128,16 @@ public final class AgentEngineEpisodicWriteHookTest {
         assertEquals(TaskState.SUCCEEDED, outcome.getFinalState());
     }
 
-    private AgentEngine newEngine(ModelGateway gateway, MemoryWriter writer) {
+    private AgentEngine newEngine(ModelGateway gateway, TaskMemoryWriter writer) {
         return new AgentEngine(gateway, modelCallExecutor, new PolicyEngine(registry),
                 registry, provider, sessionManager, new DefaultContextUpdater(),
                 sessionLockManager, toolExecutor, new AgentBudget(), null,
                 new AgentEngineConfiguration.Builder()
-                        .taskMemoryWriter(writer == null ? null : writer::writeEpisodicOnTerminal)
+                        .taskMemoryWriter(writer)
                         .build());
     }
 
-    private static final class CapturingMemoryWriter implements MemoryWriter {
+    private static final class CapturingMemoryWriter implements TaskMemoryWriter {
         final AtomicInteger episodicCount = new AtomicInteger();
         volatile AgentOutcome lastOutcome;
         volatile long lastRequestEpoch = -1L;
@@ -141,21 +149,11 @@ public final class AgentEngineEpisodicWriteHookTest {
             lastRequestEpoch = requestEpoch;
         }
 
-        @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
-            return false;
-        }
-
-        @Override
-        public String readSemantic(String userId, String zone, String key) {
-            return null;
-        }
     }
 
     private static final class NoopAuditRepository implements AuditRepository {
         @Override
-        public void persist(AgentOutcome outcome, AgentRequest request) { }
+        public void persist(com.matrix.agent.data.audit.AuditOutcomeEntry entry) { }
         @Override
         public AuditRecord queryByRequest(String userId, String zone, String requestId) {
             return null;

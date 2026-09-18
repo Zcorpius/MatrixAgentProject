@@ -1,5 +1,7 @@
 package com.matrix.agent.data.db;
 
+import com.matrix.agent.identity.AgentRequest;
+
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
 import androidx.room.Index;

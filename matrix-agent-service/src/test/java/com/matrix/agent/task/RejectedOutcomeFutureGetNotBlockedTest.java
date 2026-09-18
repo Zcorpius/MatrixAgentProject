@@ -1,4 +1,5 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.scheduler.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -10,10 +11,10 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
-import com.matrix.agent.data.session.SessionLockManager;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.session.SessionLockManager;
 
 /**
  * AbortPolicy 触发的 REJECTED future 不应阻塞后续任务的提交与执行。

@@ -1,6 +1,8 @@
 package com.matrix.agent.data.memory;
 
-import com.matrix.agent.data.session.SessionManager;
+import com.matrix.agent.session.SessionContext;
+
+import com.matrix.agent.session.SessionManager;
 
 import java.util.ArrayList;
 import java.util.Collections;

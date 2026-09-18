@@ -1,7 +1,7 @@
 package com.matrix.agent.voice;
 
 import com.matrix.agent.task.AgentIteration;
-import com.matrix.agent.task.AgentMessage;
+import com.matrix.agent.contract.AgentMessage;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;

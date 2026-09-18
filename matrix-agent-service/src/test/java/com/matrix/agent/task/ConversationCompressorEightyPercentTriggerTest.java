@@ -1,4 +1,9 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.compress.*;
+
+import com.matrix.agent.contract.SummaryProvider;
+
+import com.matrix.agent.contract.AgentMessage;
 
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -10,8 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
 
 /**
  * 80% 主动触发阈值边界测试。

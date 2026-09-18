@@ -1,6 +1,19 @@
 package com.matrix.agent.task.capability;
-import com.matrix.agent.task.capability.schema.CanonicalSchema;
-import com.matrix.agent.task.identity.*;
+import com.matrix.agent.task.redact.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.vehicle.VehicleStatePredicate;
+
+import com.matrix.agent.identity.VehicleZone;
+
+import com.matrix.agent.identity.AgentRequest;
+
+import com.matrix.agent.contract.schema.SchemaValidator;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.contract.schema.CanonicalSchema;
+import com.matrix.agent.identity.*;
+import com.matrix.agent.intent.*;
+import com.matrix.agent.vehicle.*;
 
 
 import java.util.Collections;

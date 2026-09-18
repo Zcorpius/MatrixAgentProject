@@ -1,9 +1,14 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.identity.AgentRequest;
+
 import android.util.Log;
 
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.capability.*;
-import com.matrix.agent.task.identity.*;
+import com.matrix.agent.identity.*;
+import com.matrix.agent.intent.*;
+import com.matrix.agent.vehicle.*;
 
 
 import java.util.Collections;

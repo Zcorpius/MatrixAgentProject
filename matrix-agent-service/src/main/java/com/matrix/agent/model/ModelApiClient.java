@@ -1,11 +1,23 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.LlmClient;
+
+import com.matrix.agent.contract.ApiProtocol;
+
+import com.matrix.agent.intent.LlmIntentClassifier;
+
+import com.matrix.agent.identity.AgentRequest;
+
+import com.matrix.agent.contract.ToolCall;
+
 import android.util.Log;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.platform.MatrixHttpClient;
 
 import org.json.JSONArray;
@@ -128,7 +140,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callAnthropicWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token) throws Exception {
+            com.matrix.agent.identity.CancellationToken token) throws Exception {
         return callAnthropicWithTools(config, system, conversation, tools, token, Long.MAX_VALUE);
     }
 
@@ -139,7 +151,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callAnthropicWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
+            com.matrix.agent.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
         config.validate();
         if (config.protocol != ApiProtocol.ANTHROPIC_MESSAGES) {
             throw new IllegalArgumentException("Anthropic Native Tool Calling 仅支持 ANTHROPIC_MESSAGES 协议");
@@ -188,7 +200,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callOpenAiWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token) throws Exception {
+            com.matrix.agent.identity.CancellationToken token) throws Exception {
         return callOpenAiWithTools(config, system, conversation, tools, token, Long.MAX_VALUE);
     }
 
@@ -197,7 +209,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callOpenAiWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
+            com.matrix.agent.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
         config.validate();
         if (config.protocol != ApiProtocol.OPENAI_CHAT) {
             throw new IllegalArgumentException(
@@ -245,7 +257,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callGeminiWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token) throws Exception {
+            com.matrix.agent.identity.CancellationToken token) throws Exception {
         return callGeminiWithTools(config, system, conversation, tools, token, Long.MAX_VALUE);
     }
 
@@ -254,7 +266,7 @@ public final class ModelApiClient implements LlmClient {
      */
     public ModelTurn callGeminiWithTools(ModelConfig config, String system,
             java.util.List<AgentMessage> conversation, java.util.List<ToolDefinition> tools,
-            com.matrix.agent.task.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
+            com.matrix.agent.identity.CancellationToken token, long deadlineAtMillis) throws Exception {
         config.validate();
         if (config.protocol != ApiProtocol.GEMINI_GENERATE_CONTENT) {
             throw new IllegalArgumentException(
@@ -430,7 +442,7 @@ public final class ModelApiClient implements LlmClient {
      */
     JSONObject post(String endpoint, JSONObject body,
             String header1, String value1, String header2, String value2,
-            com.matrix.agent.task.identity.CancellationToken token) throws Exception {
+            com.matrix.agent.identity.CancellationToken token) throws Exception {
         return httpTransport.post(endpoint, body, header1, value1, header2, value2, token);
     }
 

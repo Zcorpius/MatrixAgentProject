@@ -11,7 +11,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.AuditEventTypes;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.AuditEventEntity;
 

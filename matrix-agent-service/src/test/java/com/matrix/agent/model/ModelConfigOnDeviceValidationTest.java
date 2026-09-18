@@ -1,5 +1,9 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ApiProtocol;
+
 import org.junit.Test;
 
 import static org.junit.Assert.fail;

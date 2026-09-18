@@ -1,7 +1,7 @@
 package com.matrix.agent.task.prompt;
 
 import com.matrix.agent.data.SensitiveKeys;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemorySnippet;
 

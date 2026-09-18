@@ -17,9 +17,9 @@ import com.matrix.agent.data.memory.MemoryWriter;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.db.MemoryRecordDao;
@@ -60,7 +60,7 @@ public final class RoomMemoryWriterEpisodicTest {
         AgentOutcome outcome = new AgentOutcome(
                 request.getRequestId(), TaskState.SUCCEEDED, StopReason.DONE, trajectory, 1500L);
 
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("session_history 1 行", 1, sessionDao.store.size());
         SessionHistoryEntity row = sessionDao.store.get(0);
@@ -99,7 +99,7 @@ public final class RoomMemoryWriterEpisodicTest {
         Trajectory trajectory = new Trajectory(1234567890L);
         AgentOutcome outcome = new AgentOutcome(
                 request.getRequestId(), TaskState.SUCCEEDED, StopReason.DONE, trajectory, 1500L);
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
 
         // 4) 下一次 recallEpisodic 必须再次调 DAO
         episodic.recallEpisodic(new MemoryScope("demo-driver", VehicleZone.DRIVER), "q", 5);
@@ -159,7 +159,7 @@ public final class RoomMemoryWriterEpisodicTest {
                 request.getRequestId(), TaskState.SUCCEEDED, StopReason.DONE,
                 new Trajectory(1L), 1L);
 
-        noop.writeEpisodicOnTerminal(request, outcome, 0L);
+        noop.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
         boolean accepted = noop.writeSemantic("u", "z", "k", "v", 1.0, "s", 0L);
         String value = noop.readSemantic("u", "z", "k");
 

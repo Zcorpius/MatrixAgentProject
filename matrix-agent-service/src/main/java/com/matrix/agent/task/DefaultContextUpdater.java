@@ -1,10 +1,17 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.session.SessionContext;
+
+import com.matrix.agent.identity.VehicleZone;
+
 import android.util.Log;
 
-import com.matrix.agent.task.identity.*;
-import com.matrix.agent.data.session.*;
-import com.matrix.agent.task.tool.*;
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.identity.*;
+import com.matrix.agent.intent.*;
+import com.matrix.agent.vehicle.*;
+import com.matrix.agent.session.*;
+import com.matrix.agent.task.tool.ToolResult;
 
 
 public final class DefaultContextUpdater implements ContextUpdater {

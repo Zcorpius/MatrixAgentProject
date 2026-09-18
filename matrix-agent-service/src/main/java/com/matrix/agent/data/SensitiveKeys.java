@@ -12,7 +12,7 @@ import java.util.Set;
  * <ul>
  *   <li>{@link com.matrix.agent.task.prompt.DefaultPromptBuilder} —— 投影记忆 snippet 到 prompt 时,
  *       PII key 的 value 永不附(仅 "已保存,请用工具查询")。</li>
- *   <li>{@link com.matrix.agent.task.AuditRedactor} —— redactArguments 命中 PII key 时
+ *   <li>{@link com.matrix.agent.task.redact.AuditRedactor} —— redactArguments 命中 PII key 时
  *       value 替换为 {@code <memory>}(key 本身是元数据,不 mask)。</li>
  * </ul>
  *

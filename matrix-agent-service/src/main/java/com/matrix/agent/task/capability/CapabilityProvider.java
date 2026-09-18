@@ -1,6 +1,14 @@
 package com.matrix.agent.task.capability;
-import com.matrix.agent.task.identity.*;
-import com.matrix.agent.task.tool.*;
+
+import com.matrix.agent.demo.MockCapabilityProvider;
+
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.identity.*;
+import com.matrix.agent.intent.*;
+import com.matrix.agent.vehicle.*;
+import com.matrix.agent.task.tool.CommandState;
+import com.matrix.agent.task.tool.ToolResult;
 
 
 /**

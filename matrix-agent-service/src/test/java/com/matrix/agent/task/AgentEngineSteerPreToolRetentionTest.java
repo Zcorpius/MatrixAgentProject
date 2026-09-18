@@ -1,4 +1,11 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.AgentMessage;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -12,12 +19,12 @@ import org.junit.Test;
 
 import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.task.tool.ToolResult;
 

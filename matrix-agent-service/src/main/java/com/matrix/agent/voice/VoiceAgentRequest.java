@@ -1,10 +1,12 @@
 package com.matrix.agent.voice;
 
+import com.matrix.agent.identity.AgentRequest;
+
 import com.matrix.agent.voice.port.*;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.InputSource;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.identity.InputSource;
 
 /**
  * 语音会话发给 Agent 的窄调用请求。

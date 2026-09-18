@@ -1,5 +1,9 @@
 package com.matrix.agent.task.identity;
 
+import com.matrix.agent.vehicle.VehicleStatePredicate;
+
+import com.matrix.agent.vehicle.VehicleState;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 

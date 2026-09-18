@@ -1,4 +1,6 @@
 package com.matrix.agent.host;
+import com.matrix.agent.platform.MatrixExecutorRegistry;
+import com.matrix.agent.host.di.*;
 
 import android.app.Application;
 
@@ -42,7 +44,7 @@ public final class MatrixAgentApplication extends Application implements Downloa
         AppContainer c = getContainer();
         MatrixExecutorRegistry registry = c.getExecutorRegistry();
         return new VoiceRuntime(application, c.getAgentRuntimeRepository(),
-                new VoskVoiceAssemblyFactory(application, null, registry.voiceCaptureThreadFactory(),
+                new VoskVoiceAssemblyFactory(application, c.getModelDownloadDao(), registry.voiceCaptureThreadFactory(),
                         c.getHttpClient().download()),
                 registry.voiceDownloadExecutor(), registry.voiceStateExecutor(),
                 registry.voiceAgentExecutor(), registry.voiceLifecycleExecutor(),

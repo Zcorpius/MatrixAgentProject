@@ -5,7 +5,7 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Log;
 
-import com.matrix.agent.task.AuditDigest;
+import com.matrix.agent.platform.AuditDigest;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -34,7 +34,7 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * <p><b>失败语义</b>:构造失败(KeyStore 不可用 / KEY_ALIAS 已存在但类型不匹配)
  * 抛 {@link IllegalStateException}——{@code AppContainer} 捕获后退回
- * {@code com.matrix.agent.task.UnavailableAuditDigest}(fail-closed 不可比对)。
+ * {@code com.matrix.agent.platform.UnavailableAuditDigest}(fail-closed 不可比对)。
  * 修正:不再退回 {@link Sha1AuditDigest}——评审指出 SHA-1 8 位
  * 低熵枚举正是本实现要修的风险,Keystore 异常设备上不能重暴露。
  *

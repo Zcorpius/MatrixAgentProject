@@ -1,4 +1,5 @@
 package com.matrix.agent.data.audit;
+import com.matrix.agent.task.steer.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -13,7 +14,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import com.matrix.agent.task.AuditEventTypes;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.AuditEventEntity;
 

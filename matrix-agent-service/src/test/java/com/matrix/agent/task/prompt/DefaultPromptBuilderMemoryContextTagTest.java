@@ -7,9 +7,9 @@ import java.util.Arrays;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;

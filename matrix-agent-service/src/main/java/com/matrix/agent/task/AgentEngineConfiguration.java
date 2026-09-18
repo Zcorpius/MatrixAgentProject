@@ -1,5 +1,8 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.platform.AuditDigest;
+import com.matrix.agent.task.compress.*;
+
 import com.matrix.agent.data.audit.AuditEventRecorder;
 import com.matrix.agent.task.port.TaskAuditSink;
 import com.matrix.agent.task.port.TaskMemoryWriter;

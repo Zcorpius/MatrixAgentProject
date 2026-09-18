@@ -2,6 +2,8 @@ package com.matrix.agent.voice;
 
 import org.junit.Test;
 
+import com.matrix.agent.api.download.ModelDownloadInfo;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -47,6 +49,40 @@ public final class VoskModelDownloaderTest {
         VoskModelSpec spec = new VoskModelSpec("test", "http://example.com/x.zip",
                 new File(root, "model"), "conf/mfcc.conf");
         assertFalse("无 active 指针应未就绪", d.isDownloaded(spec));
+        root.delete();
+    }
+
+    @Test
+    public void modelInfo_notInstalled_usesSpecSizeForVisibleProgress() throws Exception {
+        File root = Files.createTempDirectory("vosk-info").toFile();
+        VoskModelDownloader d = new VoskModelDownloader(null);
+        VoskModelSpec spec = new VoskModelSpec("test", "http://example.com/x.zip",
+                new File(root, "model"), "conf/mfcc.conf", "test", "0.1", 1234L, 3000L, null);
+
+        ModelDownloadInfo info = d.modelInfo(spec);
+
+        assertEquals(ModelDownloadInfo.DOWNLOAD_STATE_IDLE, info.state);
+        assertEquals(0L, info.bytesDownloaded);
+        assertEquals(1234L, info.bytesTotal);
+        root.delete();
+    }
+
+    @Test
+    public void delete_removesModelDirectoryAndResumableArchive() throws Exception {
+        File root = Files.createTempDirectory("vosk-delete").toFile();
+        VoskModelDownloader d = new VoskModelDownloader(null);
+        VoskModelSpec spec = new VoskModelSpec("test", "http://example.com/x.zip",
+                new File(root, "model"), "conf/mfcc.conf", "test", "0.1", 100L, 100L, null);
+        File marker = new File(spec.targetDir, "partial/content.bin");
+        assertTrue(marker.getParentFile().mkdirs());
+        assertTrue(marker.createNewFile());
+        File archive = new File(root, ".tmp_test_0.1.zip");
+        assertTrue(archive.createNewFile());
+
+        d.delete(spec);
+
+        assertFalse(spec.targetDir.exists());
+        assertFalse(archive.exists());
         root.delete();
     }
 

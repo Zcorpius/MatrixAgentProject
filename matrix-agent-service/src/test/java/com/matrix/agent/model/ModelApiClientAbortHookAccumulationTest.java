@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 
 /**
  * 验证 ModelApiClient.post 的 abort hook 不会因 Runnable 实例不同而累积。

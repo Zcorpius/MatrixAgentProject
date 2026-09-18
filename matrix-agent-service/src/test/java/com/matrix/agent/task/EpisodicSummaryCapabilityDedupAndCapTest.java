@@ -1,5 +1,9 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.task.persistence.EpisodicSummary;
+
+import com.matrix.agent.contract.AgentMessage;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -12,9 +16,9 @@ import java.util.Map;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolResult;
 
 /**

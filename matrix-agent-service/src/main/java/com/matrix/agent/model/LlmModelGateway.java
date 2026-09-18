@@ -1,16 +1,23 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.PlannerMode;
+
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ApiProtocol;
+
+import com.matrix.agent.identity.CancellationToken;
+
 import android.util.Log;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.ModelTurnRequest;
-import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ModelTurnRequest;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.memory.MemoryStore;
-import com.matrix.agent.data.session.SessionContext;
+import com.matrix.agent.session.SessionContext;
 
 import java.util.List;
 
@@ -33,21 +40,18 @@ public final class LlmModelGateway implements ModelGateway {
     private final ModelApiClient client;
     private final ModelConfig config;
     private final LlmPlanner compatibilityPlanner;
-    private final CapabilityRegistry registry;
     private final boolean useAnthropicNative;
     private final boolean useOpenAiNative;
     private final boolean useGeminiNative;
 
-    public LlmModelGateway(ModelApiClient client, ModelConfig config, CapabilityRegistry registry) {
-        this(client, config, registry, null);
+    public LlmModelGateway(ModelApiClient client, ModelConfig config) {
+        this(client, config, null);
     }
 
-    public LlmModelGateway(ModelApiClient client, ModelConfig config, CapabilityRegistry registry,
-            MemoryStore memoryStore) {
+    public LlmModelGateway(ModelApiClient client, ModelConfig config, MemoryStore memoryStore) {
         this.client = client;
         this.config = config;
-        this.compatibilityPlanner = new LlmPlanner(client, config, registry, memoryStore);
-        this.registry = registry;
+        this.compatibilityPlanner = new LlmPlanner(client, config, memoryStore);
         this.useAnthropicNative = config.plannerMode == PlannerMode.NATIVE_TOOL_CALLING
                 && config.protocol == ApiProtocol.ANTHROPIC_MESSAGES;
         this.useOpenAiNative = config.plannerMode == PlannerMode.NATIVE_TOOL_CALLING
@@ -71,16 +75,16 @@ public final class LlmModelGateway implements ModelGateway {
 
     @Override
     public ModelTurn decide(ModelTurnRequest request) {
-        // Per-request zone projection: driver and passenger receive distinct allowed tools.
-        java.util.List<ToolDefinition> tools = registry.toToolDefinitions(
-                request.getAgentRequest().getOccupantZone());
+        // The task boundary provides this per-zone projection.  The model must never derive
+        // tools from a mutable capability registry of its own.
+        List<ToolDefinition> tools = request.getTools();
         Log.d(TAG, "[LlmGateway] decide req=" + request.getAgentRequest().getRequestId()
                 + " zone=" + request.getAgentRequest().getOccupantZone()
                 + " tools=" + tools.size()
                 + " route=" + routeName()
                 + " conversationMsgs=" + request.getConversation().size());
         try {
-            com.matrix.agent.task.identity.CancellationToken token =
+            com.matrix.agent.identity.CancellationToken token =
                     request.getAgentRequest().getCancellationToken();
             long deadlineAtMillis = request.getAgentRequest().getDeadlineAtMillis();
             if (useAnthropicNative) {
@@ -131,7 +135,7 @@ public final class LlmModelGateway implements ModelGateway {
         }
         AgentRequest agentRequest = request.getAgentRequest();
         SessionContext context = request.getSessionContext();
-        ModelTurn turn = compatibilityPlanner.decide(agentRequest, context);
+        ModelTurn turn = compatibilityPlanner.decide(agentRequest, context, request.getTools());
         Log.d(TAG, "[LlmGateway] compatibility turn finish=" + turn.getFinishReason()
                 + " toolCalls=" + turn.getToolCalls().size());
         return turn;

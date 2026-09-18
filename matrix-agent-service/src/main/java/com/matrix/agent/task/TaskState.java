@@ -1,4 +1,7 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+
+import com.matrix.agent.intent.IntentClassifier;
 
 public enum TaskState {
     RECEIVED,

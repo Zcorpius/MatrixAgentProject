@@ -1,6 +1,6 @@
 package com.matrix.agent.model;
 
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.contract.ToolCall;
 
 import org.json.JSONArray;
 import org.json.JSONException;

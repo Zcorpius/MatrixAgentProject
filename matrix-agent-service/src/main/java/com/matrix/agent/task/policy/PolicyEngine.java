@@ -1,15 +1,33 @@
 package com.matrix.agent.task.policy;
+import com.matrix.agent.task.redact.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.demo.MockCapabilityProvider;
+
+import com.matrix.agent.vehicle.VehicleStatePredicate;
+
+import com.matrix.agent.vehicle.VehicleState;
+
+import com.matrix.agent.intent.IntentClassifier;
+
+import com.matrix.agent.identity.VehicleZone;
+
+import com.matrix.agent.identity.ExplicitIntentConstraints;
+
+import com.matrix.agent.identity.AgentRequest;
 
 import android.util.Log;
 
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.contract.schema.CanonicalSchema;
+import com.matrix.agent.contract.schema.SchemaError;
+import com.matrix.agent.contract.schema.SchemaErrorCode;
+import com.matrix.agent.contract.schema.SchemaValidator;
+import com.matrix.agent.contract.schema.ValidationResult;
 import com.matrix.agent.task.capability.*;
-import com.matrix.agent.task.capability.schema.CanonicalSchema;
-import com.matrix.agent.task.capability.schema.SchemaError;
-import com.matrix.agent.task.capability.schema.SchemaErrorCode;
-import com.matrix.agent.task.capability.schema.SchemaValidator;
-import com.matrix.agent.task.capability.schema.ValidationResult;
-import com.matrix.agent.task.identity.*;
-import com.matrix.agent.task.tool.*;
+import com.matrix.agent.identity.*;
+import com.matrix.agent.intent.*;
+import com.matrix.agent.vehicle.*;
 
 
 public final class PolicyEngine {
@@ -36,7 +54,7 @@ public final class PolicyEngine {
         Log.d(TAG, "[Policy] evaluate cap=" + cap
                 + " actor=" + request.getActor()
                 + " occupantZone=" + request.getOccupantZone()
-                + " args=" + com.matrix.agent.task.SafeLog.TOOL_ARGS_PLACEHOLDER);
+                + " args=" + com.matrix.agent.task.redact.SafeLog.TOOL_ARGS_PLACEHOLDER);
 
         CapabilityDefinition definition = registry.find(cap);
         if (definition == null) {

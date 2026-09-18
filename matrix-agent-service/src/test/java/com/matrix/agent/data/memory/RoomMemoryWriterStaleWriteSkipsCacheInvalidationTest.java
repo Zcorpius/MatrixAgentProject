@@ -13,11 +13,11 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 import com.matrix.agent.data.db.SessionHistoryDao;
@@ -90,7 +90,7 @@ public final class RoomMemoryWriterStaleWriteSkipsCacheInvalidationTest {
                 .sessionId("new-session").epoch(1L).build();
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
-        writer.writeEpisodicOnTerminal(request, outcome, 1L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 1L));
 
         // 3) second recall → 若 cache 仍 fill,DAO 不被调;若失效,DAO 再调 1 次
         List<MemorySnippet> second = source.recallEpisodic(scope, "", 5);

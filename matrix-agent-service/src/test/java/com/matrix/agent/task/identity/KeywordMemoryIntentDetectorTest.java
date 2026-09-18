@@ -1,5 +1,7 @@
 package com.matrix.agent.task.identity;
 
+import com.matrix.agent.intent.KeywordMemoryIntentDetector;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 

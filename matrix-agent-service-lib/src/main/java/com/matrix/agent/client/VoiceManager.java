@@ -12,8 +12,10 @@ import com.matrix.agent.api.voice.VoiceServiceStatus;
 import com.matrix.agent.api.voice.VoiceSessionHandle;
 import com.matrix.agent.api.voice.VoiceSessionRequest;
 import com.matrix.agent.api.common.MatrixErrorCode;
+import com.matrix.agent.api.download.ModelDownloadInfo;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -119,6 +121,39 @@ public final class VoiceManager extends MatrixManagerBase {
             return s.stopSession(sessionId, clientOperationId);
         } catch (RemoteException e) {
             return handleRemoteException(e, unavailable(clientOperationId, sessionId));
+        }
+    }
+
+    /** Returns the Host-owned, persisted state of the bundled offline speech models. */
+    public List<ModelDownloadInfo> listOfflineModels() {
+        IVoiceService s = service;
+        if (s == null) return Collections.emptyList();
+        try {
+            return s.listOfflineModels();
+        } catch (RemoteException e) {
+            return handleRemoteException(e, Collections.emptyList());
+        }
+    }
+
+    /** Downloads and verifies missing speech models without starting a recording session. */
+    public VoiceOperationResult installOfflineModels(String clientOperationId) {
+        IVoiceService s = service;
+        if (s == null) return unavailable(clientOperationId, null);
+        try {
+            return s.installOfflineModels(clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailable(clientOperationId, null));
+        }
+    }
+
+    /** Removes an idle offline speech model. A model in an active voice session is protected. */
+    public VoiceOperationResult deleteOfflineModel(String modelId, String clientOperationId) {
+        IVoiceService s = service;
+        if (s == null) return unavailable(clientOperationId, null);
+        try {
+            return s.deleteOfflineModel(modelId, clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailable(clientOperationId, null));
         }
     }
 

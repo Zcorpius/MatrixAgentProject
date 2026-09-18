@@ -1,5 +1,9 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.demo.MockCapabilityProvider;
+
+import com.matrix.agent.contract.ToolCall;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
@@ -10,8 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import com.matrix.agent.data.memory.MemoryWriter;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 
 /**
@@ -69,8 +73,7 @@ public final class MemorySavePromptInjectionRejectionTest {
         final AtomicInteger writeCount = new AtomicInteger();
 
         @Override
-        public void writeEpisodicOnTerminal(AgentRequest request,
-                com.matrix.agent.task.AgentOutcome outcome, long requestEpoch) { }
+        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
         public boolean writeSemantic(String userId, String zone, String key, String value,

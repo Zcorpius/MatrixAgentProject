@@ -2,15 +2,10 @@ package com.matrix.agent.data.audit;
 
 import android.util.Log;
 
-import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.ActorUsers;
-import com.matrix.agent.task.identity.AgentRequest;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.MatrixDatabase;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.SessionHistoryDao;
-import com.matrix.agent.data.db.TrajectoryCodec;
 import com.matrix.agent.data.db.TrajectoryDao;
 import com.matrix.agent.data.db.TrajectoryEntity;
 
@@ -89,34 +84,33 @@ public final class RoomAuditRepository implements AuditRepository {
     }
 
     @Override
-    public void persist(AgentOutcome outcome, AgentRequest request) {
-        if (outcome == null || request == null) return;
+    public void persist(AuditOutcomeEntry entry) {
+        if (entry == null) return;
         try {
-            doPersist(outcome, request);
+            doPersist(entry);
         } catch (Exception ex) {
             // fail-open:仅 log,不抛——保证主任务路径不被 Audit 拖累
-            Log.e(TAG, "[Audit] persist FAILED req=" + outcome.getRequestId()
+            Log.e(TAG, "[Audit] persist FAILED req=" + entry.requestId
                     + " cause=" + ex.getClass().getSimpleName() + ": " + ex.getMessage(), ex);
         }
     }
 
-    private void doPersist(AgentOutcome outcome, AgentRequest request) {
-        Trajectory trajectory = outcome.getTrajectory();
+    private void doPersist(AuditOutcomeEntry entry) {
         TrajectoryEntity entity = new TrajectoryEntity();
-        entity.requestId = outcome.getRequestId();
-        entity.sessionId = request.getSessionId();
-        entity.arbitrationKey = request.getArbitrationKey();
-        entity.actor = request.getActor() == null ? "" : request.getActor().name();
-        entity.zone = request.getOccupantZone() == null ? "" : request.getOccupantZone().name();
-        entity.userId = ActorUsers.userIdOf(request);
-        entity.startedMs = trajectory.getStartedAtMillis();
-        entity.durationMs = outcome.getDurationMillis();
-        entity.iterationCount = trajectory.getIterations().size();
-        entity.totalToolCalls = trajectory.getTotalToolCalls();
-        entity.successToolCalls = trajectory.countSuccessfulToolCalls();
-        entity.stopReason = outcome.getStopReason().name();
-        entity.finalState = outcome.getFinalState().name();
-        entity.trajectoryJson = TrajectoryCodec.encode(outcome);
+        entity.requestId = entry.requestId;
+        entity.sessionId = entry.sessionId;
+        entity.arbitrationKey = entry.arbitrationKey;
+        entity.actor = entry.actor;
+        entity.zone = entry.zone;
+        entity.userId = entry.userId;
+        entity.startedMs = entry.startedMs;
+        entity.durationMs = entry.durationMs;
+        entity.iterationCount = entry.iterationCount;
+        entity.totalToolCalls = entry.totalToolCalls;
+        entity.successToolCalls = entry.successToolCalls;
+        entity.stopReason = entry.stopReason;
+        entity.finalState = entry.finalState;
+        entity.trajectoryJson = entry.trajectoryJson;
         entity.createdAtMs = System.currentTimeMillis();
         trajectoryDao.insert(entity);
         Log.i(TAG, "[Audit] persist req=" + entity.requestId

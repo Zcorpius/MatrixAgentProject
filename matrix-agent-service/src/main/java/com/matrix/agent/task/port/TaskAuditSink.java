@@ -1,7 +1,7 @@
 package com.matrix.agent.task.port;
 
 import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.AgentRequest;
 
 /** Task 执行完成后的审计发布端口。 */
 public interface TaskAuditSink {

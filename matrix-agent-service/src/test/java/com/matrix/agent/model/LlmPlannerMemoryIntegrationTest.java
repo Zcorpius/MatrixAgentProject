@@ -1,17 +1,26 @@
 package com.matrix.agent.model;
+import com.matrix.agent.task.redact.*;
+
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.LlmClient;
+
+import com.matrix.agent.contract.ApiProtocol;
+
+import com.matrix.agent.identity.CancellationToken;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
-import com.matrix.agent.data.session.SessionContext;
-import com.matrix.agent.data.session.SessionManager;
+import com.matrix.agent.session.SessionContext;
+import com.matrix.agent.session.SessionManager;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -58,7 +67,7 @@ public final class LlmPlannerMemoryIntegrationTest {
         CapturingLlmClient client = new CapturingLlmClient();
         LlmPlanner planner = newPlanner(client, null);
 
-        planner.decide(buildDriverRequest(), sessionContext());
+        planner.decide(buildDriverRequest(), sessionContext(), driverTools());
 
         assertNotNull(client.capturedUserPrompt);
         assertTrue("V0.4.3 行为必须含偏好 key",
@@ -82,7 +91,7 @@ public final class LlmPlannerMemoryIntegrationTest {
         CapturingLlmClient client = new CapturingLlmClient();
         LlmPlanner planner = newPlanner(client, stub);
 
-        planner.decide(buildDriverRequest(), sessionContext());
+        planner.decide(buildDriverRequest(), sessionContext(), driverTools());
 
         assertNotNull(client.capturedUserPrompt);
         assertTrue("必须含偏好 key V0.4.3 段",
@@ -107,7 +116,7 @@ public final class LlmPlannerMemoryIntegrationTest {
         CapturingLlmClient client = new CapturingLlmClient();
         LlmPlanner planner = newPlanner(client, stub);
 
-        planner.decide(buildDriverRequest(), sessionContext());
+        planner.decide(buildDriverRequest(), sessionContext(), driverTools());
 
         assertNotNull(client.capturedUserPrompt);
         // PREFERENCE snippet 必须被 savedKeysFor 跳过,只在 preferenceKeysFor 段出现 1 次
@@ -132,10 +141,14 @@ public final class LlmPlannerMemoryIntegrationTest {
         return sessionManager.getOrCreate("planner-memory");
     }
 
+    private List<ToolDefinition> driverTools() {
+        return registry.toToolDefinitions(VehicleZone.DRIVER);
+    }
+
     private LlmPlanner newPlanner(LlmClient client, MemoryRecaller recaller) {
         ModelConfig config = new ModelConfig("test", "test", ApiProtocol.OPENAI_CHAT,
                 "http://localhost/v1", "gpt-test", "", false);
-        LlmPlanner planner = new LlmPlanner(client, config, registry, memoryStore);
+        LlmPlanner planner = new LlmPlanner(client, config, memoryStore);
         if (recaller != null) planner.setMemoryRecaller(recaller);
         return planner;
     }
@@ -152,7 +165,7 @@ public final class LlmPlannerMemoryIntegrationTest {
 
         @Override
         public String complete(ModelConfig config, String systemPrompt, String userPrompt,
-                com.matrix.agent.task.identity.CancellationToken token, long deadlineAtMillis) {
+                com.matrix.agent.identity.CancellationToken token, long deadlineAtMillis) {
             return complete(config, systemPrompt, userPrompt);
         }
 

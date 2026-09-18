@@ -1,4 +1,4 @@
-package com.matrix.agent.task.capability.schema;
+package com.matrix.agent.contract.schema;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;

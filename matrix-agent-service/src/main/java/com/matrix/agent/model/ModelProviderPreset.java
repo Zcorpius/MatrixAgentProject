@@ -1,5 +1,9 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ApiProtocol;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;

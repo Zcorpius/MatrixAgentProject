@@ -1,5 +1,15 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.contract.ToolDefinition;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelTurnRequest;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.AgentMessage;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -8,11 +18,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
-import com.matrix.agent.data.session.SessionContext;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.session.SessionContext;
+import com.matrix.agent.contract.ToolCall;
 
 /**
  * ModelCallExecutor 在 ioPool 队列满 / Executor 拒绝时的契约测试。
@@ -38,7 +48,7 @@ public final class ModelCallExecutorRejectedExecutionTest {
         ModelTurnRequest request = new ModelTurnRequest(
                 agentRequest,
                 Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system prompt",
                 new SessionContext());
         ModelGateway gateway = request1 -> ModelTurn.directAnswer("ignored");

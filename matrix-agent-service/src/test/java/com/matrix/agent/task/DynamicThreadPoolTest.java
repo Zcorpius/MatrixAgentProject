@@ -1,4 +1,7 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.session.SessionLockManager;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -138,7 +141,7 @@ public final class DynamicThreadPoolTest {
         // 验证 TaskScheduler.shutdown() 不关共享池(ToolExecutor/ModelCallExecutor 还能用)
         DynamicThreadPool shared = new DynamicThreadPool(2, 4, 4);
         TaskScheduler scheduler = new TaskScheduler(2,
-                new com.matrix.agent.data.session.SessionLockManager(),
+                new com.matrix.agent.session.SessionLockManager(),
                 shared.asExecutorService());
         ToolExecutor toolExecutor = new ToolExecutor(2, shared.asExecutorService());
         try {
@@ -158,7 +161,7 @@ public final class DynamicThreadPoolTest {
     @Test
     public void sharedPoolShutdownClosesForAllOwners() throws Exception {
         DynamicThreadPool shared = new DynamicThreadPool(2, 4, 4);
-        new TaskScheduler(2, new com.matrix.agent.data.session.SessionLockManager(),
+        new TaskScheduler(2, new com.matrix.agent.session.SessionLockManager(),
                 shared.asExecutorService());
         new ToolExecutor(2, shared.asExecutorService());
         new ModelCallExecutor(2, shared.asExecutorService());

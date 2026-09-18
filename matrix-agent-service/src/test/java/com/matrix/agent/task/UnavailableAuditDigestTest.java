@@ -1,5 +1,10 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.platform.AuditDigest;
+import com.matrix.agent.platform.Sha1AuditDigest;
+import com.matrix.agent.platform.UnavailableAuditDigest;
+import com.matrix.agent.task.redact.*;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

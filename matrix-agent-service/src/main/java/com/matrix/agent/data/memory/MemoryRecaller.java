@@ -1,5 +1,7 @@
 package com.matrix.agent.data.memory;
 
+import com.matrix.agent.session.SessionContext;
+
 import java.util.List;
 
 /**

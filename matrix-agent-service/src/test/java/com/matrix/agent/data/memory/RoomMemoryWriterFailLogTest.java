@@ -15,8 +15,8 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 import com.matrix.agent.data.db.SessionHistoryDao;
@@ -49,9 +49,9 @@ public final class RoomMemoryWriterFailLogTest {
                 new Trajectory(1L), 1L);
 
         // 不抛 —— fail-log
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
         // 还要再调一次,确认多次失败都吞掉
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
         assertTrue("多次 fail-log 都吞掉", true);
     }
 
@@ -85,7 +85,7 @@ public final class RoomMemoryWriterFailLogTest {
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
         // null 参数不抛 —— 直接 return / return false / return null
-        writer.writeEpisodicOnTerminal(null, null, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(null, null, 0L));
         assertFalse(writer.writeSemantic(null, null, null, "v", 1.0, "s", 0L));
         assertNull(writer.readSemantic(null, null, null));
     }
@@ -102,7 +102,7 @@ public final class RoomMemoryWriterFailLogTest {
                 request.getRequestId(), TaskState.SUCCEEDED, StopReason.DONE,
                 new Trajectory(1L), 1L);
 
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
         assertEquals("Dao insert 1 行(episodicSource=null 不影响)", 1, sessionDao.store.size());
     }
 

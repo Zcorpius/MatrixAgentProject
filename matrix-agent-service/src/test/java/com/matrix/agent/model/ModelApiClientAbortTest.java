@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 
 /**
  * ModelApiClient.post 的 CancellationToken abort 集成测试。

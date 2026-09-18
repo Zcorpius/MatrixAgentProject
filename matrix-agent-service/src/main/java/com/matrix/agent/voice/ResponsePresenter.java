@@ -1,5 +1,7 @@
 package com.matrix.agent.voice;
 
+import com.matrix.agent.contract.ModelGateway;
+
 import com.matrix.agent.voice.port.*;
 
 import com.matrix.agent.task.AgentIteration;

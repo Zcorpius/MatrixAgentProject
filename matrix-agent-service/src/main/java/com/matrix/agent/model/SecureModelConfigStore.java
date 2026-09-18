@@ -1,5 +1,11 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.PlannerMode;
+
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ApiProtocol;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.annotation.SuppressLint;

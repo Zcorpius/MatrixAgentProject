@@ -1,20 +1,39 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.compress.*;
+import com.matrix.agent.task.redact.*;
+import com.matrix.agent.task.steer.*;
+
+import com.matrix.agent.demo.DemoModelGateway;
+
+import com.matrix.agent.contract.SummaryProvider;
+
+import com.matrix.agent.identity.ExplicitIntentConstraints;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelTurnRequest;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.FinishReason;
+
+import com.matrix.agent.contract.AgentMessage;
 
 import com.matrix.agent.task.capability.CapabilityDefinition;
 import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.capability.CapabilityRegistry;
 import com.matrix.agent.task.capability.RiskLevel;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.data.memory.MemoryScope;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.task.tool.ToolResult;
 

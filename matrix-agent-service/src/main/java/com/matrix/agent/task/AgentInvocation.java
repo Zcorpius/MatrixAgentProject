@@ -1,8 +1,8 @@
 package com.matrix.agent.task;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.InputSource;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.identity.InputSource;
 
 /**
  * Host-adapted input to the task runtime.

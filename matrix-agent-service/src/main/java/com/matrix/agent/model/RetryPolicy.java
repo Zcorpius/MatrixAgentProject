@@ -1,8 +1,10 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelApiException;
+
 import android.util.Log;
 
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ThreadLocalRandom;

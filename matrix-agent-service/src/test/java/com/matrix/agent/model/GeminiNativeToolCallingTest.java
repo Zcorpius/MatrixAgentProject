@@ -1,16 +1,22 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.PlannerMode;
+
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.ApiProtocol;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.FinishReason;
-import com.matrix.agent.task.ModelTurn;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.FinishReason;
+import com.matrix.agent.contract.ModelTurn;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.contract.ToolCall;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

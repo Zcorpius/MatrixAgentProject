@@ -1,15 +1,16 @@
 package com.matrix.agent.task;
+import com.matrix.agent.host.di.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.FallbackIntentClassifier;
-import com.matrix.agent.task.identity.IntentClassifier;
-import com.matrix.agent.task.identity.IntentResult;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.LlmIntentClassifier;
+import com.matrix.agent.intent.FallbackIntentClassifier;
+import com.matrix.agent.intent.IntentClassifier;
+import com.matrix.agent.intent.IntentResult;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.intent.LlmIntentClassifier;
 
 /**
  * Repository.setIntentClassifier + Fallback 装配契约测试。

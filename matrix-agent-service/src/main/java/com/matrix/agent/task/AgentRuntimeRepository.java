@@ -1,31 +1,42 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.vehicle.VehicleState;
+
+import com.matrix.agent.intent.LlmIntentClassifier;
+
+import com.matrix.agent.intent.FallbackIntentClassifier;
 
 import android.util.Log;
 
-import com.matrix.agent.model.GatewayLifecycleManager;
-import com.matrix.agent.model.ModelRuntimeCoordinator;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.GatewayLifecycleManager;
+import com.matrix.agent.task.ModelRuntimeCoordinator;
 import com.matrix.agent.task.AgentBudget;
 import com.matrix.agent.task.AgentEngine;
 import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.SteerMailbox;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.steer.SteerMailbox;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.ActorUsers;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.IntentClassifier;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.KeywordMemoryIntentDetector;
-import com.matrix.agent.task.identity.MemoryIntentDetector;
-import com.matrix.agent.task.identity.VehicleStateSource;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.ActorUsers;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.intent.IntentClassifier;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.intent.KeywordMemoryIntentDetector;
+import com.matrix.agent.intent.MemoryIntentDetector;
+import com.matrix.agent.vehicle.VehicleStateSource;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryStore;
-import com.matrix.agent.data.session.SessionManager;
+import com.matrix.agent.session.SessionManager;
 import com.matrix.agent.data.audit.AuditEventRecorder;
 import com.matrix.agent.data.audit.AuditRepository;
 import com.matrix.agent.data.audit.NoopAuditRepository;
+import com.matrix.agent.task.persistence.AuditRepositoryAuditSink;
 
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -171,8 +182,8 @@ public final class AgentRuntimeRepository {
                 intentClassifier);
         this.userDataResetCoordinator = new UserDataResetCoordinator(memoryStore, sessionManager,
                 auditRepository, inFlightTasks);
-        this.taskDispatchCoordinator = new TaskDispatchCoordinator(scheduler, auditRepository,
-                inFlightTasks);
+        this.taskDispatchCoordinator = new TaskDispatchCoordinator(scheduler,
+                new AuditRepositoryAuditSink(auditRepository), inFlightTasks);
         this.modelRuntime = new ModelRuntimeCoordinator(engineFactory, initialGateway, initialDisplayName);
     }
 
@@ -267,7 +278,7 @@ public final class AgentRuntimeRepository {
      * physical vehicle truth.
      */
     public Map<String, Object> getVehicleState() {
-        com.matrix.agent.task.identity.VehicleState state = vehicleStateSource.snapshot();
+        com.matrix.agent.vehicle.VehicleState state = vehicleStateSource.snapshot();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("gear", state.getGear().name());
         result.put("speedKmh", state.getSpeedKmh());

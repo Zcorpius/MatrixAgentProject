@@ -1,5 +1,6 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.contract.AgentMessage;
 import com.matrix.agent.task.policy.PolicyDecision;
 
 import java.util.ArrayList;

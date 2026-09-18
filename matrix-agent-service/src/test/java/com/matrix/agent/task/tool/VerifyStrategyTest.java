@@ -1,12 +1,14 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.contract.ToolCall;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemoryStore;

@@ -1,6 +1,8 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.redact.*;
 
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolResult;
 
 import java.util.Collections;

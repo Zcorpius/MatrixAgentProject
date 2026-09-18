@@ -1,4 +1,7 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.compress.*;
+
+import com.matrix.agent.contract.AgentMessage;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -11,13 +14,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.model.ApiProtocol;
-import com.matrix.agent.model.LlmClient;
-import com.matrix.agent.model.ModelConfig;
-import com.matrix.agent.model.PlannerMode;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.contract.ApiProtocol;
+import com.matrix.agent.contract.LlmClient;
+import com.matrix.agent.contract.ModelConfig;
+import com.matrix.agent.contract.PlannerMode;
 
 /**
  * LlmSummaryProvider 用 LlmClient 5 参重载,

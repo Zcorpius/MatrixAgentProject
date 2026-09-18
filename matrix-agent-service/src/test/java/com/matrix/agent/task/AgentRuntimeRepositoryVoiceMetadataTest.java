@@ -1,12 +1,11 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-
-import java.util.Collections;
-import java.util.List;
 
 import org.junit.Test;
 
@@ -15,32 +14,31 @@ import com.matrix.agent.task.AgentEngine;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.DefaultContextUpdater;
 import com.matrix.agent.task.ModelCallExecutor;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.SteerMailbox;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.task.steer.SteerMailbox;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.InputSource;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.task.identity.VehicleStateSource;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.identity.InputSource;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.vehicle.VehicleStateSource;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
-import com.matrix.agent.data.audit.AuditRecord;
-import com.matrix.agent.data.audit.AuditRepository;
+import com.matrix.agent.data.audit.NoopAuditRepository;
+import com.matrix.agent.task.port.TaskAuditSink;
 
 /**
  * 验证语音/文本入口的 {@link AgentRequest} 元数据贯通。
  *
- * <p>用捕获型 {@link AuditRepository} 截获 {@code AgentRuntimeRepository.dispatch} 末尾
- * {@code persist(outcome, request)} 的 {@link AgentRequest},断言:
+ * <p>用捕获型 {@link TaskAuditSink} 截获任务边界的 {@link AgentRequest},断言:
  * <ul>
  *   <li>Host-adapted voice invocation → inputSource=VOICE / confidenceAvailable=false /
  *       confidence=0 / 语言与音区与输入一致;</li>
@@ -94,7 +92,7 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
         assertEquals("zh-CN", r.getLanguageTag());
     }
 
-    private static AgentRuntimeRepository buildRepository(AuditRepository audit) {
+    private static AgentRuntimeRepository buildRepository(TaskAuditSink auditSink) {
         CapabilityRegistry registry = CapabilityRegistry.createDemoRegistry();
         PolicyEngine policyEngine = new PolicyEngine(registry);
         SessionManager sessionManager = new SessionManager();
@@ -110,14 +108,15 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
         VehicleStateSource stateSource = new MockVehicleStateSource();
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gw -> new AgentEngine(
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
-                new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox);
+                new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox,
+                new AgentEngineConfiguration.Builder().auditSink(auditSink).build());
         return new AgentRuntimeRepository(engineFactory, sessionManager,
                 new InMemoryMemoryStore(), gateway, "voice-meta-test", budget, scheduler,
-                stateSource, registry, KeywordIntentClassifier.INSTANCE, audit);
+                stateSource, registry, KeywordIntentClassifier.INSTANCE, NoopAuditRepository.INSTANCE);
     }
 
-    /** 捕获 persist 的 AgentRequest;query 路径空实现(clearByUserZone 用接口 default)。 */
-    private static final class CapturingAudit implements AuditRepository {
+    /** 捕获任务层 audit 的 AgentRequest，避免让数据层承担任务模型。 */
+    private static final class CapturingAudit implements TaskAuditSink {
         AgentRequest captured;
 
         @Override
@@ -125,14 +124,5 @@ public final class AgentRuntimeRepositoryVoiceMetadataTest {
             captured = request;
         }
 
-        @Override
-        public AuditRecord queryByRequest(String userId, String zone, String requestId) {
-            return null;
-        }
-
-        @Override
-        public List<AuditRecord> queryBySession(String userId, String zone, String sessionId, int limit) {
-            return Collections.emptyList();
-        }
     }
 }

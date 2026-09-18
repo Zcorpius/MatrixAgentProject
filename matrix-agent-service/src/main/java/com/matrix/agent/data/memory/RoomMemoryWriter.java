@@ -1,16 +1,12 @@
 package com.matrix.agent.data.memory;
 
+
+import com.matrix.agent.identity.ActorUsers;
+
 import android.util.Log;
 
 import java.util.regex.Pattern;
 
-import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.EpisodicSummary;
-import com.matrix.agent.data.memory.MemoryWriter;
-import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.ActorUsers;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 import com.matrix.agent.data.db.SessionHistoryDao;
@@ -26,7 +22,7 @@ import com.matrix.agent.data.db.SessionHistoryEntity;
  * <p><b>fail-log</b>:所有写入路径 try/catch 包裹,异常仅 Log.w,不向上传播。
  * 与 RoomAuditRepository fail-open 语义一致,但 Memory 不阻塞主路径。
  *
- * <p><b>缓存失效</b>:writeEpisodicOnTerminal 写入后必须调 {@link EpisodicMemorySourceImpl#invalidateCache()}
+ * <p><b>缓存失效</b>:writeEpisodic 写入后必须调 {@link EpisodicMemorySourceImpl#invalidateCache()}
  * 失效 5min LRU——否则"任务结束 → 立即下一任务召回"读到旧值(注释明确)。
  * SemanticMemorySourceImpl 无缓存(直查 Dao),不需要失效。
  *
@@ -86,20 +82,10 @@ public final class RoomMemoryWriter implements MemoryWriter {
     }
 
     @Override
-    public void writeEpisodicOnTerminal(AgentRequest request, AgentOutcome outcome, long requestEpoch) {
-        if (transactionRunner == null || sessionHistoryDao == null
-                || request == null || outcome == null) return;
-        // 终态过滤在 EpisodicSummary 内做——CANCELLED /
-        // TIMED_OUT / PREEMPTED / REJECTED / PROTOCOL_ERROR / EXECUTION_UNKNOWN / DEFERRED
-        // / PARTIALLY_SUCCEEDED 全部 skip。用户指定:仅 SUCCEEDED / FAILED 写入。
-        // 注意:skip 短路在事务**之前**——不浪费 Room 单写者锁。
-        EpisodicSummary summary = EpisodicSummary.build(request, outcome);
-        if (summary.shouldSkip()) {
-            Log.i(TAG, "[MemoryWriter] skip episodic write req=" + outcome.getRequestId()
-                    + " state=" + outcome.getFinalState()
-                    + " (only SUCCEEDED/FAILED persisted)");
-            return;
-        }
+    public void writeEpisodic(EpisodicWrite write) {
+        if (transactionRunner == null || sessionHistoryDao == null || write == null) return;
+        // task 侧适配器已经完成终态过滤（仅 SUCCEEDED/FAILED）和安全摘要构建。
+        // 本层只承担事务内 epoch gate、实体写入与成功后的缓存失效。
         try {
             // 顺手优化:written flag 区分"真写入"与"stale / fail-closed reject",
             // 后者不再触发 invalidateCache(避免无意义 cache miss)。同模式:ok[0]。
@@ -107,32 +93,31 @@ public final class RoomMemoryWriter implements MemoryWriter {
             transactionRunner.runInTransaction(() -> {
                 Long currentEpochBoxed = readEpochFromSystemRow();
                 if (currentEpochBoxed == null) {
-                    Log.w(TAG, "[MemoryWriter] reject episodic write req=" + outcome.getRequestId()
+                    Log.w(TAG, "[MemoryWriter] reject episodic write req=" + write.requestId
                             + " reason=epoch_read_failed (fail-closed)");
                     return;  // epoch 读取失败 → 事务内 return,不写
                 }
                 long currentEpoch = currentEpochBoxed.longValue();
-                if (requestEpoch != currentEpoch) {
-                    Log.w(TAG, "[MemoryWriter] reject stale episodic write req=" + outcome.getRequestId()
-                            + " requestEpoch=" + requestEpoch + " currentEpoch=" + currentEpoch
+                if (write.requestEpoch != currentEpoch) {
+                    Log.w(TAG, "[MemoryWriter] reject stale episodic write req=" + write.requestId
+                            + " requestEpoch=" + write.requestEpoch + " currentEpoch=" + currentEpoch
                             + " (clearUserData 已发生,在途写入被事务内拒绝)");
                     return;  // 事务内 return,不写
                 }
-                Trajectory trajectory = outcome.getTrajectory();
                 SessionHistoryEntity row = new SessionHistoryEntity();
-                row.userId = ActorUsers.userIdOf(request);
-                row.zone = request.getOccupantZone() == null ? "" : request.getOccupantZone().name();
-                row.sessionId = request.getSessionId();
-                row.startedAtMillis = summary.getStartedAtMillis();
-                row.actor = request.getActor() == null ? "" : request.getActor().name();
-                row.finalState = summary.getFinalState();
-                row.stopReason = outcome.getStopReason() == null ? "" : outcome.getStopReason().name();
-                row.durationMs = summary.getDurationMs();
-                row.turnCount = summary.getTurnCount();
+                row.userId = write.userId;
+                row.zone = write.zone;
+                row.sessionId = write.sessionId;
+                row.startedAtMillis = write.startedAtMillis;
+                row.actor = write.actor;
+                row.finalState = write.finalState;
+                row.stopReason = write.stopReason;
+                row.durationMs = write.durationMs;
+                row.turnCount = write.turnCount;
                 // trajectoryJson 列名保留(不改 schema),内容从完整 trajectory JSON
                 // 换成 EpisodicSummary JSON——仅 startedAt/finalState/durationMs/turnCount/
                 // successfulCapabilities ≤3,**不含 userText/assistantContent/arguments/result**。
-                row.trajectoryJson = summary.toJson();
+                row.trajectoryJson = write.summaryJson;
                 sessionHistoryDao.insert(row);  // @Insert(REPLACE) 幂等
                 written[0] = true;
             });
@@ -141,17 +126,17 @@ public final class RoomMemoryWriter implements MemoryWriter {
                 episodicSource.invalidateCache();  // 失效 5min LRU
             }
             if (written[0]) {
-                Log.i(TAG, "[MemoryWriter] episodic write OK req=" + outcome.getRequestId()
-                        + " state=" + outcome.getFinalState()
-                        + " requestEpoch=" + requestEpoch
-                        + " summaryBytes=" + summary.toJson().length());
+                Log.i(TAG, "[MemoryWriter] episodic write OK req=" + write.requestId
+                        + " state=" + write.finalState
+                        + " requestEpoch=" + write.requestEpoch
+                        + " summaryBytes=" + write.summaryJson.length());
             } else {
-                Log.i(TAG, "[MemoryWriter] episodic write skipped req=" + outcome.getRequestId()
+                Log.i(TAG, "[MemoryWriter] episodic write skipped req=" + write.requestId
                         + " (stale / fail-closed / row-missing mismatch)");
             }
         } catch (Exception ex) {
             Log.w(TAG, "[MemoryWriter] episodic write FAILED req="
-                    + (outcome != null ? outcome.getRequestId() : "null")
+                    + (write != null ? write.requestId : "null")
                     + " cause=" + ex.getClass().getSimpleName() + ": " + ex.getMessage());
         }
     }

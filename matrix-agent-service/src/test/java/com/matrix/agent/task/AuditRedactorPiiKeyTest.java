@@ -1,4 +1,5 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.redact.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

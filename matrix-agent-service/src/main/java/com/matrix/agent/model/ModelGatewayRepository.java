@@ -2,22 +2,22 @@ package com.matrix.agent.model;
 
 import android.util.Log;
 
-import com.matrix.agent.task.DemoModelGateway;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.FallbackIntentClassifier;
-import com.matrix.agent.task.identity.IntentClassifier;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.LlmIntentClassifier;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.demo.DemoModelGateway;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.intent.FallbackIntentClassifier;
+import com.matrix.agent.intent.ClassifierFactory;
+import com.matrix.agent.intent.IntentClassifier;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.intent.LlmIntentClassifier;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.model.LlmModelGateway;
 import com.matrix.agent.model.ModelApiClient;
-import com.matrix.agent.model.ModelConfig;
+import com.matrix.agent.contract.ModelConfig;
 import com.matrix.agent.model.ModelProviderPreset;
 import com.matrix.agent.model.SecureModelConfigStore;
-import com.matrix.agent.model.ApiProtocol;
+import com.matrix.agent.contract.ApiProtocol;
 import com.matrix.agent.model.OnDeviceModelGateway;
 import com.matrix.agent.ondevice.MnnLoadOptions;
 import com.matrix.agent.ondevice.OnDeviceLlm;
@@ -36,7 +36,6 @@ public final class ModelGatewayRepository {
             Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,119}");
     private final SecureModelConfigStore configStore;
     private final ModelApiClient modelClient;
-    private final CapabilityRegistry registry;
     private final MemoryStore memoryStore;
     /** 可选 Memory 召回——null 时 LlmPlanner 退化为旧版行为。 */
     private final MemoryRecaller memoryRecaller;
@@ -54,30 +53,27 @@ public final class ModelGatewayRepository {
     @FunctionalInterface
     public interface ModelMutation<T> { T run() throws Exception; }
 
-    public ModelGatewayRepository(SecureModelConfigStore configStore,
-            ModelApiClient modelClient, CapabilityRegistry registry) {
-        this(configStore, modelClient, registry, null);
+    public ModelGatewayRepository(SecureModelConfigStore configStore, ModelApiClient modelClient) {
+        this(configStore, modelClient, null);
     }
 
-    public ModelGatewayRepository(SecureModelConfigStore configStore,
-            ModelApiClient modelClient, CapabilityRegistry registry, MemoryStore memoryStore) {
-        this(configStore, modelClient, registry, memoryStore, null);
+    public ModelGatewayRepository(SecureModelConfigStore configStore, ModelApiClient modelClient,
+            MemoryStore memoryStore) {
+        this(configStore, modelClient, memoryStore, null);
     }
 
     /** 注入 Memory 召回器,createModelGateway 内部传给 LlmPlanner。 */
-    public ModelGatewayRepository(SecureModelConfigStore configStore,
-            ModelApiClient modelClient, CapabilityRegistry registry, MemoryStore memoryStore,
-            MemoryRecaller memoryRecaller) {
-        this(configStore, modelClient, registry, memoryStore, memoryRecaller, null, null);
+    public ModelGatewayRepository(SecureModelConfigStore configStore, ModelApiClient modelClient,
+            MemoryStore memoryStore, MemoryRecaller memoryRecaller) {
+        this(configStore, modelClient, memoryStore, memoryRecaller, null, null);
     }
 
     /** 端侧推理装配：注入 appContext（模型目录 filesDir/models/mnn）+ OnDeviceLlmFactory。 */
-    public ModelGatewayRepository(SecureModelConfigStore configStore,
-            ModelApiClient modelClient, CapabilityRegistry registry, MemoryStore memoryStore,
-            MemoryRecaller memoryRecaller, Context appContext, OnDeviceLlmFactory onDeviceLlmFactory) {
+    public ModelGatewayRepository(SecureModelConfigStore configStore, ModelApiClient modelClient,
+            MemoryStore memoryStore, MemoryRecaller memoryRecaller, Context appContext,
+            OnDeviceLlmFactory onDeviceLlmFactory) {
         this.configStore = configStore;
         this.modelClient = modelClient;
-        this.registry = registry;
         this.memoryStore = memoryStore;
         this.memoryRecaller = memoryRecaller;
         this.appContext = appContext;
@@ -169,7 +165,7 @@ public final class ModelGatewayRepository {
             return createOnDeviceGateway(config);
         }
         Log.i(TAG, "[ModelRepo] create LlmModelGateway provider=" + config.displayName);
-        LlmModelGateway gateway = new LlmModelGateway(modelClient, config, registry, memoryStore);
+        LlmModelGateway gateway = new LlmModelGateway(modelClient, config, memoryStore);
         // 把 Memory 召回器透传给 LlmPlanner(结构化 JSON 兼容路径)
         if (memoryRecaller != null) gateway.setMemoryRecaller(memoryRecaller);
         return gateway;
@@ -238,13 +234,7 @@ public final class ModelGatewayRepository {
      * 让意图分类与新 Provider 同步切换，避免“已应用”但分类仍使用旧配置的伪装状态。
      */
     public IntentClassifier buildIntentClassifier(ModelConfig config) {
-        if (config.protocol == ApiProtocol.ON_DEVICE) {
-            Log.i(TAG, "[ModelRepo] build KeywordIntentClassifier (on-device offline)");
-            return KeywordIntentClassifier.INSTANCE;
-        }
-        Log.i(TAG, "[ModelRepo] build FallbackIntentClassifier provider=" + config.displayName);
-        LlmIntentClassifier llm = new LlmIntentClassifier(modelClient, config);
-        return new FallbackIntentClassifier(llm, KeywordIntentClassifier.INSTANCE);
+        return ClassifierFactory.build(modelClient, config);
     }
 
     /**
@@ -252,8 +242,7 @@ public final class ModelGatewayRepository {
      * LLM 不再被调用。
      */
     public IntentClassifier buildKeywordClassifier() {
-        Log.i(TAG, "[ModelRepo] build KeywordIntentClassifier (offline demo)");
-        return KeywordIntentClassifier.INSTANCE;
+        return ClassifierFactory.keyword();
     }
 
     /** 端侧 .so 仅 arm64-v8a，非 arm64 设备前置拒绝（避免 UnsatisfiedLinkError）。 */

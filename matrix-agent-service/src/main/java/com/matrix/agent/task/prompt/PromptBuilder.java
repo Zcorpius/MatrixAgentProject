@@ -1,6 +1,6 @@
 package com.matrix.agent.task.prompt;
 
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.memory.MemorySnippet;
 
 import java.util.List;

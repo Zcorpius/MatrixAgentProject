@@ -1,4 +1,9 @@
 package com.matrix.agent.task;
+import com.matrix.agent.host.di.*;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.intent.KeywordIntentClassifier;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -9,24 +14,24 @@ import com.matrix.agent.task.AgentEngine;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.DefaultContextUpdater;
 import com.matrix.agent.task.ModelCallExecutor;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.SteerMailbox;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.task.steer.SteerMailbox;
 import com.matrix.agent.task.StopReason;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.task.identity.VehicleState;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.vehicle.VehicleState;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.audit.AuditRecord;
 import com.matrix.agent.data.audit.AuditRepository;
@@ -107,7 +112,7 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
         assertEquals("Repository audit 必须记录 TIMED_OUT", "TIMED_OUT", repoAudit.getFinalState());
         assertEquals("AuditRecord.stopReason 必须为 TIMEOUT", "TIMEOUT", repoAudit.getStopReason());
         // round-trip 后 AuditRecord.stopReason 与 decodeTrajectory(...).getStopReason() 一致
-        Trajectory decodedFromAudit = com.matrix.agent.data.db.TrajectoryCodec.decodeTrajectory(
+        Trajectory decodedFromAudit = com.matrix.agent.task.persistence.TrajectoryCodec.decodeTrajectory(
                 repoAudit.getTrajectoryJson());
         assertEquals("round-trip 后 trajectory.stopReason 必须与 AuditRecord.stopReason 一致",
                 repoAudit.getStopReason(), decodedFromAudit.getStopReason().name());
@@ -168,7 +173,7 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
         assertEquals("AuditRecord.stopReason 必须为 CANCELLED",
                 "CANCELLED", repoAudit.getStopReason());
         // round-trip 后 AuditRecord.stopReason 与 decodeTrajectory(...).getStopReason() 一致
-        Trajectory decodedFromAudit = com.matrix.agent.data.db.TrajectoryCodec.decodeTrajectory(
+        Trajectory decodedFromAudit = com.matrix.agent.task.persistence.TrajectoryCodec.decodeTrajectory(
                 repoAudit.getTrajectoryJson());
         assertEquals("round-trip 后 trajectory.stopReason 必须与 AuditRecord.stopReason 一致",
                 repoAudit.getStopReason(), decodedFromAudit.getStopReason().name());
@@ -248,7 +253,7 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
                 "PREEMPTED", passengerAudit.getStopReason());
         // round-trip 后 trajectoryJson.trajectory.stopReason 必须为 PREEMPTED,
         // 与 AuditRecord.stopReason(结构化列)一致——否则列表显示"被抢占"但回放解码为"已取消"
-        Trajectory decodedPassenger = com.matrix.agent.data.db.TrajectoryCodec.decodeTrajectory(
+        Trajectory decodedPassenger = com.matrix.agent.task.persistence.TrajectoryCodec.decodeTrajectory(
                 passengerAudit.getTrajectoryJson());
         assertEquals("副驾 round-trip 后 trajectory.stopReason 必须为 PREEMPTED",
                 StopReason.PREEMPTED, decodedPassenger.getStopReason());
@@ -259,7 +264,7 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
                 driverOutcome.getRequestId(), "SUCCEEDED");
         assertNotNull("主驾 SUCCEEDED 必须落 audit", driverAudit);
         assertEquals("SUCCEEDED", driverAudit.getFinalState());
-        Trajectory decodedDriver = com.matrix.agent.data.db.TrajectoryCodec.decodeTrajectory(
+        Trajectory decodedDriver = com.matrix.agent.task.persistence.TrajectoryCodec.decodeTrajectory(
                 driverAudit.getTrajectoryJson());
         assertEquals("主驾 round-trip 后 AuditRecord.stopReason 与 trajectory.stopReason 必须一致",
                 driverAudit.getStopReason(), decodedDriver.getStopReason().name());
@@ -292,11 +297,13 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gw -> new AgentEngine(
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget, mailbox,
-                new AgentEngineConfiguration.Builder().auditSink(audit::persist).build());
+                new AgentEngineConfiguration.Builder()
+                        .auditSink(new com.matrix.agent.task.persistence.AuditRepositoryAuditSink(audit))
+                        .build());
         return new AgentRuntimeRepository(engineFactory, sessionManager,
                 new InMemoryMemoryStore(), gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
-                com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE, audit);
+                com.matrix.agent.intent.KeywordIntentClassifier.INSTANCE, audit);
     }
 
     /**
@@ -309,23 +316,12 @@ public final class AgentRuntimeRepositoryAuditCoverageTest {
         private final List<AuditRecord> records = new ArrayList<>();
 
         @Override
-        public synchronized void persist(AgentOutcome outcome,
-                com.matrix.agent.task.identity.AgentRequest request) {
+        public synchronized void persist(com.matrix.agent.data.audit.AuditOutcomeEntry entry) {
             records.add(new AuditRecord(
-                    outcome.getRequestId(),
-                    request.getSessionId(),
-                    request.getActor() == null ? "" : request.getActor().name(),
-                    request.getOccupantZone() == null ? "" : request.getOccupantZone().name(),
-                    com.matrix.agent.task.identity.ActorUsers.userIdOf(request),
-                    outcome.getTrajectory().getStartedAtMillis(),
-                    outcome.getDurationMillis(),
-                    outcome.getStopReason().name(),
-                    outcome.getFinalState().name(),
-                    outcome.getTrajectory().getIterations().size(),
-                    outcome.getTrajectory().getTotalToolCalls(),
-                    outcome.getTrajectory().countSuccessfulToolCalls(),
-                    // 存 trajectoryJson 让测试可断言 round-trip 一致性
-                    com.matrix.agent.data.db.TrajectoryCodec.encode(outcome)));
+                    entry.requestId, entry.sessionId, entry.actor, entry.zone, entry.userId,
+                    entry.startedMs, entry.durationMs, entry.stopReason, entry.finalState,
+                    entry.iterationCount, entry.totalToolCalls, entry.successToolCalls,
+                    entry.trajectoryJson));
         }
 
         @Override

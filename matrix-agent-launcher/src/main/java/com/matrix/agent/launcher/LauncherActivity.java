@@ -10,6 +10,9 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -21,6 +24,7 @@ import com.matrix.agent.launcher.presentation.DownloadFragment;
 import com.matrix.agent.launcher.presentation.LauncherViewModel;
 import com.matrix.agent.launcher.presentation.LauncherViewModelFactory;
 import com.matrix.agent.launcher.presentation.ModelFragment;
+import com.matrix.agent.launcher.presentation.VoiceFragment;
 
 /** Shell navigation only; feature pages keep their own MVVM state and SDK boundary. */
 public final class LauncherActivity extends AppCompatActivity {
@@ -28,9 +32,11 @@ public final class LauncherActivity extends AppCompatActivity {
     private TextView status;
     private TextView pageTitle;
     private Button tasks;
+    private Button voice;
     private Button models;
     private Button downloads;
     private View tasksIndicator;
+    private View voiceIndicator;
     private View modelsIndicator;
     private View downloadsIndicator;
     private LauncherViewModelFactory viewModelFactory;
@@ -39,12 +45,15 @@ public final class LauncherActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_launcher);
         drawer = findViewById(R.id.drawer_layout);
+        applySystemBarInsets();
         status = findViewById(R.id.host_status);
         pageTitle = findViewById(R.id.page_title);
         tasks = findViewById(R.id.nav_tasks);
+        voice = findViewById(R.id.nav_voice);
         models = findViewById(R.id.nav_models);
         downloads = findViewById(R.id.nav_downloads);
         tasksIndicator = findViewById(R.id.nav_tasks_indicator);
+        voiceIndicator = findViewById(R.id.nav_voice_indicator);
         modelsIndicator = findViewById(R.id.nav_models_indicator);
         downloadsIndicator = findViewById(R.id.nav_downloads_indicator);
         findViewById(R.id.menu_button).setOnClickListener(ignored -> drawer.openDrawer(GravityCompat.START));
@@ -52,6 +61,7 @@ public final class LauncherActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.drawer_version)).setText(
                 getString(R.string.launcher_version, versionName()));
         tasks.setOnClickListener(v -> show(new AgentTaskFragment(), tasks, R.string.nav_tasks));
+        voice.setOnClickListener(v -> show(new VoiceFragment(), voice, R.string.nav_voice));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
         downloads.setOnClickListener(v -> show(new DownloadFragment(), downloads, R.string.nav_downloads));
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -100,8 +110,8 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void selectNavigation(Button selected) {
-        Button[] buttons = {tasks, models, downloads};
-        View[] indicators = {tasksIndicator, modelsIndicator, downloadsIndicator};
+        Button[] buttons = {tasks, voice, models, downloads};
+        View[] indicators = {tasksIndicator, voiceIndicator, modelsIndicator, downloadsIndicator};
         for (int index = 0; index < buttons.length; index++) {
             Button button = buttons[index];
             boolean active = button == selected;
@@ -118,6 +128,24 @@ public final class LauncherActivity extends AppCompatActivity {
 
     public LauncherViewModelFactory viewModelFactory() { return viewModelFactory; }
     public int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density + .5f); }
+
+    /**
+     * Android 15+ draws app content edge-to-edge by default.  Keep the workspace and drawer
+     * deliberately below the system status bar instead of relying on a fixed, device-specific
+     * top margin.
+     */
+    private void applySystemBarInsets() {
+        View workspace = findViewById(R.id.workspace_content);
+        View drawerContent = findViewById(R.id.drawer_content);
+        ViewCompat.setOnApplyWindowInsetsListener(drawer, (view, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            workspace.setPadding(0, bars.top, 0, bars.bottom);
+            drawerContent.setPadding(dp(24), dp(28) + bars.top, dp(20), dp(24) + bars.bottom);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(drawer);
+    }
+
     private String versionName() {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
         catch (android.content.pm.PackageManager.NameNotFoundException impossible) { return "—"; }

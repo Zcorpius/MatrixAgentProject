@@ -3,7 +3,7 @@ package com.matrix.agent.task;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.host.MatrixExecutorRegistry;
+import com.matrix.agent.platform.MatrixExecutorRegistry;
 
 import java.util.concurrent.ThreadPoolExecutor;
 

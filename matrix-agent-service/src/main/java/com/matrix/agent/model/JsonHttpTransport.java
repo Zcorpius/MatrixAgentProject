@@ -1,9 +1,10 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelApiException;
+
 import android.util.Log;
 
-import com.matrix.agent.task.SafeLog;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.platform.MatrixHttpClient;
 
 import org.json.JSONObject;
@@ -27,6 +28,7 @@ import okhttp3.Response;
  */
 final class JsonHttpTransport {
     private static final String TAG = "MatrixAgent";
+    private static final String PROVIDER_RAW_PLACEHOLDER = "[provider-raw-redacted]";
     /** Tool-calling JSON is small; never let a hostile/misconfigured provider allocate unbounded heap. */
     static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
@@ -80,10 +82,12 @@ final class JsonHttpTransport {
     }
 
     private static void throwForHttpStatus(int code, String endpoint, String response) {
-        SafeLog.wProviderRaw(TAG, "[Http] HTTP error ", code, truncate(response, 500));
+        // Provider responses can contain user data and credentials; raw text never reaches logs.
+        Log.w(TAG, "[Http] HTTP error code=" + code + " body=" + PROVIDER_RAW_PLACEHOLDER
+                + " bytes=" + (response == null ? 0 : response.length()));
         String masked = maskEndpoint(endpoint);
         RuntimeException error = new IllegalStateException("HTTP " + code + ": body="
-                + SafeLog.PROVIDER_RAW_PLACEHOLDER);
+                + PROVIDER_RAW_PLACEHOLDER);
         if (code == 429) throw new ModelApiException.RateLimitException(masked, error);
         if (code >= 500) throw new ModelApiException.ServerException(code, masked, error);
         if (code >= 400) throw new ModelApiException.ClientException(code, masked, error);
@@ -117,7 +121,4 @@ final class JsonHttpTransport {
         }
     }
 
-    private static String truncate(String value, int max) {
-        return value.length() <= max ? value : value.substring(0, max) + "…";
-    }
 }

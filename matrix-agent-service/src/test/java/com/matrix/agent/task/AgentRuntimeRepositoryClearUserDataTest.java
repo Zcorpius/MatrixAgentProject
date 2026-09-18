@@ -1,4 +1,10 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.intent.KeywordIntentClassifier;
+
+import com.matrix.agent.identity.AgentRequest;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -10,23 +16,23 @@ import com.matrix.agent.task.AgentEngine;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.DefaultContextUpdater;
 import com.matrix.agent.task.ModelCallExecutor;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.Steer;
-import com.matrix.agent.task.SteerMailbox;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.task.steer.Steer;
+import com.matrix.agent.task.steer.SteerMailbox;
 import com.matrix.agent.task.StopReason;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.task.identity.VehicleState;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.vehicle.VehicleState;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.audit.AuditRecord;
 import com.matrix.agent.data.audit.AuditRepository;
@@ -450,8 +456,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
     /** 测试用 AuditRepository:clearByUserZone 抛 RuntimeException。 */
     private static final class ThrowingAuditRepository implements AuditRepository {
         @Override
-        public void persist(com.matrix.agent.task.AgentOutcome outcome,
-                com.matrix.agent.task.identity.AgentRequest request) { }
+        public void persist(com.matrix.agent.data.audit.AuditOutcomeEntry entry) { }
         @Override
         public AuditRecord queryByRequest(String userId, String zone, String requestId) {
             return null;
@@ -470,8 +475,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
     /** 测试用 AuditRepository:clearByUserZone 返回 FAILURE(不抛,直接结构化失败)。 */
     private static final class FailingAuditRepository implements AuditRepository {
         @Override
-        public void persist(com.matrix.agent.task.AgentOutcome outcome,
-                com.matrix.agent.task.identity.AgentRequest request) { }
+        public void persist(com.matrix.agent.data.audit.AuditOutcomeEntry entry) { }
         @Override
         public AuditRecord queryByRequest(String userId, String zone, String requestId) {
             return null;
@@ -507,11 +511,12 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
                 gw, modelCallExecutor, policyEngine, registry, provider, sessionManager,
                 new DefaultContextUpdater(), sessionLockManager, toolExecutor, budget,
                 new SteerMailbox(), new AgentEngineConfiguration.Builder()
-                        .auditSink(audit::persist).build());
+                        .auditSink(new com.matrix.agent.task.persistence.AuditRepositoryAuditSink(audit))
+                        .build());
         return new AgentRuntimeRepository(engineFactory,
                 sessionManager, memoryStore, gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
-                com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE, audit);
+                com.matrix.agent.intent.KeywordIntentClassifier.INSTANCE, audit);
     }
 
 
@@ -557,7 +562,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
         AgentRuntimeRepository repo = new AgentRuntimeRepository(engineFactory,
                 sessionManager, memoryStore, gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
-                com.matrix.agent.task.identity.KeywordIntentClassifier.INSTANCE,
+                com.matrix.agent.intent.KeywordIntentClassifier.INSTANCE,
                 NoopAuditRepository.INSTANCE);
         if (mailbox != null) {
             repo.setSteerMailbox(mailbox);

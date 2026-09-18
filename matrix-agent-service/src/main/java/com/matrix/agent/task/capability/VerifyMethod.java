@@ -1,5 +1,7 @@
 package com.matrix.agent.task.capability;
 
+import com.matrix.agent.demo.MockCapabilityProvider;
+
 /**
  * Capability 验证方式枚举。
  *

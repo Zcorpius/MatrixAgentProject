@@ -1,4 +1,7 @@
 package com.matrix.agent.task.identity;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.intent.KeywordIntentClassifier;
 
 import static org.junit.Assert.assertEquals;
 

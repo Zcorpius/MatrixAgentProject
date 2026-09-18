@@ -1,4 +1,10 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.contract.ToolCall;
+
+import com.matrix.agent.contract.AgentMessage;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -14,22 +20,22 @@ import com.matrix.agent.task.AgentEngine;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.DefaultContextUpdater;
 import com.matrix.agent.task.ModelCallExecutor;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.SteerMailbox;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.task.steer.SteerMailbox;
 import com.matrix.agent.task.StopReason;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.task.identity.VehicleState;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.vehicle.VehicleState;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.task.policy.PolicyEngine;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 
 /**
@@ -59,7 +65,7 @@ public final class AgentRuntimeRepositoryPreemptionIntegrationTest {
         // driver 抢占后 passenger token 被 cancel,passenger 出 cancellationState 路径
         ModelGateway gateway = req -> {
             boolean hasToolResult = req.getConversation().stream()
-                    .anyMatch(m -> m.getRole() == com.matrix.agent.task.AgentMessage.Role.TOOL);
+                    .anyMatch(m -> m.getRole() == com.matrix.agent.contract.AgentMessage.Role.TOOL);
             if (req.getAgentRequest().getActor() == Actor.PASSENGER && !hasToolResult) {
                 passengerEntered.countDown();
                 try {
@@ -72,7 +78,7 @@ public final class AgentRuntimeRepositoryPreemptionIntegrationTest {
                 return ModelTurn.directAnswer("done");
             }
             return ModelTurn.ofToolCalls(java.util.Collections.singletonList(
-                    new com.matrix.agent.task.tool.ToolCall(
+                    new com.matrix.agent.contract.ToolCall(
                             "vehicle.info.get_battery", java.util.Collections.emptyMap())), "battery");
         };
 

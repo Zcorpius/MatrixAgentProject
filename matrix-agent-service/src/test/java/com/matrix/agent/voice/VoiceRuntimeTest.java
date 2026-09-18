@@ -1,16 +1,19 @@
 package com.matrix.agent.voice;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.contract.ModelTurn;
 
 import android.app.Application;
 
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.Trajectory;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.data.session.SessionLockManager;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.session.SessionLockManager;
 import com.matrix.agent.voice.port.AsrPort;
 import com.matrix.agent.voice.port.AudioFocusPort;
 import com.matrix.agent.voice.NoopVoiceMetrics;
@@ -411,7 +414,7 @@ public final class VoiceRuntimeTest {
     /** repository 仅满足构造非空校验,恢复路径不触达(engine/gateway 仅占位,runner 不被调用)。 */
     private static AgentRuntimeRepository dummyRepository() {
         return new AgentRuntimeRepository(gw -> null, null, null,
-                req -> com.matrix.agent.task.ModelTurn.directAnswer("done"),
+                req -> com.matrix.agent.contract.ModelTurn.directAnswer("done"),
                 "runtime-recovery-test", null,
                 new TaskScheduler(1, new SessionLockManager()), new MockVehicleStateSource(),
                 CapabilityRegistry.createDemoRegistry(),

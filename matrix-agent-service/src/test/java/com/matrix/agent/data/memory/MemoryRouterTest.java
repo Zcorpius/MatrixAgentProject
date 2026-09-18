@@ -1,9 +1,11 @@
 package com.matrix.agent.data.memory;
 
+import com.matrix.agent.session.SessionManager;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 
 import java.util.ArrayList;
 import java.util.Arrays;

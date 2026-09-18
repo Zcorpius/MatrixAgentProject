@@ -1,5 +1,7 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.contract.ToolCall;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -11,9 +13,9 @@ import org.junit.Test;
 import com.matrix.agent.task.DynamicThreadPool;
 import com.matrix.agent.task.capability.CapabilityDefinition;
 import com.matrix.agent.task.capability.RiskLevel;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.task.tool.ToolResult.Status;
 
 /**

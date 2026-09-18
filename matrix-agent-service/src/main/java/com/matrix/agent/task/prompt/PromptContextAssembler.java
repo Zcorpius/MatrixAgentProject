@@ -5,8 +5,8 @@ import android.util.Log;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
-import com.matrix.agent.task.identity.ActorUsers;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.ActorUsers;
+import com.matrix.agent.identity.AgentRequest;
 
 import java.util.Collections;
 import java.util.List;

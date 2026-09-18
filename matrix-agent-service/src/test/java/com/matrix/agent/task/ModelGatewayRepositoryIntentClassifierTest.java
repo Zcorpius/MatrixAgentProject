@@ -1,18 +1,19 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.intent.LlmIntentClassifier;
+
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.FallbackIntentClassifier;
-import com.matrix.agent.task.identity.IntentClassifier;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
+import com.matrix.agent.intent.FallbackIntentClassifier;
+import com.matrix.agent.intent.IntentClassifier;
+import com.matrix.agent.intent.KeywordIntentClassifier;
 import com.matrix.agent.model.ModelGatewayRepository;
 import com.matrix.agent.model.ModelApiClient;
-import com.matrix.agent.model.ModelConfig;
+import com.matrix.agent.contract.ModelConfig;
 import com.matrix.agent.model.ModelProviderPreset;
 
 /**
@@ -61,7 +62,6 @@ public final class ModelGatewayRepositoryIntentClassifierTest {
         return new ModelGatewayRepository(
                 /* configStore */ null,
                 ModelApiClient.forTesting(),
-                CapabilityRegistry.createDemoRegistry(),
                 /* memoryStore */ null,
                 /* memoryRecaller */ null);
     }

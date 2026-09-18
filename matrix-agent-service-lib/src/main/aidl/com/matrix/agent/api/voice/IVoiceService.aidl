@@ -6,6 +6,7 @@ import com.matrix.agent.api.voice.VoiceOperationResult;
 import com.matrix.agent.api.voice.VoiceServiceStatus;
 import com.matrix.agent.api.voice.VoiceSessionHandle;
 import com.matrix.agent.api.voice.VoiceSessionRequest;
+import com.matrix.agent.api.download.ModelDownloadInfo;
 
 /**
  * 受控语音会话与系统语音入口协调。音频采集全部在服务进程内完成；
@@ -23,6 +24,13 @@ interface IVoiceService {
                                                  String clientOperationId,
                                                  IVoiceSessionCallback callback);
     VoiceOperationResult stopSession(String sessionId, String clientOperationId);
+
+    /** Offline speech-model projection. Progress is persisted by the Host downloader. */
+    List<ModelDownloadInfo> listOfflineModels();
+    /** Starts installation of every missing bundled offline speech model without opening audio. */
+    VoiceOperationResult installOfflineModels(String clientOperationId);
+    /** Deletes one idle offline speech model and its resumable download artifact. */
+    VoiceOperationResult deleteOfflineModel(String modelId, String clientOperationId);
 
     void subscribeStatus(IVoiceCallback callback);
     void unsubscribeStatus(IVoiceCallback callback);

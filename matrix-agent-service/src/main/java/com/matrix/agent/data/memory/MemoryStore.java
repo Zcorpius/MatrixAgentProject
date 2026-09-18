@@ -1,5 +1,7 @@
 package com.matrix.agent.data.memory;
 
+import com.matrix.agent.identity.AgentRequest;
+
 import java.util.Map;
 
 public interface MemoryStore {

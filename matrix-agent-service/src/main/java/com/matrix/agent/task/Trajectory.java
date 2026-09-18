@@ -1,4 +1,5 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.redact.*;
 
 import java.util.ArrayList;
 import java.util.Collections;

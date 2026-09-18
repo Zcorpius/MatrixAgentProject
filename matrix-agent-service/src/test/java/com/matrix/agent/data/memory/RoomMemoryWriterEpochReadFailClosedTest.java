@@ -15,8 +15,8 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 import com.matrix.agent.data.db.SessionHistoryDao;
@@ -65,7 +65,7 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
         // 不抛 —— fail-log;不写 —— fail-closed
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("throwing memoryDao → sessionDao.insert 必须 0 次(readEpoch 失败 → 事务内 return)",
                 0, sessionDao.insertCount.get());
@@ -98,7 +98,7 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodicOnTerminal(request, outcome, 0L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("row 缺失 + requestEpoch=0 → 合法初始,sessionDao.insert 1 次",
                 1, sessionDao.insertCount.get());

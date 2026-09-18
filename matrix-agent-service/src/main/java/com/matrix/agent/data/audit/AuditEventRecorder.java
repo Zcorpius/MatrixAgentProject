@@ -2,7 +2,6 @@ package com.matrix.agent.data.audit;
 
 import android.util.Log;
 
-import com.matrix.agent.task.AuditEventTypes;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.AuditEventEntity;
 

@@ -1,8 +1,5 @@
 package com.matrix.agent.data.memory;
 
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.AgentOutcome;
-
 /**
  * Memory 写入路径——Episodic 自动 + Semantic 显式。
  *
@@ -12,8 +9,8 @@ import com.matrix.agent.task.AgentOutcome;
  *
  * <p><b>写入策略</b>(用户选择"Episodic 全自动,Semantic 仅显式"):
  * <ul>
- *   <li>{@link #writeEpisodicOnTerminal(AgentRequest, AgentOutcome, long)} —— AgentEngine 终态出口点
- *       自动调用,把任务终态写 session_history 表。fail-log(异常仅 Log.w,不向上传播)。</li>
+ *   <li>{@link #writeEpisodic(EpisodicWrite)} —— task 侧适配器完成终态过滤和摘要构建后
+ *       调用,把任务终态写 session_history 表。fail-log(异常仅 Log.w,不向上传播)。</li>
  *   <li>{@link #writeSemantic(String, String, String, String, double, String, long)} —— 仅由
  *       {@code memory.semantic.save} capability handler 调用,用户显式要求长期记住的
  *       事实/知识(如"我对花生过敏")。返回写入是否成功(供 handler 转 ToolResult)。</li>
@@ -32,15 +29,15 @@ import com.matrix.agent.task.AgentOutcome;
 public interface MemoryWriter {
 
     /**
-     * Episodic 自动写入:AgentEngine 终态出口点调用。
+     * Episodic 自动写入:task 侧适配器完成终态过滤与摘要构建后调用。
      *
      * <p>实现必须 fail-log(仅 Log.w + 计数,不向上传播)——保证主任务路径不被 Memory 拖累。
      * 幂等:同 (userId, zone, sessionId, startedAtMillis) 主键重复时 REPLACE。
      *
-     * @param requestEpoch 任务入口捕获的 epoch(由 AgentRequest.getEpoch() 透传),
-     *     与 clearUserDataAndBump 自增后的 currentEpoch 不匹配时事务内 return 不写
+     * <p>事务内 epoch gate 不变：{@code write.requestEpoch} 与
+     * clearUserDataAndBump 自增后的 currentEpoch 不匹配时事务内 return 不写。
      */
-    void writeEpisodicOnTerminal(AgentRequest request, AgentOutcome outcome, long requestEpoch);
+    void writeEpisodic(EpisodicWrite write);
 
     /**
      * Semantic 显式写入:仅由 save_semantic capability handler 调用。
@@ -61,7 +58,7 @@ public interface MemoryWriter {
     /** Singleton NOOP,database=null 时使用,与 NoopAuditRepository.INSTANCE 同模式。 */
     MemoryWriter NOOP = new MemoryWriter() {
         @Override
-        public void writeEpisodicOnTerminal(AgentRequest request, AgentOutcome outcome, long requestEpoch) {
+        public void writeEpisodic(EpisodicWrite write) {
             // Noop:database=null 时无持久化层,与 auditRepository fail-open 语义一致。
         }
 

@@ -1,11 +1,17 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.platform.AuditDigest;
+import com.matrix.agent.platform.Sha1AuditDigest;
+import com.matrix.agent.platform.UnavailableAuditDigest;
+import com.matrix.agent.host.di.*;
+import com.matrix.agent.task.redact.*;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.task.tool.ToolResult;
 
 import org.junit.Test;

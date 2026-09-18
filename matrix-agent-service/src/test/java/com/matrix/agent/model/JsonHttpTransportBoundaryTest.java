@@ -1,5 +1,7 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelApiException;
+
 import static org.junit.Assert.fail;
 
 import org.json.JSONObject;

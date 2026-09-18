@@ -14,9 +14,9 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 import com.matrix.agent.data.db.SessionHistoryDao;
@@ -69,7 +69,7 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodicOnTerminal(request, outcome, 5L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 5L));
 
         assertEquals("同 epoch → session_history 1 行", 1, sessionDao.store.size());
     }
@@ -86,7 +86,7 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodicOnTerminal(request, outcome, 5L);
+        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 5L));
 
         assertEquals("不同 epoch → session_history 0 行(事务内拒绝)",
                 0, sessionDao.store.size());
@@ -140,7 +140,7 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcomeA = new AgentOutcome(requestA.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodicOnTerminal(requestA, outcomeA, 2L);
+        writer.writeEpisodic(EpisodicTestSupport.write(requestA, outcomeA, 2L));
         boolean semanticAccepted = writer.writeSemantic(
                 "demo-driver", "DRIVER", "fact.x", "y", 1.0, "a", 2L);
 

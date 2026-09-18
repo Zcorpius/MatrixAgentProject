@@ -1,4 +1,8 @@
 package com.matrix.agent.host;
+import com.matrix.agent.host.di.*;
+import com.matrix.agent.task.steer.*;
+
+import com.matrix.agent.identity.Actor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -11,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.Steer;
+import com.matrix.agent.task.steer.Steer;
 import com.matrix.agent.data.audit.AuditEventRecorder;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.AuditEventEntity;

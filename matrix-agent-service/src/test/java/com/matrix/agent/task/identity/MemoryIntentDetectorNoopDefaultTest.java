@@ -1,4 +1,9 @@
 package com.matrix.agent.task.identity;
+import com.matrix.agent.host.di.*;
+
+import com.matrix.agent.intent.MemoryIntentDetector;
+
+import com.matrix.agent.intent.KeywordMemoryIntentDetector;
 
 import static org.junit.Assert.assertFalse;
 

@@ -1,6 +1,6 @@
 package com.matrix.agent.data.memory;
 
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 
 import java.util.Objects;
 

@@ -1,20 +1,23 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
+import com.matrix.agent.contract.LlmClient;
+
 import android.util.Log;
 
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.ActorUsers;
-import com.matrix.agent.task.identity.VehicleZone;
-import com.matrix.agent.task.capability.CapabilityRegistry;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.ActorUsers;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
 import com.matrix.agent.data.memory.MemoryStore;
-import com.matrix.agent.data.session.SessionContext;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.tool.ToolCall;
-import com.matrix.agent.task.capability.ToolDefinition;
+import com.matrix.agent.session.SessionContext;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.contract.ToolDefinition;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -43,7 +46,6 @@ public final class LlmPlanner {
 
     private final LlmClient client;
     private final ModelConfig config;
-    private final CapabilityRegistry registry;
     private final MemoryStore memoryStore;
     /**
      * 可选 Memory 召回——null 时维持旧版行为(289 测试兼容)。
@@ -51,13 +53,8 @@ public final class LlmPlanner {
      */
     private MemoryRecaller memoryRecaller;
 
-    public LlmPlanner(ModelApiClient client, ModelConfig config, CapabilityRegistry registry) {
-        this(client, config, registry, null);
-    }
-
-    public LlmPlanner(ModelApiClient client, ModelConfig config, CapabilityRegistry registry,
-            MemoryStore memoryStore) {
-        this((LlmClient) client, config, registry, memoryStore);
+    public LlmPlanner(LlmClient client, ModelConfig config) {
+        this(client, config, null);
     }
 
     /**
@@ -66,11 +63,9 @@ public final class LlmPlanner {
      * <p>生产路径继续走 {@link ModelApiClient} 构造器(签名不变,向后兼容旧版)。
      * 测试用此构造器注入 fake LlmClient,无需起 HttpServer 验证 prompt 装配。
      */
-    public LlmPlanner(LlmClient client, ModelConfig config, CapabilityRegistry registry,
-            MemoryStore memoryStore) {
+    public LlmPlanner(LlmClient client, ModelConfig config, MemoryStore memoryStore) {
         this.client = client;
         this.config = config;
-        this.registry = registry;
         this.memoryStore = memoryStore;
     }
 
@@ -79,11 +74,10 @@ public final class LlmPlanner {
         this.memoryRecaller = recaller;
     }
 
-    public ModelTurn decide(AgentRequest request, SessionContext context) {
+    public ModelTurn decide(AgentRequest request, SessionContext context, List<ToolDefinition> tools) {
         try {
-            // Per-request zone projection must apply to the compatibility prompt too.
-            String systemPrompt = PROMPT_PREFIX
-                    + registry.toPlannerInstructions(request.getOccupantZone());
+            // The caller supplies the same per-zone projection used for the wire schema.
+            String systemPrompt = PROMPT_PREFIX + plannerInstructions(tools);
             String userPrompt = "发起者=" + request.getActor()
                     + "\n最近上下文=" + context.getRecentTurns()
                     + "\n已保存的偏好 key 列表=" + savedKeysFor(request)
@@ -104,6 +98,21 @@ public final class LlmPlanner {
         } catch (Exception error) {
             throw new IllegalStateException("模型规划失败：" + safeMessage(error), error);
         }
+    }
+
+    /** Builds the legacy prompt fragment from an already policy-projected tool list. */
+    private static String plannerInstructions(List<ToolDefinition> tools) {
+        StringBuilder text = new StringBuilder();
+        if (tools != null) {
+            for (ToolDefinition tool : tools) {
+                text.append("- ").append(tool.getCapabilityName());
+                if (tool.getDescription() != null && !tool.getDescription().isEmpty()) {
+                    text.append(": ").append(tool.getDescription());
+                }
+                text.append('\n');
+            }
+        }
+        return text.toString();
     }
 
     private static Map<String, Object> toMap(JSONObject object) throws Exception {

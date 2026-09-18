@@ -1,12 +1,14 @@
 package com.matrix.agent.voice;
 
+import com.matrix.agent.contract.AgentMessage;
+
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.task.identity.InputSource;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.identity.InputSource;
 import com.matrix.agent.voice.port.AsrPort;
 import com.matrix.agent.voice.AgentRunner;
 import com.matrix.agent.voice.port.AudioFocusPort;
@@ -839,7 +841,7 @@ public final class VoiceSessionControllerTest {
         Trajectory t = new Trajectory();
         if (obs.length > 0) {
             t.addIteration(new com.matrix.agent.task.AgentIteration(1,
-                    com.matrix.agent.task.AgentMessage.assistant("ok", java.util.Collections.emptyList()),
+                    com.matrix.agent.contract.AgentMessage.assistant("ok", java.util.Collections.emptyList()),
                     java.util.Collections.emptyList(),
                     java.util.Arrays.asList(obs),
                     java.util.Collections.emptyList(),

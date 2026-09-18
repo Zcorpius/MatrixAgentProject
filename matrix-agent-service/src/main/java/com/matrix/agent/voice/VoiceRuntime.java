@@ -1,4 +1,5 @@
 package com.matrix.agent.voice;
+import com.matrix.agent.platform.MatrixExecutorRegistry;
 
 import com.matrix.agent.voice.port.*;
 
@@ -15,7 +16,7 @@ import com.matrix.agent.voice.VoiceSessionState;
 import com.matrix.agent.voice.WakeEvent;
 import com.matrix.agent.task.AgentRuntimeRepository;
 import com.matrix.agent.task.AgentInvocation;
-import com.matrix.agent.task.identity.InputSource;
+import com.matrix.agent.identity.InputSource;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -333,6 +334,11 @@ public final class VoiceRuntime {
     public boolean isSessionActive() {
         VoiceSessionController c = controller;
         return c != null && c.currentState() != VoiceSessionState.State.IDLE;
+    }
+
+    /** True once native recognizers/models have been assembled and must not be deleted on disk. */
+    public boolean hasLoadedModels() {
+        return built || startInFlight;
     }
 
     /** 退后台:停采音释放麦克风。foregroundActive 写与 buildAndStart 互斥(同一 lifecycleLock)。 */

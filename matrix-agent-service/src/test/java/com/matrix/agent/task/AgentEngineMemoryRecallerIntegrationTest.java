@@ -1,9 +1,15 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelTurnRequest;
+
+import com.matrix.agent.contract.ModelGateway;
+
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.data.memory.MemoryLayer;
 import com.matrix.agent.data.memory.MemoryRecaller;
@@ -11,9 +17,9 @@ import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
 import com.matrix.agent.task.policy.PolicyEngine;
 import com.matrix.agent.task.prompt.PromptContextAssembler;
-import com.matrix.agent.data.session.SessionLockManager;
-import com.matrix.agent.data.session.SessionManager;
-import com.matrix.agent.task.tool.MockCapabilityProvider;
+import com.matrix.agent.session.SessionLockManager;
+import com.matrix.agent.session.SessionManager;
+import com.matrix.agent.demo.MockCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 
 import org.junit.Before;

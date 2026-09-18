@@ -1,5 +1,9 @@
 package com.matrix.agent.task.identity;
 
+import com.matrix.agent.identity.VehicleZone;
+
+import com.matrix.agent.identity.ExplicitIntentConstraints;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

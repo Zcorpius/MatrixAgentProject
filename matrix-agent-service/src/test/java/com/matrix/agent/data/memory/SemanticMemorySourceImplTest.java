@@ -10,7 +10,7 @@ import org.junit.Test;
 
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
 

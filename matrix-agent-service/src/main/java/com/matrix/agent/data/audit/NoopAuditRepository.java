@@ -1,8 +1,5 @@
 package com.matrix.agent.data.audit;
 
-import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.identity.AgentRequest;
-
 import java.util.Collections;
 import java.util.List;
 
@@ -17,7 +14,7 @@ public final class NoopAuditRepository implements AuditRepository {
     private NoopAuditRepository() {}
 
     @Override
-    public void persist(AgentOutcome outcome, AgentRequest request) {
+    public void persist(AuditOutcomeEntry entry) {
         // intentionally empty
     }
 

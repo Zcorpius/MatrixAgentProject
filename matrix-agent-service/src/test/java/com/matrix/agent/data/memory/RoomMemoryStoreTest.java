@@ -16,7 +16,7 @@ import org.junit.Test;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 
 /**
  * RoomMemoryStore 主路径 JVM 契约测试。

@@ -1,5 +1,9 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.identity.AgentRequest;
+
+import com.matrix.agent.contract.ToolCall;
+
 /**
  * Agent Loop 单任务执行预算。不引 tokenizer,字符数用 char-based 估算。
  *

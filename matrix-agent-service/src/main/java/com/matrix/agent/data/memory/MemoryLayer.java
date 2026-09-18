@@ -1,5 +1,7 @@
 package com.matrix.agent.data.memory;
 
+import com.matrix.agent.session.SessionContext;
+
 /**
  * 四层 Memory 抽象——区分瞬时上下文、事件记忆、语义知识、用户偏好。
  *

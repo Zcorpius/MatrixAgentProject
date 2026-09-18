@@ -1,5 +1,7 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ApiProtocol;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 

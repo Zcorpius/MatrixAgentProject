@@ -2,10 +2,14 @@ package com.matrix.agent.task;
 
 import android.util.Log;
 
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.contract.CancellableModelCall;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ModelTurnRequest;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
 
-import com.matrix.agent.model.ModelApiException;
+import com.matrix.agent.contract.ModelApiException;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;

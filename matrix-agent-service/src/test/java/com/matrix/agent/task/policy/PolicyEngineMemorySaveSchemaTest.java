@@ -1,5 +1,7 @@
 package com.matrix.agent.task.policy;
 
+import com.matrix.agent.contract.schema.SchemaValidator;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -11,10 +13,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.contract.ToolCall;
 
 /**
  * PolicyEngine 必须用 CapabilityRegistry.memory.semantic.save 的 schema

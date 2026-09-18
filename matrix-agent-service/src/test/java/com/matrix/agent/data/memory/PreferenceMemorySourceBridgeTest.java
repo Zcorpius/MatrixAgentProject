@@ -3,7 +3,7 @@ package com.matrix.agent.data.memory;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.VehicleZone;
 
 import java.util.List;
 import java.util.Map;

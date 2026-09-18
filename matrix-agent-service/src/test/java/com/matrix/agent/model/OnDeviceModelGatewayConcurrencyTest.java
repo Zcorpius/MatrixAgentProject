@@ -1,14 +1,14 @@
 package com.matrix.agent.model;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.CancellableModelCall;
-import com.matrix.agent.task.FinishReason;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.ModelTurnRequest;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.data.session.SessionContext;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.CancellableModelCall;
+import com.matrix.agent.contract.FinishReason;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ModelTurnRequest;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.session.SessionContext;
 import com.matrix.agent.ondevice.GenerationResult;
 import com.matrix.agent.ondevice.MnnLoadOptions;
 import com.matrix.agent.ondevice.OnDeviceFinishReason;

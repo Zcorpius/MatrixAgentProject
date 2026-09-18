@@ -5,7 +5,7 @@ import com.matrix.agent.voice.port.*;
 import android.util.Log;
 
 import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.identity.CancellationToken;
+import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.voice.port.AsrPort;
 import com.matrix.agent.voice.AgentRunner;
 import com.matrix.agent.voice.port.AudioFocusPort;

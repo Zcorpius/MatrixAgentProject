@@ -11,6 +11,8 @@ import com.matrix.agent.voice.ModelPathResolver;
 import com.matrix.agent.voice.Sha256Util;
 import com.matrix.agent.data.db.ModelDownloadDao;
 import com.matrix.agent.data.db.ModelDownloadEntity;
+import com.matrix.agent.api.common.MatrixErrorCode;
+import com.matrix.agent.api.download.ModelDownloadInfo;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -91,6 +93,56 @@ public final class VoskModelDownloader {
         // active 版本必须等于 spec.version:否则旧版本(如 0.15)的 marker 会让升级(0.16)误判已下载。
         if (!spec.version.equals(ModelPathResolver.activeVersion(spec.targetDir))) return false;
         return new File(active, spec.marker).exists();
+    }
+
+    /**
+     * Returns the canonical Host projection for one bundled Vosk model.  The completed state is
+     * derived from the active pointer and marker rather than trusting a stale database row.
+     */
+    public ModelDownloadInfo modelInfo(VoskModelSpec spec) {
+        ModelDownloadEntity entity = null;
+        if (dao != null) {
+            try {
+                entity = dao.getByName(spec.name);
+            } catch (Exception e) {
+                Log.w(TAG, "[Voice] 读取模型进度失败: " + e.getClass().getSimpleName());
+            }
+        }
+        if (isDownloaded(spec)) {
+            File active = ModelPathResolver.activeDir(spec.targetDir);
+            long installed = active == null ? 0L : dirSize(active);
+            return new ModelDownloadInfo(spec.name, ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED,
+                    installed, installed, MatrixErrorCode.SUCCESS);
+        }
+        long downloaded = entity == null ? 0L : Math.max(0L, entity.downloadedBytes);
+        long total = entity == null || entity.totalBytes <= 0L
+                ? spec.sizeBytes : entity.totalBytes;
+        return new ModelDownloadInfo(spec.name, downloadState(entity == null ? null : entity.status),
+                downloaded, total, MatrixErrorCode.SUCCESS);
+    }
+
+    /**
+     * Removes one model under the same cross-process lock used by installation.  Callers must
+     * first ensure no voice session owns its native resources.
+     */
+    public void delete(VoskModelSpec spec) throws IOException {
+        try {
+            ModelInstallLock.withTryLock(spec.targetDir, () -> {
+                ModelDownloadEntity entity = dao == null ? null : dao.getByName(spec.name);
+                if (entity != null && "DOWNLOADING".equals(entity.status)) {
+                    throw new IOException("MODEL_BUSY: " + spec.name);
+                }
+                File parent = spec.targetDir.getParentFile();
+                deleteRecursivelyChecked(spec.targetDir, spec.name);
+                if (parent != null) {
+                    deleteRecursivelyChecked(new File(parent,
+                            ".tmp_" + spec.name + "_" + spec.version + ".zip"), spec.name);
+                }
+                if (dao != null) dao.deleteByName(spec.name);
+            });
+        } catch (ModelInstallLock.LockBusyException busy) {
+            throw new IOException("MODEL_BUSY: " + spec.name, busy);
+        }
     }
 
     /**
@@ -420,6 +472,24 @@ public final class VoskModelDownloader {
             }
         }
         f.delete();
+    }
+
+    private static void deleteRecursivelyChecked(File f, String name) throws IOException {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            File[] children = f.listFiles();
+            if (children == null) throw new IOException("MODEL_DELETE_LIST_FAILED: " + name);
+            for (File child : children) deleteRecursivelyChecked(child, name);
+        }
+        if (!f.delete()) throw new IOException("MODEL_DELETE_FAILED: " + name);
+    }
+
+    private static int downloadState(String value) {
+        if ("DOWNLOADING".equals(value)) return ModelDownloadInfo.DOWNLOAD_STATE_DOWNLOADING;
+        if ("PAUSED".equals(value)) return ModelDownloadInfo.DOWNLOAD_STATE_PAUSED;
+        if ("COMPLETED".equals(value)) return ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED;
+        if ("FAILED".equals(value)) return ModelDownloadInfo.DOWNLOAD_STATE_FAILED;
+        return ModelDownloadInfo.DOWNLOAD_STATE_IDLE;
     }
 
     /** 取消信号触发的异常;catch 后保留断点、标 PAUSED。 */

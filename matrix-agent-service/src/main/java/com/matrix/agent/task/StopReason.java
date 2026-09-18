@@ -1,4 +1,10 @@
 package com.matrix.agent.task;
+import com.matrix.agent.task.steer.*;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.intent.IntentClassifier;
+
+import com.matrix.agent.contract.FinishReason;
 
 /** 终止原因:Agent Loop 退出时由 Runtime 给出的结构化判定。 */
 public enum StopReason {

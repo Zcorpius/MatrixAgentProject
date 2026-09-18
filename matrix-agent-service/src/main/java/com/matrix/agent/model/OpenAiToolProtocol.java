@@ -1,16 +1,18 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelConfig;
+
 import android.util.Log;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.FinishReason;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.tool.ToolCall;
-import com.matrix.agent.task.capability.ToolDefinition;
-import com.matrix.agent.task.capability.ToolParameterDefinition;
-import com.matrix.agent.task.capability.schema.CanonicalSchema;
-import com.matrix.agent.task.capability.schema.SchemaJsonWriter;
-import com.matrix.agent.task.capability.schema.SchemaProjectionConfig;
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.FinishReason;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.contract.ToolParameterDefinition;
+import com.matrix.agent.contract.schema.CanonicalSchema;
+import com.matrix.agent.contract.schema.SchemaJsonWriter;
+import com.matrix.agent.contract.schema.SchemaProjectionConfig;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -23,6 +25,7 @@ import java.util.Map;
 /** OpenAI-compatible native tool-calling wire adapter; it owns no retry or transport policy. */
 final class OpenAiToolProtocol {
     private static final String TAG = "MatrixAgent";
+    private static final String PROVIDER_RAW_PLACEHOLDER = "[provider-raw-redacted]";
 
     static JSONObject buildSingleTurnRequest(ModelConfig config, String system, String user,
             List<ToolDefinition> tools) throws Exception {
@@ -44,9 +47,9 @@ final class OpenAiToolProtocol {
             String finishReason = response.getJSONArray("choices").getJSONObject(0)
                     .optString("finish_reason", "(missing)");
             String content = message.optString("content", "");
-            com.matrix.agent.task.SafeLog.e(TAG, "[Http] no tool_calls in response. finish_reason="
+            Log.e(TAG, "[Http] no tool_calls in response. finish_reason="
                     + finishReason + " contentChars=" + content.length() + " contentHead="
-                    + com.matrix.agent.task.SafeLog.PROVIDER_RAW_PLACEHOLDER + " respBytes="
+                    + PROVIDER_RAW_PLACEHOLDER + " respBytes="
                     + response.toString().length());
             throw new IllegalStateException("模型未返回 tool_calls；请确认模型支持原生 Tool Calling，或显式切换兼容模式");
         }

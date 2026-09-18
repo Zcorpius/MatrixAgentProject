@@ -1,5 +1,7 @@
 package com.matrix.agent.model;
 
+import com.matrix.agent.contract.ModelApiException;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;

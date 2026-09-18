@@ -11,10 +11,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.contract.ToolCall;
 
 /**
  * PolicyEngine 必须用 capability-level CAPABILITY_REJECTED 拒绝

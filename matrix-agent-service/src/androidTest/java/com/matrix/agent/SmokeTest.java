@@ -1,4 +1,5 @@
 package com.matrix.agent;
+import com.matrix.agent.host.di.*;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;

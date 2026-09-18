@@ -1,15 +1,27 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.contract.ToolDefinition;
+
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.ModelTurnRequest;
+
+import com.matrix.agent.contract.ModelGateway;
+
+import com.matrix.agent.contract.CancellableModelCall;
+
+import com.matrix.agent.contract.AgentMessage;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.CancellationToken;
-import com.matrix.agent.data.session.SessionContext;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.session.SessionContext;
 
-import com.matrix.agent.model.ModelApiException;
+import com.matrix.agent.contract.ModelApiException;
 
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
@@ -72,7 +84,7 @@ public final class ModelCallExecutorTest {
         AgentRequest agentRequest = AgentRequest.builder("test", Actor.DRIVER)
                 .sessionId(sessionId).timeoutMillis(10_000).build();
         return new ModelTurnRequest(agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
     }
 
@@ -143,7 +155,7 @@ public final class ModelCallExecutorTest {
                 .build();
         ModelTurnRequest turnRequest = new ModelTurnRequest(
                 agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
 
         // 异步跑 decide,等 gateway 进入阻塞后触发 cancel
@@ -185,7 +197,7 @@ public final class ModelCallExecutorTest {
                 .build();
         ModelTurnRequest turnRequest = new ModelTurnRequest(
                 agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
 
         ModelCallExecutor.Result result = executor.decide(gateway, turnRequest);
@@ -219,7 +231,7 @@ public final class ModelCallExecutorTest {
                 .sessionId("wrapped-network").timeoutMillis(10_000).build();
         ModelTurnRequest turnRequest = new ModelTurnRequest(
                 agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
 
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);
@@ -240,7 +252,7 @@ public final class ModelCallExecutorTest {
                 .sessionId("direct-network").timeoutMillis(10_000).build();
         ModelTurnRequest turnRequest = new ModelTurnRequest(
                 agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
 
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);
@@ -259,7 +271,7 @@ public final class ModelCallExecutorTest {
                 .sessionId("protocol-error").timeoutMillis(10_000).build();
         ModelTurnRequest turnRequest = new ModelTurnRequest(
                 agentRequest, Collections.<AgentMessage>emptyList(),
-                Collections.<com.matrix.agent.task.capability.ToolDefinition>emptyList(),
+                Collections.<com.matrix.agent.contract.ToolDefinition>emptyList(),
                 "system", new SessionContext());
 
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);

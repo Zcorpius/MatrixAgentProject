@@ -1,8 +1,5 @@
 package com.matrix.agent.data.audit;
 
-import com.matrix.agent.task.AgentOutcome;
-import com.matrix.agent.task.identity.AgentRequest;
-
 import java.util.List;
 
 /**
@@ -26,12 +23,12 @@ import java.util.List;
 public interface AuditRepository {
 
     /**
-     * 持久化 AgentOutcome + AgentRequest 元数据。
+     * 持久化已由 task 侧投影完成的一条终态审计命令。
      *
      * <p>同步阻塞单条 insert;失败必须 fail-open(仅 log,不抛)——
      * 保证 Audit 不影响主任务路径。引入 WAL + 重试队列后改 fail-closed。
      */
-    void persist(AgentOutcome outcome, AgentRequest request);
+    void persist(AuditOutcomeEntry entry);
 
     /**
      * 按 (userId, zone, requestId) 查询单条记录——SQL WHERE 强制访问域,

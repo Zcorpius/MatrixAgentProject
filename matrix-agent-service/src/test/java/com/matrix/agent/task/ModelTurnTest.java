@@ -1,9 +1,13 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.contract.ModelTurn;
+
+import com.matrix.agent.contract.FinishReason;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.contract.ToolCall;
 
 import java.util.Collections;
 

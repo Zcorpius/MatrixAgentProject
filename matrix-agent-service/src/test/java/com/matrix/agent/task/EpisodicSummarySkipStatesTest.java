@@ -1,12 +1,14 @@
 package com.matrix.agent.task;
 
+import com.matrix.agent.task.persistence.EpisodicSummary;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
 
 /**
  * EpisodicSummary 终态过滤——仅 SUCCEEDED / FAILED 写入。

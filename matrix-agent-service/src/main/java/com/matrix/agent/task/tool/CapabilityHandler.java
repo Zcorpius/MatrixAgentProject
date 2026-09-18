@@ -1,5 +1,7 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.demo.MockCapabilityProvider;
+
 /**
  * 单个 capability 的执行器。
  *

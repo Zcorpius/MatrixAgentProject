@@ -5,14 +5,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.matrix.agent.task.AgentMessage;
+import com.matrix.agent.contract.AgentMessage;
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.task.persistence.AuditOutcomeEntryFactory;
 import com.matrix.agent.data.db.TrajectoryEntity;
 
 import org.junit.Test;
@@ -48,7 +49,7 @@ public final class RoomAuditRepositoryContractTest {
                 .occupantZone(VehicleZone.DRIVER)
                 .build();
 
-        repo.persist(outcome, request);
+        repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
 
         assertEquals(1, dao.store.size());
         TrajectoryEntity entity = dao.store.get("req-A");
@@ -80,7 +81,7 @@ public final class RoomAuditRepositoryContractTest {
                 .arbitrationKey("demo-vehicle")
                 .occupantZone(VehicleZone.PASSENGER)
                 .build();
-        repo.persist(outcome, request);
+        repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
 
         AuditRecord record = repo.queryByRequest("demo-passenger", "PASSENGER", "req-B");
 
@@ -116,7 +117,7 @@ public final class RoomAuditRepositoryContractTest {
                     .arbitrationKey("demo-vehicle")
                     .occupantZone(VehicleZone.DRIVER)
                     .build();
-            repo.persist(outcome, request);
+            repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
         }
 
         // 访问域 (userId, zone) 强制传入
@@ -147,7 +148,7 @@ public final class RoomAuditRepositoryContractTest {
                 .arbitrationKey("demo-vehicle")
                 .occupantZone(VehicleZone.DRIVER)
                 .build();
-        repo.persist(outcome, request);
+        repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
 
         // 同 userId 但 zone 不匹配——必须返回空
         List<AuditRecord> wrongZone = repo.queryBySession(
@@ -184,7 +185,7 @@ public final class RoomAuditRepositoryContractTest {
                 .build();
 
         // fail-open:不抛异常
-        repo.persist(outcome, request);
+        repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
         assertEquals(0, dao.store.size());
     }
 
@@ -217,7 +218,7 @@ public final class RoomAuditRepositoryContractTest {
                 .occupantZone(VehicleZone.DRIVER)
                 .build();
 
-        repo.persist(outcome, request);
+        repo.persist(AuditOutcomeEntryFactory.from(outcome, request));
 
         // 同步契约:persist 返回后立即查询必须看到记录
         AuditRecord record = repo.queryByRequest("demo-driver", "DRIVER", "req-sync");

@@ -1,4 +1,7 @@
 package com.matrix.agent.task.policy;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.intent.IntentClassifier;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -8,9 +11,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.tool.ToolCall;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.contract.ToolCall;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

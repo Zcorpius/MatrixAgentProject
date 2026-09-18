@@ -1,16 +1,19 @@
 package com.matrix.agent.voice.system;
+import com.matrix.agent.task.scheduler.*;
+
+import com.matrix.agent.contract.ModelTurn;
 
 import android.app.Application;
 
 import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
-import com.matrix.agent.task.TaskScheduler;
+import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.Trajectory;
 import com.matrix.agent.task.capability.CapabilityRegistry;
-import com.matrix.agent.task.identity.KeywordIntentClassifier;
-import com.matrix.agent.task.identity.MockVehicleStateSource;
-import com.matrix.agent.data.session.SessionLockManager;
+import com.matrix.agent.intent.KeywordIntentClassifier;
+import com.matrix.agent.demo.MockVehicleStateSource;
+import com.matrix.agent.session.SessionLockManager;
 import com.matrix.agent.voice.port.AsrPort;
 import com.matrix.agent.voice.port.AudioFocusPort;
 import com.matrix.agent.voice.NoopVoiceMetrics;
@@ -88,7 +91,7 @@ public final class SystemVoiceRuntimeOwnerTest {
 
     private static AgentRuntimeRepository repo() {
         return new AgentRuntimeRepository(gw -> null, null, null,
-                req -> com.matrix.agent.task.ModelTurn.directAnswer("done"),
+                req -> com.matrix.agent.contract.ModelTurn.directAnswer("done"),
                 "owner-test", null, new TaskScheduler(1, new SessionLockManager()),
                 new MockVehicleStateSource(), CapabilityRegistry.createDemoRegistry(),
                 KeywordIntentClassifier.INSTANCE, NoopAuditRepository.INSTANCE);

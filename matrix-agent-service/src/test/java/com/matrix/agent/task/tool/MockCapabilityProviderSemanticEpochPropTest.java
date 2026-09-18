@@ -1,5 +1,9 @@
 package com.matrix.agent.task.tool;
 
+import com.matrix.agent.demo.MockCapabilityProvider;
+
+import com.matrix.agent.contract.ToolCall;
+
 import static org.junit.Assert.assertEquals;
 
 import java.util.LinkedHashMap;
@@ -14,9 +18,9 @@ import com.matrix.agent.data.memory.MemoryWriter;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 
 /**
@@ -105,7 +109,7 @@ public final class MockCapabilityProviderSemanticEpochPropTest {
         final AtomicLong lastRequestEpoch = new AtomicLong(-1L);
 
         @Override
-        public void writeEpisodicOnTerminal(AgentRequest request, AgentOutcome outcome, long requestEpoch) { }
+        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
         public boolean writeSemantic(String userId, String zone, String key, String value,

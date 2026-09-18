@@ -1,11 +1,13 @@
 package com.matrix.agent.model;
 
-import com.matrix.agent.task.AgentMessage;
-import com.matrix.agent.task.CancellableModelCall;
-import com.matrix.agent.task.FinishReason;
-import com.matrix.agent.task.ModelGateway;
-import com.matrix.agent.task.ModelTurn;
-import com.matrix.agent.task.ModelTurnRequest;
+import com.matrix.agent.contract.RetirableModelGateway;
+
+import com.matrix.agent.contract.AgentMessage;
+import com.matrix.agent.contract.CancellableModelCall;
+import com.matrix.agent.contract.FinishReason;
+import com.matrix.agent.contract.ModelGateway;
+import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ModelTurnRequest;
 import com.matrix.agent.ondevice.GenerationResult;
 import com.matrix.agent.ondevice.OnDeviceFinishReason;
 import com.matrix.agent.ondevice.OnDeviceLlm;
