@@ -41,6 +41,8 @@ public final class VoiceEvent {
         SPEECH,
         /** 连续静音超时,触发端点。 */
         SILENCE_TIMEOUT,
+        /** 唤醒后在策略窗口内始终未形成任何 ASR partial，正常结束本轮监听。 */
+        NO_SPEECH_TIMEOUT,
         /** ASR final 文本。 */
         FINAL,
         /** ASR 识别出错。 */
@@ -90,6 +92,11 @@ public final class VoiceEvent {
     /** 连续静音超时。 */
     public static VoiceEvent silenceTimeout() {
         return new VoiceEvent(EventType.SILENCE_TIMEOUT, null, 0f, null);
+    }
+
+    /** 唤醒后等待开口超时；这不是 ASR 或录音错误。 */
+    public static VoiceEvent noSpeechTimeout() {
+        return new VoiceEvent(EventType.NO_SPEECH_TIMEOUT, null, 0f, null);
     }
 
     /** ASR final 文本。text 不能为空。 */

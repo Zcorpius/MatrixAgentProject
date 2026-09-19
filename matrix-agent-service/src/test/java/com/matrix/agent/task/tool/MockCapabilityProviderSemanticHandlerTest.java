@@ -108,6 +108,10 @@ public final class MockCapabilityProviderSemanticHandlerTest {
         assertEquals("memory.semantic.get", result.getCapabilityName());
         assertEquals("readSemantic 调 1 次", 1, writer.readCount.get());
         assertEquals("fact.daughter_name", writer.lastKey);
+        assertEquals("semantic value must be available to the model boundary", "我女儿叫小红",
+                result.getObservedState().get("fact.daughter_name"));
+        assertTrue("semantic result message must retain its meaning for the model",
+                result.getMessage().contains("我女儿叫小红"));
     }
 
     @Test

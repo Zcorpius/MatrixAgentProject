@@ -38,11 +38,9 @@ public final class VoskAsrAdapter implements AsrPort {
             }
 
             @Override
-            public void onFinal(String text, float confidence, boolean confAvailable, long sessionId) {
+            public void onFinal(FinalTranscript transcript, long sessionId) {
                 if (VoskAsrAdapter.this.listener != null) {
-                    // engine 经 VoskResultParser 解析 word conf,构造真实 FinalTranscript。
-                    VoskAsrAdapter.this.listener.onFinal(
-                            new FinalTranscript(text, "zh-CN", confidence, confAvailable), sessionId);
+                    VoskAsrAdapter.this.listener.onFinal(transcript, sessionId);
                 }
             }
 

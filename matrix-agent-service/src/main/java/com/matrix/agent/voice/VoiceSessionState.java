@@ -111,6 +111,8 @@ public final class VoiceSessionState {
                     // FINAL 在 LISTENING 不迁移——Controller 缓存为 pendingFinal,
                     // 由 VAD 的 SILENCE_TIMEOUT(端点)驱动 LISTENING→ENDPOINTING,再消费 final。
                     case SILENCE_TIMEOUT: return State.ENDPOINTING;
+                    // 未说话是一次正常监听轮结束，先进入可清理的过渡态，再由 RESET 回 IDLE。
+                    case NO_SPEECH_TIMEOUT: return State.CANCELLED;
                     case ASR_ERROR:
                     case ERROR: return State.ERROR_ANNOUNCING;
                     case CANCEL: return State.CANCELLED;

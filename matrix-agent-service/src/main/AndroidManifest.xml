@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- VoiceRuntime owns AudioRecord in the Host process; Launcher never receives PCM. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Host owns the user-initiated, verified display/audio control capabilities. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="com.matrix.agent.permission.ACCESS_AGENT" />
 
     <permission

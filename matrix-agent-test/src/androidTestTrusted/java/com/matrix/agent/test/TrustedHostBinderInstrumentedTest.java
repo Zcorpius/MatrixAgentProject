@@ -188,4 +188,57 @@ public final class TrustedHostBinderInstrumentedTest {
             agent.release();
         }
     }
+
+    /**
+     * 真机回归：唤醒后不说话是正常路径。必须在策略窗口后结束 PTT，并让 Host 回到可重新唤醒的 IDLE，
+     * 不能残留在 LISTENING 把后续 PCM 错送给已经关闭的 ASR。
+     */
+    @Test public void trustedClientPttNoSpeechTimeoutReturnsIdle() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        MatrixAgent agent = MatrixAgent.create(context, null, 8_000L, null);
+        try {
+            assertEquals(ConnectionState.CONNECTED, agent.getState());
+            VoiceManager voice = agent.getVoiceManager();
+            assertNotNull(voice);
+            CountDownLatch listening = new CountDownLatch(1);
+            CountDownLatch idle = new CountDownLatch(1);
+            VoiceSessionHandle handle = voice.startUserInitiatedSession(
+                    new VoiceSessionRequest(VoiceSessionRequest.TRIGGER_PTT,
+                            Locale.getDefault().toLanguageTag()),
+                    UUID.randomUUID().toString(), new VoiceSessionListener() {
+                        @Override public void onSessionStateChanged(String sessionId, int state) {
+                            if (state == VoiceServiceStatus.SESSION_LISTENING) listening.countDown();
+                            if (state == VoiceServiceStatus.SESSION_IDLE) idle.countDown();
+                        }
+                        @Override public void onPartialText(String sessionId, String text) { }
+                        @Override public void onFinalText(String sessionId, String text) { }
+                        @Override public void onSessionError(String sessionId, int errorCode) { }
+                    });
+            assertNotNull("PTT admission failed", handle);
+            assertTrue("Audio capture did not reach LISTENING", listening.await(15, TimeUnit.SECONDS));
+            assertTrue("No-speech timeout did not return PTT to IDLE", idle.await(7, TimeUnit.SECONDS));
+            // CANCELLED 是内部清理过渡态，也会映射为回调 IDLE；等待真正的 RESET 收尾清空 sessionId，
+            // 避免在 callback 与 Controller 串行队列之间的极小窗口读取到旧 session 快照。
+            VoiceServiceStatus settled = awaitSessionCleared(voice, 2_000L);
+            assertNotNull("No-speech cleanup did not settle a public status", settled);
+            assertEquals("No-speech cleanup must leave public voice service idle",
+                    VoiceServiceStatus.SESSION_IDLE, settled.sessionState);
+            assertTrue("No-speech cleanup must clear the PTT session id", settled.currentSessionId == null);
+        } finally {
+            agent.release();
+        }
+    }
+
+    private static VoiceServiceStatus awaitSessionCleared(VoiceManager voice, long timeoutMs)
+            throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+        VoiceServiceStatus latest = null;
+        do {
+            latest = voice.getStatus();
+            if (latest != null && latest.currentSessionId == null
+                    && latest.sessionState == VoiceServiceStatus.SESSION_IDLE) return latest;
+            SystemClock.sleep(50L);
+        } while (SystemClock.elapsedRealtime() < deadline);
+        return latest;
+    }
 }

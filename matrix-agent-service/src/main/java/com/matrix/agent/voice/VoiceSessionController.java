@@ -348,7 +348,12 @@ public final class VoiceSessionController {
             }
         } else {
             repromptCount++;
-            Log.i(TAG, "[Voice] 转写校验拒绝: " + v.reason() + ", repromptCount=" + repromptCount);
+            Log.i(TAG, "[Voice] 转写校验拒绝 reason=" + v.reason()
+                    + " textChars=" + transcript.text().trim().length()
+                    + " confidenceAvailable=" + transcript.confidenceAvailable()
+                    + " confidence=" + transcript.confidence()
+                    + " threshold=" + policy.minConfidence()
+                    + " repromptCount=" + repromptCount);
             if (repromptCount <= policy.maxReprompt()) {
                 transit(VoiceEvent.rejected());
                 if (!startAsr()) return;
@@ -674,7 +679,10 @@ public final class VoiceSessionController {
         if (state.current() != VoiceSessionState.State.LISTENING) return;
         Log.i(TAG, "[Voice] speech-start timeout, no command heard; returning to IDLE and re-arming wake");
         metrics.onTimeout("SPEECH_START", "LISTENING");
-        failAndCleanup("SPEECH_START_TIMEOUT");
+        // 用户在唤醒后未开口是正常收尾，不应呈现为错误；但需先离开 LISTENING，
+        // 否则 AudioRecord 路由会继续把 PCM 送给已 stop 的 ASR，KWS 无法重新接收音频。
+        transit(VoiceEvent.noSpeechTimeout());
+        cleanupAndIdle();
     }
 
     private void handleMaxSpeechTimeout() {

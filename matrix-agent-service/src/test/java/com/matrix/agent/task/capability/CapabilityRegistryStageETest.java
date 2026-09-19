@@ -21,11 +21,11 @@ import org.junit.Test;
  */
 public final class CapabilityRegistryStageETest {
 
-    /** 默认 toToolDefinitions() 不过滤——10 个 capability 都暴露(新增 memory.semantic.* 2 个)。 */
+    /** 默认 toToolDefinitions() 不过滤——含两个已验证的系统控制能力。 */
     @Test
     public void toToolDefinitionsNoZoneReturnsAll() {
         List<ToolDefinition> tools = CapabilityRegistry.createDemoRegistry().toToolDefinitions();
-        assertEquals(10, tools.size());
+        assertEquals(12, tools.size());
     }
 
     /** toToolDefinitions(null) 等价于默认——不过滤。 */
@@ -33,7 +33,7 @@ public final class CapabilityRegistryStageETest {
     public void toToolDefinitionsWithNullZoneReturnsAll() {
         List<ToolDefinition> tools = CapabilityRegistry.createDemoRegistry()
                 .toToolDefinitions(null);
-        assertEquals(10, tools.size());
+        assertEquals(12, tools.size());
     }
 
     /** toToolDefinitions(DRIVER) 含 driver-allowed capability(climate 写 + 查询等)。 */
@@ -93,6 +93,22 @@ public final class CapabilityRegistryStageETest {
         assertFalse(registry.deriveReadOnlyHint(Arrays.asList(
                 "vehicle.info.get_battery",
                 "vehicle.climate.set_temperature")));
+    }
+
+    @Test
+    public void systemControlsAreVerifiedWritesWithoutVehicleStatePrerequisites() {
+        CapabilityRegistry registry = CapabilityRegistry.createDemoRegistry();
+        CapabilityDefinition volume = registry.find("system.media.set_volume");
+        CapabilityDefinition brightness = registry.find("system.display.set_brightness");
+        assertNotNull(volume);
+        assertNotNull(brightness);
+        assertTrue(volume.isWriteOperation());
+        assertTrue(brightness.isWriteOperation());
+        assertTrue(volume.isVerificationRequired());
+        assertTrue(brightness.isVerificationRequired());
+        assertTrue(volume.getRequiredVehicleStates().isEmpty());
+        assertTrue(brightness.getRequiredVehicleStates().isEmpty());
+        assertFalse(registry.deriveReadOnlyHint(Arrays.asList("system.media.set_volume")));
     }
 
     /** deriveReadOnlyHint:空 / null → 保守 false。 */

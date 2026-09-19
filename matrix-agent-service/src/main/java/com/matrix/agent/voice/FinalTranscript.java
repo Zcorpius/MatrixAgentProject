@@ -25,7 +25,6 @@ public final class FinalTranscript {
     private final String languageTag;
     private final float confidence;
     private final boolean confidenceAvailable;
-
     public FinalTranscript(String text, String languageTag, float confidence, boolean confidenceAvailable) {
         if (text == null) throw new IllegalArgumentException("text 不能为空");
         if (languageTag == null || languageTag.trim().isEmpty()) {

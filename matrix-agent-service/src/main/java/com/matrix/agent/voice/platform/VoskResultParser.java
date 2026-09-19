@@ -23,16 +23,19 @@ public final class VoskResultParser {
 
     public static ParsedResult parse(String json) {
         if (json == null) {
-            return new ParsedResult("", 0f, false);
+            return ParsedResult.noResult("NULL_JSON");
         }
         String text = "";
         float confidence = 0f;
         boolean confidenceAvailable = false;
+        int resultWordCount = 0;
+        int confidenceWordCount = 0;
         try {
             JSONObject obj = new JSONObject(json);
             text = obj.optString("text", "").trim();
             JSONArray result = obj.optJSONArray("result");
             if (result != null && result.length() > 0) {
+                resultWordCount = result.length();
                 double sum = 0.0;
                 int n = 0;
                 for (int i = 0; i < result.length(); i++) {
@@ -44,16 +47,18 @@ public final class VoskResultParser {
                         n++;
                     }
                 }
+                confidenceWordCount = n;
                 if (n > 0) {
                     confidence = (float) (sum / n);
                     confidenceAvailable = true;
                 }
             }
         } catch (Exception e) {
-            return new ParsedResult("", 0f, false);
+            return ParsedResult.noResult("MALFORMED_JSON");
         }
         float clamped = Math.max(0f, Math.min(1f, confidence));
-        return new ParsedResult(text, clamped, confidenceAvailable);
+        return new ParsedResult(text, clamped, confidenceAvailable, resultWordCount, confidenceWordCount,
+                confidenceAvailable ? "WORD_CONFIDENCE" : "NO_WORD_CONFIDENCE");
     }
 
     /** 解析结果:text 总是非 null;confidence∈[0,1];confidenceAvailable=false 时 confidence 应视为未知。 */
@@ -61,15 +66,31 @@ public final class VoskResultParser {
         private final String text;
         private final float confidence;
         private final boolean confidenceAvailable;
+        private final int resultWordCount;
+        private final int confidenceWordCount;
+        private final String confidenceSource;
 
-        ParsedResult(String text, float confidence, boolean confidenceAvailable) {
+        ParsedResult(String text, float confidence, boolean confidenceAvailable, int resultWordCount,
+                int confidenceWordCount, String confidenceSource) {
             this.text = text;
             this.confidence = confidence;
             this.confidenceAvailable = confidenceAvailable;
+            this.resultWordCount = resultWordCount;
+            this.confidenceWordCount = confidenceWordCount;
+            this.confidenceSource = confidenceSource;
+        }
+
+        static ParsedResult noResult(String confidenceSource) {
+            return new ParsedResult("", 0f, false, 0, 0, confidenceSource);
         }
 
         public String text() { return text; }
         public float confidence() { return confidence; }
         public boolean confidenceAvailable() { return confidenceAvailable; }
+        /** 不含转写原文的 JSON 结构摘要，仅用于现场诊断。 */
+        public int resultWordCount() { return resultWordCount; }
+        /** 实际带 {@code conf} 字段的词数。 */
+        public int confidenceWordCount() { return confidenceWordCount; }
+        public String confidenceSource() { return confidenceSource; }
     }
 }

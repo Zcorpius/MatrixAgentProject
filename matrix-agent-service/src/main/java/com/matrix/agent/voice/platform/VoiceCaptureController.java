@@ -43,6 +43,14 @@ public final class VoiceCaptureController implements VoiceCapturePort {
     private static final String TAG = "MatrixAgent";
     private static final int SAMPLE_RATE = 16_000;
     private static final int FRAME_BYTES = 1600; // 50ms @ 16kHz mono 16bit
+    /**
+     * ASR 优先使用未针对通话优化的识别音源。部分设备对 VOICE_COMMUNICATION 施加强 AEC/降噪/增益，
+     * 会损害离线识别；若 ROM 不支持则退回通用 MIC，而不是静默沿用通话链路。
+     */
+    private static final int[] ASR_AUDIO_SOURCES = {
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC
+    };
 
     private final VoiceSessionController controller;
     private final WakeWordPort wakePort;
@@ -121,39 +129,35 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             int bufSize = Math.max(minBuf, FRAME_BYTES * 4);
             Log.i(TAG, "[VoiceCapture] start config permissionGranted=true rate=" + SAMPLE_RATE
                     + " minBuffer=" + minBuf + " buffer=" + bufSize
-                    + " source=VOICE_COMMUNICATION");
+                    + " sources=VOICE_RECOGNITION,MIC");
             if (minBuf <= 0) {
                 throw new IllegalStateException("AudioRecord min buffer invalid: " + minBuf);
             }
             try {
-                // 权限可能被运行时即时撤销,AudioRecord 构造抛 SecurityException
-                ar = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, SAMPLE_RATE,
-                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize);
+                // 权限可能被运行时即时撤销,AudioRecord 构造抛 SecurityException。
+                ar = createAsrAudioRecord(bufSize);
+                if (AcousticEchoCanceler.isAvailable()) {
+                    aec = AcousticEchoCanceler.create(ar.getAudioSessionId());
+                    if (aec != null) {
+                        // create 成功 ≠ enable 成功,必须检查 setEnabled 返回值 + getEnabled
+                        int r = aec.setEnabled(true);
+                        boolean aecEnabled = (r == android.media.audiofx.AudioEffect.SUCCESS)
+                                && aec.getEnabled();
+                        if (aecEnabled) {
+                            Log.i(TAG, "[Voice] 已启用 AEC(回声消除)");
+                        } else {
+                            Log.w(TAG, "[Voice] AEC enable 失败(code=" + r + "),降级半双工");
+                            aec.release();
+                            aec = null;
+                        }
+                    }
+                }
             } catch (SecurityException e) {
                 Log.e(TAG, "[Voice] RECORD_AUDIO 被撤销,无法采音: " + e.getMessage());
                 throw e;
             }
-            if (ar.getState() != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "[VoiceCapture] AudioRecord state=uninitialized");
-                throw new IllegalStateException("AudioRecord 初始化失败(权限或设备问题)");
-            }
             Log.i(TAG, "[VoiceCapture] AudioRecord initialized audioSession=" + ar.getAudioSessionId());
-            boolean aecEnabled = false;
-            if (AcousticEchoCanceler.isAvailable()) {
-                aec = AcousticEchoCanceler.create(ar.getAudioSessionId());
-                if (aec != null) {
-                    // create 成功 ≠ enable 成功,必须检查 setEnabled 返回值 + getEnabled
-                    int r = aec.setEnabled(true);
-                    aecEnabled = (r == android.media.audiofx.AudioEffect.SUCCESS) && aec.getEnabled();
-                    if (aecEnabled) {
-                        Log.i(TAG, "[Voice] 已启用 AEC(回声消除)");
-                    } else {
-                        Log.w(TAG, "[Voice] AEC enable 失败(code=" + r + "),降级半双工");
-                        aec.release();
-                        aec = null;
-                    }
-                }
-            }
+            boolean aecEnabled = aec != null && aec.getEnabled();
             // AEC 真正启用才全双工;否则半双工(SPEAKING 期间不开放免唤醒打断)
             detector.setAecAvailable(aecEnabled);
             ar.startRecording();
@@ -187,6 +191,28 @@ public final class VoiceCaptureController implements VoiceCapturePort {
         } finally {
             starting.set(false);
         }
+    }
+
+    /** 依次尝试识别音源和 MIC；失败的候选立即释放，成功者由调用方接管。 */
+    private static AudioRecord createAsrAudioRecord(int bufferSize) {
+        for (int source : ASR_AUDIO_SOURCES) {
+            AudioRecord candidate = new AudioRecord(source, SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+            if (candidate.getState() == AudioRecord.STATE_INITIALIZED) {
+                Log.i(TAG, "[VoiceCapture] AudioRecord source=" + audioSourceName(source));
+                return candidate;
+            }
+            Log.w(TAG, "[VoiceCapture] AudioRecord source=" + audioSourceName(source)
+                    + " state=uninitialized, trying fallback");
+            candidate.release();
+        }
+        throw new IllegalStateException("AudioRecord 初始化失败(VOICE_RECOGNITION 与 MIC 均不可用)");
+    }
+
+    private static String audioSourceName(int source) {
+        if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) return "VOICE_RECOGNITION";
+        if (source == MediaRecorder.AudioSource.MIC) return "MIC";
+        return "UNKNOWN(" + source + ")";
     }
 
     /** 回收尚未包装为 Session 的启动期资源。 */

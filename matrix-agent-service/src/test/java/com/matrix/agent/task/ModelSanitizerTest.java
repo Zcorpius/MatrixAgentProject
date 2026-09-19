@@ -103,6 +103,24 @@ public final class ModelSanitizerTest {
         assertEquals("24", sanitized.getResult().getObservedState().get("preferred_temperature"));
     }
 
+    /** 用户显式保存的 semantic fact 也必须可被模型读取；审计边界另行完整脱敏。 */
+    @Test
+    public void preservesSemanticMemoryValueForModel() {
+        ModelSanitizer sanitizer = new ModelSanitizer(1000);
+        Map<String, Object> observed = new LinkedHashMap<>();
+        observed.put("fact.daughter_name", "小红");
+        ToolResult result = new ToolResult(ToolResult.Status.SUCCESS,
+                "memory.semantic.get", "已找到这条记忆：小红", observed, true, 3L);
+        ToolObservation observation = ToolObservation.of(
+                new ToolCall("memory.semantic.get", observed), result);
+
+        ToolObservation sanitized = sanitizer.sanitize(observation);
+
+        assertEquals("小红", sanitized.getResult().getObservedState().get("fact.daughter_name"));
+        assertTrue(sanitized.getResult().getMessage().contains("小红"));
+        assertFalse(sanitized.getResult().getMessage().contains("<memory>"));
+    }
+
     /** 非 memory 类 capability 也只 mask 凭据,保留语义。 */
     @Test
     public void masksSecretsInNonMemoryCapability() {

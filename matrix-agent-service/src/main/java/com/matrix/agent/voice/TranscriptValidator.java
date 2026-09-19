@@ -58,8 +58,11 @@ public final class TranscriptValidator {
         }
         // fail-closed:未知置信度(confidenceAvailable=false)或低于阈值 → REJECT(复述一次,仍未知则结束)。
         // 不把无置信度依据的转写直接送给 Agent / 写操作。
-        if (!transcript.confidenceAvailable() || transcript.confidence() < policy.minConfidence()) {
-            return new Verdict(Decision.REJECT, "UNKNOWN_OR_LOW_CONFIDENCE");
+        if (!transcript.confidenceAvailable()) {
+            return new Verdict(Decision.REJECT, "CONFIDENCE_UNAVAILABLE");
+        }
+        if (transcript.confidence() < policy.minConfidence()) {
+            return new Verdict(Decision.REJECT, "LOW_CONFIDENCE");
         }
         // 语言校验:Demo 单中文,不一致则拒(防引擎/模型错配,如误装英文模型却当中文用)。
         if (!EXPECTED_LANGUAGE_TAG.equalsIgnoreCase(transcript.languageTag())) {

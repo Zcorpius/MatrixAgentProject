@@ -133,6 +133,16 @@ public final class DemoModelGateway implements ModelGateway {
             steps.add(new ToolCall("vehicle.info.get_tire_pressure", new LinkedHashMap<>()));
         }
 
+        if (containsAny(text, "音量", "声音")) {
+            Integer percent = findNumber(text);
+            if (percent != null) steps.add(call("system.media.set_volume", "percent", percent));
+        }
+
+        if (containsAny(text, "亮度", "屏幕亮")) {
+            Integer percent = findNumber(text);
+            if (percent != null) steps.add(call("system.display.set_brightness", "percent", percent));
+        }
+
         if (containsAny(text, "导航", "带我去")) {
             Map<String, Object> args = new LinkedHashMap<>();
             args.put("destination", resolveDestination(text));

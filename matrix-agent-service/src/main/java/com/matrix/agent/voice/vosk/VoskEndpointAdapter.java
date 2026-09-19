@@ -33,7 +33,7 @@ public final class VoskEndpointAdapter implements VadPort {
             }
 
             @Override
-            public void onFinal(String text, float confidence, boolean confAvailable, long sessionId) {
+            public void onFinal(com.matrix.agent.voice.FinalTranscript transcript, long sessionId) {
                 // ASR 关注。
             }
 

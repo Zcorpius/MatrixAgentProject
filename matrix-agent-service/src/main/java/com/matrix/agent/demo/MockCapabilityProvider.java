@@ -365,7 +365,9 @@ public final class MockCapabilityProvider implements CapabilityProvider {
      * Semantic 显式读取——memory.semantic.get capability handler。
      *
      * <p>readSemantic 返回 null(无记录 / 失败)时转 EXECUTION_FAILED,
-     * 与 MemoryPreferenceGetHandler 的 not-found 路径一致。
+     * 与 MemoryPreferenceGetHandler 的 not-found 路径一致。命中的 value 必须原样进入
+     * ToolResult：这是模型按用户显式保存的事实回答问题的唯一读取通道。模型侧只由
+     * ModelSanitizer 脱凭据；UI、日志与审计轨迹则由 AuditRedactor 完整脱敏。
      */
     private static final class MemorySemanticGetHandler implements CapabilityHandler {
         @Override
@@ -389,9 +391,9 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             Log.d(TAG, "[Provider] memory.semantic.get user=" + ctx.userId()
                     + " key=" + SafeLog.TOOL_ARGS_PLACEHOLDER + " -> found");
             Map<String, Object> readback = new LinkedHashMap<>();
-            readback.put(key, "<memory>");
+            readback.put(key, value);
             return result("memory.semantic.get",
-                    "已找到这条记忆", readback, true, started);
+                    "已找到这条记忆：" + value, readback, true, started);
         }
     }
 

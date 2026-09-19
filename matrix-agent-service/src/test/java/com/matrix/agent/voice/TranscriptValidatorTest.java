@@ -45,7 +45,7 @@ public final class TranscriptValidatorTest {
         TranscriptValidator.Verdict v = validator.validate(
                 new FinalTranscript("开空调", "zh-CN", 0.2f, true), VoicePolicyConfig.defaults(), 0);
         assertFalse(v.accepted());
-        assertEquals("UNKNOWN_OR_LOW_CONFIDENCE", v.reason());
+        assertEquals("LOW_CONFIDENCE", v.reason());
     }
 
     @Test
@@ -54,7 +54,7 @@ public final class TranscriptValidatorTest {
         TranscriptValidator.Verdict v = validator.validate(
                 new FinalTranscript("开空调", "zh-CN", 0f, false), VoicePolicyConfig.defaults(), 0);
         assertFalse(v.accepted());
-        assertEquals("UNKNOWN_OR_LOW_CONFIDENCE", v.reason());
+        assertEquals("CONFIDENCE_UNAVAILABLE", v.reason());
     }
 
     @Test
@@ -80,4 +80,5 @@ public final class TranscriptValidatorTest {
                 VoicePolicyConfig.defaults(), 0);
         assertTrue(v.accepted());
     }
+
 }

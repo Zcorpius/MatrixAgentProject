@@ -23,6 +23,9 @@ public final class VoskResultParserTest {
         assertEquals("开空调", r.text());
         assertTrue(r.confidenceAvailable());
         assertEquals(0.8f, r.confidence(), 0.001f); // (0.9+0.7)/2
+        assertEquals(2, r.resultWordCount());
+        assertEquals(2, r.confidenceWordCount());
+        assertEquals("WORD_CONFIDENCE", r.confidenceSource());
     }
 
     @Test
@@ -31,6 +34,8 @@ public final class VoskResultParserTest {
         assertEquals("开", r.text());
         assertFalse(r.confidenceAvailable());
         assertEquals(0f, r.confidence(), 0f);
+        assertEquals(0, r.resultWordCount());
+        assertEquals("NO_WORD_CONFIDENCE", r.confidenceSource());
     }
 
     @Test
@@ -38,6 +43,7 @@ public final class VoskResultParserTest {
         VoskResultParser.ParsedResult r = VoskResultParser.parse("{\"text\":\"你好\"}");
         assertEquals("你好", r.text());
         assertFalse(r.confidenceAvailable());
+        assertEquals("NO_WORD_CONFIDENCE", r.confidenceSource());
     }
 
     @Test
@@ -50,6 +56,8 @@ public final class VoskResultParserTest {
         VoskResultParser.ParsedResult r = VoskResultParser.parse(json);
         assertTrue(r.confidenceAvailable());
         assertEquals(0.8f, r.confidence(), 0.001f);
+        assertEquals(2, r.resultWordCount());
+        assertEquals(1, r.confidenceWordCount());
     }
 
     @Test
@@ -57,6 +65,7 @@ public final class VoskResultParserTest {
         VoskResultParser.ParsedResult r = VoskResultParser.parse(null);
         assertEquals("", r.text());
         assertFalse(r.confidenceAvailable());
+        assertEquals("NULL_JSON", r.confidenceSource());
     }
 
     @Test
@@ -64,5 +73,6 @@ public final class VoskResultParserTest {
         VoskResultParser.ParsedResult r = VoskResultParser.parse("not json");
         assertEquals("", r.text());
         assertFalse(r.confidenceAvailable());
+        assertEquals("MALFORMED_JSON", r.confidenceSource());
     }
 }

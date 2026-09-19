@@ -27,6 +27,9 @@ import com.matrix.agent.task.policy.PolicyEngine;
 import com.matrix.agent.session.SessionLockManager;
 import com.matrix.agent.session.SessionManager;
 import com.matrix.agent.demo.MockCapabilityProvider;
+import com.matrix.agent.platform.control.AndroidSystemControlAdapter;
+import com.matrix.agent.platform.control.SystemControlCapabilityProvider;
+import com.matrix.agent.task.capability.RoutedCapabilityProvider;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.task.AgentRuntimeRepository;
@@ -114,7 +117,13 @@ public final class AppContainer implements DownloadRuntime {
         if (memoryGraph.isDegraded()) {
             Log.w(TAG, "[App] volatile memory fallback active; persistent Binder writes stay gated");
         }
-        CapabilityProvider provider = new MockCapabilityProvider(memoryStore, memoryWriter);
+        CapabilityProvider domainProvider = new MockCapabilityProvider(memoryStore, memoryWriter);
+        SystemControlCapabilityProvider systemControlProvider = new SystemControlCapabilityProvider(
+                new AndroidSystemControlAdapter(appContext));
+        java.util.Map<String, CapabilityProvider> platformRoutes = new java.util.LinkedHashMap<>();
+        platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
+        platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
+        CapabilityProvider provider = new RoutedCapabilityProvider(domainProvider, platformRoutes);
         ModelRuntimeGraph modelGraph = new ModelRuntimeGraph(appContext, memoryStore,
                 memoryRecaller, executorRegistry.modelRetirementScheduler(), httpClient);
         modelGatewayRepository = modelGraph.repository();

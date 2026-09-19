@@ -42,6 +42,13 @@ public final class VoiceSessionStateTest {
     }
 
     @Test
+    public void listening_noSpeechTimeout_goesThroughCancelledThenIdle() {
+        VoiceSessionState s = reach(VoiceSessionState.State.LISTENING);
+        assertEquals(VoiceSessionState.State.CANCELLED, s.transit(VoiceEvent.noSpeechTimeout()));
+        assertEquals(VoiceSessionState.State.IDLE, s.transit(VoiceEvent.reset()));
+    }
+
+    @Test
     public void endpointing_final_goesToRecognizing() {
         VoiceSessionState s = reach(VoiceSessionState.State.ENDPOINTING);
         assertEquals(VoiceSessionState.State.RECOGNIZING,
@@ -227,6 +234,7 @@ public final class VoiceSessionStateTest {
             case PARTIAL: return VoiceEvent.partial("x", 0.5f);
             case SPEECH: return VoiceEvent.speech();
             case SILENCE_TIMEOUT: return VoiceEvent.silenceTimeout();
+            case NO_SPEECH_TIMEOUT: return VoiceEvent.noSpeechTimeout();
             case FINAL: return VoiceEvent.finalTranscript("x", 0.9f);
             case ASR_ERROR: return VoiceEvent.asrError("E");
             case ACCEPTED: return VoiceEvent.accepted();
