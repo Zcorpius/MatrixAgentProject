@@ -7,7 +7,7 @@ import com.matrix.agent.voice.*;
  *
  * <p>消费 16kHz / 单声道 / 16bit LE PCM,检测到唤醒词时触发 {@link Listener#onWake(long)}。
  * Demo 实现为 {@code platform.voice.VoskWakeAdapter}:英文小模型 + grammar 受限词表
- * ("hey matrix")做关键词检测。量产替换为 OEM DSP / VoiceInteractionService 可信唤醒事件。
+ * ("hi matrix"，兼容 "hey matrix")做关键词检测。量产替换为 OEM DSP / VoiceInteractionService 可信唤醒事件。
  *
  * <p><b>唤醒代次(epoch)</b>:start() 递增并经 {@link WakeStartResult} 返回,stop() 作废亦递增;
  * 回调携带产出结果的 recognizer 代次。native 结果在锁外解析/派发期间可能发生 stop+start 重建,

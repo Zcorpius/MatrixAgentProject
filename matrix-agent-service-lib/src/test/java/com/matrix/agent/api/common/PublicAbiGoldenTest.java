@@ -19,7 +19,7 @@ public final class PublicAbiGoldenTest {
     }
 
     @Test public void errorCodesRemainFrozen() {
-        assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
+        assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
                 new int[] {MatrixErrorCode.SUCCESS, MatrixErrorCode.PERMISSION_DENIED,
                         MatrixErrorCode.SERVICE_NOT_READY,
                         MatrixErrorCode.IDEMPOTENCY_CONFLICT, MatrixErrorCode.TIMED_OUT,
@@ -27,7 +27,8 @@ public final class PublicAbiGoldenTest {
                         MatrixErrorCode.TOO_LATE, MatrixErrorCode.PERSISTENCE_UNAVAILABLE,
                         MatrixErrorCode.INVALID_ARGUMENT, MatrixErrorCode.NOT_FOUND,
                         MatrixErrorCode.UNSUPPORTED_OPERATION, MatrixErrorCode.TASK_FAILED,
-                        MatrixErrorCode.CONTRACT_MISMATCH});
+                        MatrixErrorCode.CONTRACT_MISMATCH,
+                        MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE});
     }
 
     @Test public void eventsAndFeatureBitsRemainFrozen() {

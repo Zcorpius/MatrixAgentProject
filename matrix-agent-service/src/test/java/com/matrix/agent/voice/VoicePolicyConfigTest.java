@@ -13,7 +13,7 @@ public final class VoicePolicyConfigTest {
     @Test
     public void defaults_hasDocumentedValues() {
         VoicePolicyConfig p = VoicePolicyConfig.defaults();
-        assertEquals(5000L, p.speechStartMs());
+        assertEquals(3000L, p.speechStartMs());
         assertEquals(15000L, p.maxSpeechMs());
         assertEquals(2000L, p.finalWaitMs());
         assertEquals(1, p.maxReprompt());

@@ -80,7 +80,10 @@ public final class AgentTaskViewModel extends ViewModel {
 
     public void cancel() {
         String taskId = current.taskId;
-        if (taskId == null) { update(current.withNotice(Notice.NO_ACTIVE_TASK, 0)); return; }
+        if (taskId == null || current.isTerminal()) {
+            update(current.withNotice(Notice.NO_ACTIVE_TASK, 0));
+            return;
+        }
         final long operation = operations.begin();
         closePendingSubmit();
         update(current.withNotice(Notice.CANCELLING, 0));
@@ -171,6 +174,14 @@ public final class AgentTaskViewModel extends ViewModel {
         static State initial() { return new State(null, 0L, null, Collections.emptyList(), Notice.IDLE, 0); }
         State withNotice(Notice notice, int code) {
             return new State(taskId, lastSequence, snapshot, events, notice, code);
+        }
+        /** 任务快照可能还未回补；此时也要以最新状态事件关闭终态操作入口。 */
+        boolean isTerminal() {
+            if (snapshot != null) return AgentTaskState.isTerminal(snapshot.state);
+            for (int index = events.size() - 1; index >= 0; index--) {
+                if (AgentTaskState.isTerminal(events.get(index).state)) return true;
+            }
+            return false;
         }
     }
 }

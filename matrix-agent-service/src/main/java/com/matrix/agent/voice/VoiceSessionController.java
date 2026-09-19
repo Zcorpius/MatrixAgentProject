@@ -261,6 +261,8 @@ public final class VoiceSessionController {
         pendingSpeak = null;
         cancelAllTimeouts();
         metrics.onWake(source);
+        Log.i(TAG, "[Voice] wake accepted source=" + source
+                + ", waiting_for_command timeoutMs=" + policy.speechStartMs());
         wakePort.stop();
         if (!startAsr()) return;
         vadPort.reset();
@@ -670,7 +672,7 @@ public final class VoiceSessionController {
 
     private void handleSpeechStartTimeout() {
         if (state.current() != VoiceSessionState.State.LISTENING) return;
-        Log.i(TAG, "[Voice] speech-start 超时,无声回 IDLE");
+        Log.i(TAG, "[Voice] speech-start timeout, no command heard; returning to IDLE and re-arming wake");
         metrics.onTimeout("SPEECH_START", "LISTENING");
         failAndCleanup("SPEECH_START_TIMEOUT");
     }

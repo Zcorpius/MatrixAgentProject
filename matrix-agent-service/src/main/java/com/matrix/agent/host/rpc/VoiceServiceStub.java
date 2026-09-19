@@ -4,6 +4,7 @@ import com.matrix.agent.task.durable.PersistenceGate;
 
 import android.app.Application;
 import android.os.RemoteException;
+import android.util.Log;
 
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.common.ParcelSchema;
@@ -101,17 +102,21 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         validateRequest(request);
         if (callback == null) throw new IllegalArgumentException("callback required");
         if (!persistenceGate.isAvailable()) {
+            Log.w("MatrixAgent", "[VoiceSession] PTT rejected reason=persistence_unavailable");
             callback.onSessionError(null, MatrixErrorCode.PERSISTENCE_UNAVAILABLE);
             return null;
         }
         VoiceRuntime runtime = VoiceRuntimeHolder.get();
         if (runtime == null || !enabled) {
+            Log.w("MatrixAgent", "[VoiceSession] PTT rejected reason="
+                    + (runtime == null ? "runtime_unavailable" : "voice_disabled"));
             callback.onSessionError(null, MatrixErrorCode.SERVICE_NOT_READY);
             return null;
         }
         final String sessionId;
         synchronized (sessionLock) {
             if (currentSessionId != null || runtime.isSessionActive()) {
+                Log.w("MatrixAgent", "[VoiceSession] PTT rejected reason=session_busy");
                 callback.onSessionError(currentSessionId, MatrixErrorCode.OVERLOADED);
                 return null;
             }
@@ -125,6 +130,8 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
             }
             runtime.setUiListener(new BinderVoiceListener(sessionId));
         }
+        Log.i("MatrixAgent", "[VoiceSession] PTT accepted language=" + request.languageTag
+                + " runtimeBuilt=" + runtime.hasLoadedModels());
         // VoiceRuntime deliberately refuses to assemble or open the microphone while it is
         // considered background.  A Binder PTT request is itself the foreground, user-initiated
         // entry point, so make that lifecycle transition before scheduling the asynchronous
@@ -233,7 +240,9 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
     }
 
     private void installIfMissing(VoskModelSpec model) throws IOException {
-        if (!modelDownloader.isDownloaded(model)) modelDownloader.download(model, () -> false);
+        boolean ready = modelDownloader.isDownloaded(model);
+        Log.i("MatrixAgent", "[VoiceModel] install request name=" + model.name + " ready=" + ready);
+        if (!ready) modelDownloader.download(model, () -> false);
     }
 
     private final class BinderVoiceListener implements VoiceSessionListener {
@@ -264,8 +273,14 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
 
         @Override public void onError(String code) {
             if (!isCurrent(sessionId)) return;
-            finishSession(VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.TASK_FAILED);
+            finishSession(VoiceServiceStatus.SESSION_IDLE, publicVoiceFailureCode(code));
         }
+    }
+
+    /** Maps an internal voice-stage failure to a stable, user-actionable public error. */
+    static int publicVoiceFailureCode(String code) {
+        return "TTS_INIT_FAILED".equals(code)
+                ? MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE : MatrixErrorCode.TASK_FAILED;
     }
 
     private boolean isCurrent(String sessionId) {
@@ -274,6 +289,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
 
     private void beginListening(VoiceRuntime runtime, String sessionId) {
         if (!isCurrent(sessionId) || !enabled) return;
+        Log.i("MatrixAgent", "[VoiceSession] runtime ready, dispatching PTT listen");
         runtime.resume();
         runtime.manualWake("binder_ptt");
         dispatchSessionState(sessionId, VoiceServiceStatus.SESSION_LISTENING);
@@ -282,6 +298,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
 
     private void failStartup(String sessionId) {
         if (isCurrent(sessionId)) {
+            Log.e("MatrixAgent", "[VoiceSession] startup failed, closing PTT session");
             finishSession(VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.TASK_FAILED);
         }
     }

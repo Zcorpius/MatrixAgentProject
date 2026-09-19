@@ -98,8 +98,14 @@ public final class VoiceCaptureController implements VoiceCapturePort {
      */
     @Override
     public long start() {
-        if (current.get() != null) return -1; // 快速路径:已有会话(含 STOPPING 残留)
-        if (!starting.compareAndSet(false, true)) return -1; // #2:占位防并发建双 AudioRecord
+        if (current.get() != null) {
+            Log.w(TAG, "[VoiceCapture] start rejected reason=existing_session");
+            return -1; // 快速路径:已有会话(含 STOPPING 残留)
+        }
+        if (!starting.compareAndSet(false, true)) {
+            Log.w(TAG, "[VoiceCapture] start rejected reason=start_in_flight");
+            return -1; // #2:占位防并发建双 AudioRecord
+        }
         AcousticEchoCanceler aec = null;
         AudioRecord ar = null;
         Session s = null;
@@ -107,11 +113,18 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             // lint 门禁——内部 checkSelfPermission 让 lint 认可权限已检查(不报 MissingPermission)
             if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                     != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "[VoiceCapture] permission check granted=false");
                 throw new SecurityException("RECORD_AUDIO 未授予,无法采音");
             }
             int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
             int bufSize = Math.max(minBuf, FRAME_BYTES * 4);
+            Log.i(TAG, "[VoiceCapture] start config permissionGranted=true rate=" + SAMPLE_RATE
+                    + " minBuffer=" + minBuf + " buffer=" + bufSize
+                    + " source=VOICE_COMMUNICATION");
+            if (minBuf <= 0) {
+                throw new IllegalStateException("AudioRecord min buffer invalid: " + minBuf);
+            }
             try {
                 // 权限可能被运行时即时撤销,AudioRecord 构造抛 SecurityException
                 ar = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, SAMPLE_RATE,
@@ -121,8 +134,10 @@ public final class VoiceCaptureController implements VoiceCapturePort {
                 throw e;
             }
             if (ar.getState() != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "[VoiceCapture] AudioRecord state=uninitialized");
                 throw new IllegalStateException("AudioRecord 初始化失败(权限或设备问题)");
             }
+            Log.i(TAG, "[VoiceCapture] AudioRecord initialized audioSession=" + ar.getAudioSessionId());
             boolean aecEnabled = false;
             if (AcousticEchoCanceler.isAvailable()) {
                 aec = AcousticEchoCanceler.create(ar.getAudioSessionId());
@@ -142,6 +157,11 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             // AEC 真正启用才全双工;否则半双工(SPEAKING 期间不开放免唤醒打断)
             detector.setAecAvailable(aecEnabled);
             ar.startRecording();
+            Log.i(TAG, "[VoiceCapture] AudioRecord start state=" + ar.getRecordingState()
+                    + " aecEnabled=" + aecEnabled);
+            if (ar.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                throw new IllegalStateException("AudioRecord did not enter recording state");
+            }
             long sid = sessionSeq.incrementAndGet();
             final Session session = new Session(ar, aec, sid);
             s = session;
@@ -156,6 +176,7 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             Log.i(TAG, "[Voice] 采音启动(sid=" + sid + ")");
             return sid;
         } catch (RuntimeException e) {
+            Log.e(TAG, "[VoiceCapture] start failed type=" + e.getClass().getSimpleName(), e);
             if (s != null) {
                 current.compareAndSet(s, null);
                 s.release();

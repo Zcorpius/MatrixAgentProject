@@ -300,6 +300,20 @@ public final class VoiceSessionControllerTest {
     }
 
     @Test
+    public void wakeWithoutCommand_afterThreeSecondPolicyTimeout_returnsIdleAndRearmsWake() {
+        VoiceSessionController c = newController(req -> succeededOutcome(), direct(), direct());
+        wake.fireWake();
+        assertEquals(VoiceSessionState.State.LISTENING, c.currentState());
+
+        timeoutScheduler.fireAll();
+
+        assertEquals("唤醒后始终无有效语音，应结束本轮并回到待唤醒状态",
+                VoiceSessionState.State.IDLE, c.currentState());
+        assertTrue("无声超时后必须立即重新布防 Hi Matrix 唤醒", wake.started);
+        assertTrue("无声超时必须记录 LISTENING 超时", metrics.timeoutCount >= 1);
+    }
+
+    @Test
     public void maxSpeechTimeout_forcesEndpoint() {
         final VoiceAgentRequest[] captured = new VoiceAgentRequest[1];
         AgentRunner runner = req -> { captured[0] = req; return succeededOutcome(); };

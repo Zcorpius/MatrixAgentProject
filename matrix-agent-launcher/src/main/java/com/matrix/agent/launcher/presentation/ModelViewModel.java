@@ -42,12 +42,16 @@ public final class ModelViewModel extends ViewModel {
             return;
         }
         char[] retainedSecret = secret.clone();
+        final boolean credentialProvided = retainedSecret.length > 0;
         Arrays.fill(secret, '\0');
         final long operation = operations.begin();
-        update(current.withBusy(true, Notice.PROVISIONING, 0));
+        update(current.withBusy(true, Notice.PROVISIONING, 0).withSavedForm(null));
         repository.provision(providerId, modelId, endpoint, retainedSecret, code -> {
             if (!operations.isCurrent(operation)) return;
-            update(current.withBusy(false, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code));
+            SavedForm saved = code == 0
+                    ? new SavedForm(providerId, modelId, endpoint, credentialProvided) : null;
+            update(current.withBusy(false, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code)
+                    .withSavedForm(saved));
             if (code == 0) refresh(operation);
         }, result -> {
             try {
@@ -83,7 +87,8 @@ public final class ModelViewModel extends ViewModel {
                 return;
             }
             ModelRepository.Snapshot snapshot = result.value;
-            update(new State(snapshot.runtime, snapshot.models, false, Notice.RUNTIME, 0));
+            update(new State(snapshot.runtime, snapshot.models, false, Notice.RUNTIME, 0,
+                    current.savedForm));
         });
     }
 
@@ -116,18 +121,44 @@ public final class ModelViewModel extends ViewModel {
         public final boolean busy;
         @NonNull public final Notice notice;
         public final int code;
+        /** 最近一次成功保存的非敏感表单摘要；保留到下一次保存操作，防止刷新状态吞掉 SAVED 帧。 */
+        @Nullable public final SavedForm savedForm;
         State(@Nullable ModelRuntimeStatus runtime, @NonNull List<ModelInfo> models, boolean busy,
                 @NonNull Notice notice, int code) {
+            this(runtime, models, busy, notice, code, null);
+        }
+        State(@Nullable ModelRuntimeStatus runtime, @NonNull List<ModelInfo> models, boolean busy,
+                @NonNull Notice notice, int code, @Nullable SavedForm savedForm) {
             this.runtime = runtime;
             this.models = Collections.unmodifiableList(new ArrayList<>(models));
             this.busy = busy;
             this.notice = notice;
             this.code = code;
+            this.savedForm = savedForm;
         }
         static State initial() { return new State(null, Collections.emptyList(), false, Notice.IDLE, 0); }
         State withBusy(boolean busy, Notice notice, int code) {
-            return new State(runtime, models, busy, notice, code);
+            return new State(runtime, models, busy, notice, code, savedForm);
         }
         State withNotice(Notice notice, int code) { return withBusy(busy, notice, code); }
+        State withSavedForm(@Nullable SavedForm savedForm) {
+            return new State(runtime, models, busy, notice, code, savedForm);
+        }
+    }
+
+    /** 仅用于 Launcher 回显的非敏感字段；API Key 不会进入此对象。 */
+    public static final class SavedForm {
+        @NonNull public final String providerId;
+        @NonNull public final String modelId;
+        @NonNull public final String endpoint;
+        public final boolean credentialProvided;
+
+        SavedForm(@NonNull String providerId, @NonNull String modelId, @NonNull String endpoint,
+                boolean credentialProvided) {
+            this.providerId = providerId;
+            this.modelId = modelId;
+            this.endpoint = endpoint;
+            this.credentialProvided = credentialProvided;
+        }
     }
 }

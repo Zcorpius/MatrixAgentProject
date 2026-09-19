@@ -78,11 +78,11 @@ public final class VoicePolicyConfig {
     }
 
     /**
-     * 默认策略:wake 后等开口 5s / 最大说话 15s / endpoint 等 final 2s / 复述 1 次 / 置信度 0.5 / 最短 1 字符 /
+     * 默认策略:wake 后等开口 3s / 最大说话 15s / endpoint 等 final 2s / 复述 1 次 / 置信度 0.5 / 最短 1 字符 /
      * TTS 就绪 3s / 每字 200ms / 播报上限 30s / barge-in RMS 1500 / 连续 5 帧(250ms) / 不强制半双工。
      */
     public static VoicePolicyConfig defaults() {
-        return new VoicePolicyConfig(5000L, 15000L, 2000L, 1, 0.5f, 1,
+        return new VoicePolicyConfig(3000L, 15000L, 2000L, 1, 0.5f, 1,
                 3000L, 200L, 30000L, 1500, 5, false);
     }
 

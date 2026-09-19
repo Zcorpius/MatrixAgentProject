@@ -68,6 +68,7 @@
     <string name="voice_status_interrupting">打断中</string>
     <string name="voice_status_interrupted">已打断</string>
     <string name="voice_status_error">语音会话异常（错误码：%1$d）</string>
+    <string name="voice_status_tts_unavailable">语音已处理，但系统未安装可用的语音播报引擎</string>
     <string name="voice_status_host_unavailable">Host 未连接，暂时无法使用语音功能</string>
     <string name="voice_status_session_unavailable">无法启动语音会话（错误码：%1$d）</string>
     <string name="agent_eyebrow_format">●  %1$s</string>
@@ -131,6 +132,7 @@
     <string name="model_key_required">API Key（必填）</string>
     <string name="model_key_optional">API Key（可选）</string>
     <string name="model_key_transient_hint">仅用于本次安全写入</string>
+    <string name="model_key_saved_hint">已安全保存；输入新 Key 以覆盖</string>
     <string name="model_save_activate">保存并启用</string>
     <string name="model_test_current">测试当前配置</string>
     <string name="model_available_runtime_title">可用运行时</string>

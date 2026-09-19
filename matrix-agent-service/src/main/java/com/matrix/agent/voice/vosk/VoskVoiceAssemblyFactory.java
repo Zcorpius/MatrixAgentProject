@@ -75,8 +75,10 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
         File voskRoot = new File(app.getFilesDir(), "vosk-model");
         final VoskModelSpec en = VoskModelSpec.en(voskRoot);
         final VoskModelSpec cn = VoskModelSpec.cn(voskRoot);
+        Log.i(TAG, "[VoiceAssembly] prepare begin models=en:" + en.version + ",cn:" + cn.version);
         try {
             ensureModels(en, cn, progress, cancelled);
+            Log.i(TAG, "[VoiceAssembly] prepare complete modelsReady=true");
         } catch (ModelInstallLock.LockBusyException e) {
             // 锁竞争→退避重试 download(自己接管缺失模型,不要求另一实例下完两个)
             Log.i(TAG, "[Voice] 模型正在被另一实例安装,退避重试");
@@ -89,12 +91,16 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
 
     private void ensureModels(VoskModelSpec en, VoskModelSpec cn,
             ProgressListener progress, BooleanSupplier cancelled) throws java.io.IOException {
-        if (!downloader.isDownloaded(en)) {
+        boolean englishReady = downloader.isDownloaded(en);
+        Log.i(TAG, "[VoiceAssembly] model decision name=" + en.name + " ready=" + englishReady);
+        if (!englishReady) {
             progress.onProgress("下载英文唤醒模型(~40MB)…");
             downloader.download(en, cancelled);
         }
         if (cancelled.getAsBoolean()) return;
-        if (!downloader.isDownloaded(cn)) {
+        boolean chineseReady = downloader.isDownloaded(cn);
+        Log.i(TAG, "[VoiceAssembly] model decision name=" + cn.name + " ready=" + chineseReady);
+        if (!chineseReady) {
             progress.onProgress("下载中文识别模型(~42MB)…");
             downloader.download(cn, cancelled);
         }
@@ -136,6 +142,7 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
         VoskWakeAdapter wake = null;
         AndroidTtsAdapter tts = null;
         try {
+            Log.i(TAG, "[VoiceAssembly] create begin");
             holder = new VoskModelHolder(new File(app.getFilesDir(), "vosk-model"));
             VoskAsrEngine engine = new VoskAsrEngine(holder.cnModel());
             asr = new VoskAsrAdapter(engine);
@@ -149,8 +156,10 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
                     context.timeoutScheduler(), NoopVoiceMetrics.INSTANCE);
             VoiceCaptureController capture = new VoiceCaptureController(controller, wake, asr,
                     VoicePolicyConfig.defaults(), context.appContext(), captureThreadFactory);
+            Log.i(TAG, "[VoiceAssembly] create complete");
             return new VoskAssembly(controller, capture, wake, asr, tts, holder);
         } catch (Exception e) {
+            Log.e(TAG, "[VoiceAssembly] create failed type=" + e.getClass().getSimpleName(), e);
             if (wake != null) try { wake.stop(); } catch (Exception ignored) { } // recognizer 先
             if (asr != null) try { asr.stop(); } catch (Exception ignored) { }
             if (tts != null) try { tts.shutdown(); } catch (Exception ignored) { }

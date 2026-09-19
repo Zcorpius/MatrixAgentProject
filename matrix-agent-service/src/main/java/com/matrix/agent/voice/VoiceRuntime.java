@@ -173,14 +173,19 @@ public final class VoiceRuntime {
         if (onFailure != null) this.onFailureCallback = onFailure;
         synchronized (lifecycleLock) {
             this.statusListener = statusListener;
-            if (cleared) return;
+            if (cleared) {
+                Log.w(TAG, "[VoiceRuntime] start ignored reason=cleared");
+                return;
+            }
             if (built) {
+                Log.i(TAG, "[VoiceRuntime] start reused_ready_runtime captureStarted=" + captureStarted);
                 // 已就绪:不重复装配,发布就绪(晚传入的 onReady 同步补发一次)。
-                postStatus("就绪:说 \"hey matrix\" 或按\"开始\"");
+                postStatus("就绪:说 \"Hi Matrix\" 或按\"开始\"");
                 fireReadyOnce();
                 return;
             }
             if (startInFlight) {
+                Log.i(TAG, "[VoiceRuntime] start coalesced reason=prepare_in_flight");
                 // 下载/装配中:不重复提交(防递增 generation 让旧任务报"已取消")。
                 return;
             }
@@ -188,19 +193,27 @@ public final class VoiceRuntime {
         }
         final long gen = ++generation; // 首次启动才递增(startInFlight 保证不重复)
         final BooleanSupplier cancelled = () -> cleared || gen != generation;
+        Log.i(TAG, "[VoiceRuntime] start accepted generation=" + gen
+                + " foreground=" + foregroundActive);
         downloadExecutor.submit(() -> {
             if (cleared) return;
             try {
+                Log.i(TAG, "[VoiceRuntime] prepare begin generation=" + gen);
                 // 引擎资源(模型下载/校验/锁竞争退避)在工厂内,含 LockBusy 有界重试
                 factory.prepare(progress -> {
                     if (!cancelled.getAsBoolean()) postStatus(progress);
                 }, cancelled);
-                if (cancelled.getAsBoolean()) return;
+                if (cancelled.getAsBoolean()) {
+                    Log.i(TAG, "[VoiceRuntime] prepare cancelled generation=" + gen);
+                    return;
+                }
+                Log.i(TAG, "[VoiceRuntime] prepare complete generation=" + gen);
                 postStatus("模型就绪,装配中…");
                 buildAndStart();
             } catch (Exception e) {
                 if (gen != generation || cleared) return; // 旧 generation 取消,静默不报失败
-                Log.e(TAG, "[Voice] 启动失败: " + e.getClass().getSimpleName(), e);
+                Log.e(TAG, "[VoiceRuntime] start failed generation=" + gen
+                        + " type=" + e.getClass().getSimpleName(), e);
                 // P3: UI 只输出稳定文案+异常类型,原始 message 可能含模型绝对路径
                 postStatus("启动失败(" + e.getClass().getSimpleName() + "),请重试");
                 fireFailure();
@@ -211,7 +224,10 @@ public final class VoiceRuntime {
     }
 
     private void buildAndStart() {
-        if (cleared || built) return;
+        if (cleared || built) {
+            Log.i(TAG, "[VoiceRuntime] build skipped cleared=" + cleared + " built=" + built);
+            return;
+        }
         if (!foregroundActive) { // 退后台不装配(防下载完成后台启动麦)
             pendingBuild = true; // 记待装配,resume 回前台时重调本方法
             Log.i(TAG, "[Voice] 退后台,暂停装配,回前台重试");
@@ -219,6 +235,7 @@ public final class VoiceRuntime {
             return;
         }
         pendingBuild = false;
+        Log.i(TAG, "[VoiceRuntime] assembly create begin foreground=" + foregroundActive);
         // 引擎装配在锁外(耗时不持锁);装配后到锁内发布+启动
         final VoiceAssembly built;
         try {
@@ -240,6 +257,7 @@ public final class VoiceRuntime {
             this.capture = built.capture();
             this.capture.setTerminationListener(this::onCaptureTerminated); // #5:采音终止→恢复链入口
             this.built = true;
+            Log.i(TAG, "[VoiceRuntime] assembly published foreground=" + foregroundActive);
             try {
                 VoiceSessionListener ui = this.uiListener; // ⑤:装配期绑定时已 attach 的 UI 订阅
                 if (ui != null) controller.setUiListener(ui);
@@ -248,10 +266,12 @@ public final class VoiceRuntime {
                 // 加载期间可能已 pause,此时不能后台启动麦;built=true 但 captureStarted=false,
                 // 由 resume 在回前台时补 capture.start()。
                 if (foregroundActive) {
+                    Log.i(TAG, "[VoiceRuntime] capture start requested source=initial");
                     long sid = capture.start();
                     if (sid >= 0) {
                         captureStarted = true;
                         captureSessionId = sid;
+                        Log.i(TAG, "[VoiceRuntime] capture started source=initial sid=" + sid);
                     } else {
                         captureStarted = false;
                         // P2: busy(STOPPING 残留/AudioRecord 短暂占用)有界退避重试,
@@ -279,7 +299,7 @@ public final class VoiceRuntime {
                 return;
             }
         }
-        postStatus("就绪:说 \"hey matrix\" 或按\"开始\"");
+        postStatus("就绪:说 \"Hi Matrix\" 或按\"开始\"");
         fireReadyOnce();
     }
 

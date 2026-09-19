@@ -35,6 +35,8 @@ public final class MatrixErrorCode {
     public static final int TASK_FAILED = 12;
     /** Client and service contracts could not negotiate a safe common version. */
     public static final int CONTRACT_MISMATCH = 13;
+    /** Speech was recognized and handled, but this device has no usable system TTS engine. */
+    public static final int VOICE_OUTPUT_UNAVAILABLE = 14;
 
     private MatrixErrorCode() {
     }

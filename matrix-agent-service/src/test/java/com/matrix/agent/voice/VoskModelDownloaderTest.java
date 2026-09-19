@@ -2,7 +2,10 @@ package com.matrix.agent.voice;
 
 import org.junit.Test;
 
+import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.download.ModelDownloadInfo;
+import com.matrix.agent.data.db.ModelDownloadDao;
+import com.matrix.agent.data.db.ModelDownloadEntity;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -13,6 +16,8 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -144,13 +149,15 @@ public final class VoskModelDownloaderTest {
         return ss;
     }
 
-    /** P2-3: HTTP 503(瞬态)→ PAUSED 保留 tmpZip 断点。 */
+    /** 可重试 HTTP 503 必须保留断点，但不能伪装成用户主动暂停。 */
     @Test
-    public void download_http503_keepsTmpZipBreakpoint() throws Exception {
+    public void download_http503_marksFailedAndKeepsTmpZipBreakpoint() throws Exception {
         ServerSocket server = startMiniStatusServer(503);
         try {
             File root = Files.createTempDirectory("vosk-503").toFile();
-            VoskModelDownloader d = new VoskModelDownloader(null);
+            InMemoryDao dao = new InMemoryDao();
+            VoskModelDownloader d = new VoskModelDownloader(null, dao,
+                    new com.matrix.agent.platform.MatrixHttpClient().download());
             VoskModelSpec spec = new VoskModelSpec("test",
                     "http://127.0.0.1:" + server.getLocalPort() + "/m.zip",
                     new File(root, "model"), "conf/mfcc.conf", "test", "0.1", 100L, 100L, null);
@@ -160,12 +167,17 @@ public final class VoskModelDownloaderTest {
             try {
                 d.download(spec, () -> false);
                 fail("503 应抛异常");
-            } catch (IOException expected) { // PAUSED
+            } catch (IOException expected) {
                 assertTrue("应是瞬态 HTTP_503: " + expected.getMessage(),
                         expected.getMessage().contains("HTTP_503"));
             }
             assertTrue("503(瞬态)应保留 tmpZip 断点", tmpZip.exists());
             assertEquals("503 后断点字节必须不变(未截断)", 50L, tmpZip.length());
+            assertEquals("网络失败不应显示为已暂停", "FAILED", dao.row.status);
+            ModelDownloadInfo info = d.modelInfo(spec);
+            assertEquals(ModelDownloadInfo.DOWNLOAD_STATE_FAILED, info.state);
+            assertEquals(MatrixErrorCode.TASK_FAILED, info.errorCode);
+            assertEquals("失败可重试仍应展示已保留的断点", 50L, info.bytesDownloaded);
         } finally {
             server.close();
         }
@@ -197,7 +209,7 @@ public final class VoskModelDownloaderTest {
         }
     }
 
-    /** P2-3: HTTP 429(限流瞬态)→ PAUSED 保留 tmpZip 断点(字节不变)。 */
+    /** P2-3: HTTP 429(限流可重试)→ FAILED 保留 tmpZip 断点(字节不变)。 */
     @Test
     public void download_http429_keepsTmpZipBreakpoint() throws Exception {
         ServerSocket server = startMiniStatusServer(429);
@@ -224,7 +236,7 @@ public final class VoskModelDownloaderTest {
         }
     }
 
-    /** P2-3: 连接断开(SocketException/EOF,递归 cause)→ PAUSED 保留断点。 */
+    /** P2-3: 连接断开(SocketException/EOF,递归 cause)→ FAILED 保留断点。 */
     @Test
     public void download_socketReset_keepsTmpZipBreakpoint() throws Exception {
         java.util.concurrent.CountDownLatch accepted = new java.util.concurrent.CountDownLatch(1);
@@ -338,5 +350,26 @@ public final class VoskModelDownloaderTest {
         t.setDaemon(true);
         t.start();
         return ss;
+    }
+
+    /** Minimal Room DAO double: exposes the persisted projection asserted by downloader tests. */
+    private static final class InMemoryDao implements ModelDownloadDao {
+        ModelDownloadEntity row;
+
+        @Override public void upsert(ModelDownloadEntity entity) { row = entity; }
+        @Override public void update(ModelDownloadEntity entity) { row = entity; }
+        @Override public List<ModelDownloadEntity> getAll() {
+            return row == null ? Collections.emptyList() : Collections.singletonList(row);
+        }
+        @Override public List<ModelDownloadEntity> getCompleted() {
+            return row != null && "COMPLETED".equals(row.status)
+                    ? Collections.singletonList(row) : Collections.emptyList();
+        }
+        @Override public ModelDownloadEntity getByName(String modelName) {
+            return row != null && modelName.equals(row.modelName) ? row : null;
+        }
+        @Override public void deleteByName(String modelName) {
+            if (row != null && modelName.equals(row.modelName)) row = null;
+        }
     }
 }

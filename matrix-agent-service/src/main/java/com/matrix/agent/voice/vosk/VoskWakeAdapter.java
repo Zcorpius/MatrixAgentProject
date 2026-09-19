@@ -12,7 +12,8 @@ import java.util.Locale;
 /**
  * {@link com.matrix.agent.voice.port.WakeWordPort} 的 Vosk 实现。
  *
- * <p>用英文小模型 + grammar 受限词表做关键词检测:grammar 只含 "hey matrix" 与 "[unk]",
+ * <p>用英文小模型 + grammar 受限词表做关键词检测:grammar 包含主唤醒词 "hi matrix"
+ * 与兼容说法 "hey matrix"，
  * 命中唤醒词时触发 {@link com.matrix.agent.voice.port.WakeWordPort.Listener#onWake()}。
  * 同时检查 final 与 partial,降低响应延迟。
  *
@@ -26,9 +27,9 @@ public final class VoskWakeAdapter implements com.matrix.agent.voice.port.WakeWo
     private static final String TAG = "MatrixAgent";
     private static final String ERR_START = "VOSK_WAKE_START_FAILED";
 
-    /** grammar JSON:唤醒词 + [unk] 通配(其它声音不触发)。 */
-    private static final String GRAMMAR = "[\"hey matrix\", \"[unk]\"]";
-    private static final String WAKE_PHRASE = "hey matrix";
+    /** grammar JSON:主唤醒词、兼容说法 + [unk] 通配(其它声音不触发)。 */
+    private static final String GRAMMAR = "[\"hi matrix\", \"hey matrix\", \"[unk]\"]";
+    private static final String WAKE_PHRASE = "matrix";
 
     private final Model enModel;
     private final Object recognizerLock = new Object();
@@ -82,7 +83,7 @@ public final class VoskWakeAdapter implements com.matrix.agent.voice.port.WakeWo
         // P2:解析期间可能发生 stop+start 重建(如采音错误清理),旧 recognizer 的迟到唤醒不得
         // 污染新会话——派发前校验代次未变;Controller 侧再校验 epoch == start() 返回值,双重丢弃。
         String text = parse(raw, endpoint ? "text" : "partial");
-        if (containsWake(text)) {
+        if (isWakePhrase(text)) {
             if (entryEpoch != epoch) return; // 重建/停止已发生,丢弃旧结果
             Listener l = listener;
             if (l != null) l.onWake(entryEpoch);
@@ -100,8 +101,12 @@ public final class VoskWakeAdapter implements com.matrix.agent.voice.port.WakeWo
         }
     }
 
-    private static boolean containsWake(String text) {
-        return text != null && text.toLowerCase(Locale.ROOT).contains(WAKE_PHRASE);
+    /** 纯文本命中判断，保持包可见以便不依赖 Vosk native 的回归测试。 */
+    static boolean isWakePhrase(String text) {
+        if (text == null) return false;
+        String normalized = text.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        return normalized.equals("hi " + WAKE_PHRASE)
+                || normalized.equals("hey " + WAKE_PHRASE);
     }
 
     private static String parse(String json, String field) {

@@ -173,7 +173,10 @@ public final class VoiceFragment extends Fragment {
             case INTERRUPTING: return getString(R.string.voice_status_interrupting);
             case INTERRUPTED: return getString(R.string.voice_status_interrupted);
             case FINISHED: return getString(R.string.voice_status_finished);
-            case ERROR: return getString(R.string.voice_status_error, value.errorCode);
+            case ERROR:
+                return value.errorCode == MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE
+                        ? getString(R.string.voice_status_tts_unavailable)
+                        : getString(R.string.voice_status_error, value.errorCode);
             case HOST_UNAVAILABLE:
             default: return getString(R.string.voice_status_host_unavailable);
         }

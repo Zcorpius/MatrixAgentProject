@@ -3,6 +3,9 @@ package com.matrix.agent.voice;
 import com.matrix.agent.voice.port.*;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.storage.StorageManager;
 import android.util.Log;
 
@@ -42,7 +45,8 @@ import okhttp3.Response;
  *
  * <p><b>锁与并发</b>:统一经 {@link ModelInstallLock}(进程内 per-langDir + 跨进程 FileLock)。
  * 锁竞争(另一实例正在装同 langDir)抛 {@link ModelInstallLock.LockBusyException} <b>不删任何 tmp</b>
- * (持锁者正在用);取消/瞬态网络错误保留断点(PAUSED);真实损坏(校验/解压)删 tmp(FAILED)。
+ * (持锁者正在用);用户取消保留断点(PAUSED);可重试网络错误保留断点但标为 FAILED，
+ * 真实损坏(校验/解压)删 tmp(FAILED)。
  * migrateLegacy 也在锁内(防与 promote/rollback 竞争指针)。
  *
  * <p><b>取消语义</b>:取消抛 {@link DownloadCancelledException}——保留 {@code .tmp_<name>_<version>.zip}
@@ -86,13 +90,15 @@ public final class VoskModelDownloader {
         this.httpClient = httpClient;
     }
 
-    /** active 版本目录存在且 marker 就绪。 */
+    /** active 版本目录存在且 marker 就绪。热路径不记录日志，避免页面轮询淹没诊断日志。 */
     public boolean isDownloaded(VoskModelSpec spec) {
         File active = ModelPathResolver.activeDir(spec.targetDir);
-        if (active == null) return false;
-        // active 版本必须等于 spec.version:否则旧版本(如 0.15)的 marker 会让升级(0.16)误判已下载。
-        if (!spec.version.equals(ModelPathResolver.activeVersion(spec.targetDir))) return false;
-        return new File(active, spec.marker).exists();
+        String activeVersion = ModelPathResolver.activeVersion(spec.targetDir);
+        boolean activePresent = active != null;
+        boolean versionMatches = spec.version.equals(activeVersion);
+        boolean markerPresent = activePresent && new File(active, spec.marker).exists();
+        boolean ready = activePresent && versionMatches && markerPresent;
+        return ready;
     }
 
     /**
@@ -108,7 +114,8 @@ public final class VoskModelDownloader {
                 Log.w(TAG, "[Voice] 读取模型进度失败: " + e.getClass().getSimpleName());
             }
         }
-        if (isDownloaded(spec)) {
+        boolean ready = isDownloaded(spec);
+        if (ready) {
             File active = ModelPathResolver.activeDir(spec.targetDir);
             long installed = active == null ? 0L : dirSize(active);
             return new ModelDownloadInfo(spec.name, ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED,
@@ -117,8 +124,11 @@ public final class VoskModelDownloader {
         long downloaded = entity == null ? 0L : Math.max(0L, entity.downloadedBytes);
         long total = entity == null || entity.totalBytes <= 0L
                 ? spec.sizeBytes : entity.totalBytes;
-        return new ModelDownloadInfo(spec.name, downloadState(entity == null ? null : entity.status),
-                downloaded, total, MatrixErrorCode.SUCCESS);
+        String persistedStatus = entity == null ? null : entity.status;
+        int state = downloadState(persistedStatus);
+        int error = state == ModelDownloadInfo.DOWNLOAD_STATE_FAILED
+                ? MatrixErrorCode.TASK_FAILED : MatrixErrorCode.SUCCESS;
+        return new ModelDownloadInfo(spec.name, state, downloaded, total, error);
     }
 
     /**
@@ -175,11 +185,23 @@ public final class VoskModelDownloader {
         try {
             ModelInstallLock.withTryLock(spec.targetDir, () -> {
                 // P1-3: 先复查已完成(不写 DOWNLOADING 覆盖 COMPLETED)
-                if (isDownloaded(spec)) return;
+                if (isDownloaded(spec)) {
+                    Log.i(TAG, "[VoiceModel] download skipped name=" + spec.name
+                            + " reason=already_ready");
+                    return;
+                }
                 // P1-5b/P3-1: 锁内直调 ModelPathResolver.migrateLegacy(避免 this.migrateLegacy 重入锁)
                 ModelPathResolver.migrateLegacy(spec.targetDir, spec.version, spec.marker);
-                if (isDownloaded(spec)) return; // 迁移后可能已就绪
+                if (isDownloaded(spec)) {
+                    Log.i(TAG, "[VoiceModel] download skipped name=" + spec.name
+                            + " reason=legacy_migrated_ready");
+                    return; // 迁移后可能已就绪
+                }
+                Log.i(TAG, "[VoiceModel] download begin name=" + spec.name
+                        + " version=" + spec.version
+                        + " hasResumeBytes=" + (tmpZip.exists() && tmpZip.length() > 0));
                 setStatus(spec, "DOWNLOADING", tmpZip.exists() ? tmpZip.length() : 0, 0);
+                ensureNetworkAvailable(spec);
                 checkCancelled(cancelled);
                 downloadZip(spec, tmpZip, cancelled);
                 checkCancelled(cancelled);
@@ -203,17 +225,25 @@ public final class VoskModelDownloader {
             Log.i(TAG, "[Voice] 模型正在被另一实例安装,跳过: " + spec.name);
             throw e;
         } catch (Exception e) {
-            // 取消 / 瞬态网络(PAUSED 保断点)/ 真实损坏(FAILED 删 zip)(P2-C 分类)
+            // 取消 / 可重试网络(FAILED 保断点) / 真实损坏(FAILED 删 zip)。
             boolean cancelledNow = (e instanceof DownloadCancelledException)
                     || cancelled.getAsBoolean()
                     || Thread.currentThread().isInterrupted();
             boolean transientNetwork = !cancelledNow && isTransientNetwork(e);
             long have = tmpZip.exists() ? tmpZip.length() : 0;
-            if (cancelledNow || transientNetwork) {
+            if (cancelledNow) {
                 setStatus(spec, "PAUSED", have, 0); // 保留断点,下次 Range 续传
                 deleteRecursive(tmpVersionDir);
-                Log.i(TAG, "[Voice] 下载暂停(保留断点," + have + " B): " + spec.name
-                        + (transientNetwork ? "(网络)" : "(取消)"));
+                Log.i(TAG, "[VoiceModel] download paused name=" + spec.name
+                        + " reason=user_cancelled resumeBytes=" + have);
+            } else if (transientNetwork) {
+                // "暂停"仅表示用户或生命周期主动停止。DNS/网络失败仍可断点续传，
+                // 但必须让 UI 和日志准确地展示失败原因，避免误导用户去点"继续"。
+                setStatus(spec, "FAILED", have, 0);
+                deleteRecursive(tmpVersionDir);
+                Log.w(TAG, "[VoiceModel] download retryable_network_failure name=" + spec.name
+                        + " version=" + spec.version + " code=" + networkFailureCode(e)
+                        + " type=" + rootCauseClass(e) + " resumeBytes=" + have);
             } else {
                 // 日志只记模型名+版本+code+异常类,不含绝对路径
                 Log.e(TAG, "[Voice] Vosk 模型下载失败 " + spec.name + " v" + spec.version
@@ -251,6 +281,27 @@ public final class VoskModelDownloader {
         throw new IOException("INSUFFICIENT_STORAGE: " + spec.name);
     }
 
+    /**
+     * Fail before DNS/HTTP when Android has no usable default network.  This does not require a
+     * validated network: captive portals and enterprise networks may become usable after their
+     * own sign-in flow, while the subsequent HTTP call remains the final authority.
+     */
+    private void ensureNetworkAvailable(VoskModelSpec spec) throws IOException {
+        if (appContext == null) return; // Pure JVM downloader tests deliberately have no Android context.
+        ConnectivityManager connectivity = appContext.getSystemService(ConnectivityManager.class);
+        Network network = connectivity == null ? null : connectivity.getActiveNetwork();
+        NetworkCapabilities capabilities = network == null || connectivity == null
+                ? null : connectivity.getNetworkCapabilities(network);
+        boolean internet = capabilities != null
+                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        boolean validated = capabilities != null
+                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        Log.i(TAG, "[VoiceModel] network preflight name=" + spec.name
+                + " activeNetwork=" + (network != null)
+                + " internet=" + internet + " validated=" + validated);
+        if (!internet) throw new IOException("NETWORK_UNAVAILABLE: " + spec.name);
+    }
+
     /** P2-2: 瞬态网络错误(递归 cause)——连接/超时/DNS/Socket(Connection reset/Broken pipe)/EOF/HTTP 429/408/5xx → PAUSED 保断点;真实损坏(HASH/ZIP_SLIP/404)→ FAILED 删。 */
     private static boolean isTransientNetwork(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
@@ -261,11 +312,36 @@ public final class VoskModelDownloader {
                     || t instanceof java.io.InterruptedIOException
                     || t instanceof java.io.EOFException) return true;
             String msg = t.getMessage();
-            if (msg != null && (msg.startsWith("HTTP_429") || msg.startsWith("HTTP_408") || msg.startsWith("HTTP_5"))) {
+            if (msg != null && (msg.startsWith("NETWORK_UNAVAILABLE")
+                    || msg.startsWith("HTTP_429") || msg.startsWith("HTTP_408")
+                    || msg.startsWith("HTTP_5"))) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Stable, non-sensitive network failure category for device logs. */
+    private static String networkFailureCode(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t instanceof java.net.UnknownHostException) return "DNS_UNRESOLVED";
+            if (t instanceof java.net.SocketTimeoutException) return "NETWORK_TIMEOUT";
+            if (t instanceof java.net.ConnectException) return "NETWORK_CONNECT_FAILED";
+            if (t instanceof java.net.SocketException) return "NETWORK_SOCKET_ERROR";
+            if (t instanceof java.io.EOFException) return "NETWORK_EOF";
+            String message = t.getMessage();
+            if (message != null && message.startsWith("NETWORK_UNAVAILABLE")) {
+                return "NETWORK_UNAVAILABLE";
+            }
+            if (message != null && message.startsWith("HTTP_")) return errorCode(t);
+        }
+        return "NETWORK_RETRYABLE";
+    }
+
+    private static String rootCauseClass(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null) root = root.getCause();
+        return root.getClass().getSimpleName();
     }
 
     /** SHA-256 校验:expected 非空时比对(不匹配抛),空时跳过(warning,防篡改未启用)。 */
