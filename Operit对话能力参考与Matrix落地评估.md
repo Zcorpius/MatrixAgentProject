@@ -207,25 +207,14 @@ android {
 实际模块名或 `internal` build type 可随工程组织调整，但以下契约不可变：
 
 1. Host 与 Launcher 都只检查各自的 `BuildConfig.MATRIX_DEBUG_TRACE_UI`，不使用 `BuildConfig.DEBUG` 作为额外条件。buildType 门控已确保 release 字段恒为 false；这样 internal 不必为了调试轨迹改变 `isDebuggable` 或承受其副作用。任一侧字段为 false 时，Host 不创建/不接受订阅，Launcher 不订阅/不渲染；两侧不需要、也不应跨 Binder 查询对方的 BuildConfig。
-2. `matrix.debugTraceUi=true` 时，调试轨迹以可折叠的**内嵌调试面板**呈现在宿主用户消息的状态卡下方（视觉上位于该用户请求与对应助手答复之间），而非跳转到独立页面。面板按 `hostUserMessageId + taskId + generation` 绑定本轮执行；工具调用属于用户请求触发的任务，不能错误挂在 assistant message。它不复用正式 `ConversationMessage` 正文或 `executionTraces`，但会从专用、加密的 `DebugTraceEventRecord` 历史恢复内容：重新进入会话时，debug Launcher 查询该宿主轮次的已脱敏事件并恢复折叠面板；generation 只用于拒绝迟到的实时事件，不能删除已定稿的历史轨迹。调试轨迹不得进入审计导出、普通聊天导出、剪贴板、模型上下文或 TTS。折叠/展开或离开页面不影响 Host 继续输出诊断日志。
-
-   ```text
-   用户请求气泡 / 状态卡
-     └─ 调试过程 ▾                 （仅 MATRIX_DEBUG_TRACE_UI=true）
-          reasoning_content         （仅当 GLM 实际返回）
-          候选工具：set_volume(30%)
-          策略：允许
-          请求：30% → 核验：33%
-   助手回复气泡
-   ```
-
-3. Host 到 Launcher 使用独立的 append-only AIDL：`IDebugTraceCallback` 以 `oneway` 推送有界 `DebugTraceEvent`，通过独立的注册/注销方法订阅；同一 debug-only service 提供按 `hostUserMessageId + taskId` 分页读取已持久化轨迹的只读方法。Launcher 先加载历史页、再订阅增量，按 `hostUserMessageId + taskId + generation` 将实时事件归入对应内嵌面板。Host 在字段为 false 时直接拒绝注册和历史读取且不写入调试表，Launcher 自身字段为 false 时不调用、不渲染。该通道不复用 `IConversationCallback`，避免正式会话 ABI、持久化事实与 debug-only 数据相互污染。
+2. 调试页是独立的“调试轨迹”视图，不复用 `ConversationMessage`、`executionTraces` 或正式消息气泡。它只使用有界内存 ring buffer，进程重启即清空；不得进入 SQLCipher 对话库、审计导出、聊天导出、剪贴板、模型上下文或 TTS。页面关闭不影响 Host 继续输出诊断日志。
+3. Host 到 Launcher 使用独立的 append-only AIDL：`IDebugTraceCallback` 以 `oneway` 推送有界 `DebugTraceEvent`，通过独立的注册/注销方法订阅。Host 在字段为 false 时直接拒绝注册且不产生事件；Launcher 自身字段为 false 时不调用注册、不渲染。该通道不复用 `IConversationCallback`，避免正式会话 ABI、持久化事实与 debug-only 内存事件相互污染。
 4. 为满足“已取得的思考过程无论 UI 开关如何都打印日志”，`ModelApiClient → LlmClient` 必须演进为增量详情通道，例如 `completeWithDetail()` 返回 `CompletionDetail{text, reasoningIfPresent}`；保留现有 `complete()` 作为兼容包装，默认实现只产生 text。供应商实际返回 reasoning 时，将其作为 `DebugTraceEvent.MODEL_REASONING` 写入日志；未返回时写“reasoning unavailable”，绝不尝试推导隐藏思维链。reasoning 是否在 UI 显示仍受 `matrix.debugTraceUi` 门控。
-5. Host 建立唯一 `DebugTraceEmitter`：每个模型轮次、reasoning、候选工具、PolicyEngine 判定、工具请求、工具结果、readback、错误码和耗时先经过 `DebugTraceRedactor`，然后**无条件**以 `Log.i("MatrixAgent", ...)` 写入 logcat。当 Host 侧 UI 标志为 true 时，同一已净化事件还会：先写入 `DebugTraceEventRecord`，再复制到内存 ring buffer 并经 `IDebugTraceCallback` 下发至对应气泡的内嵌面板；写库和回调携带同一个 `traceId/eventSequence`，保证重进会话后的历史顺序与实时顺序一致。面板按时间展示“reasoning → 候选工具 → 策略 → 请求 → 核验”，并支持折叠。单条日志按 3 KiB 上限切分，附带 `traceId`、`taskId`、`partIndex/partCount`、阶段和时间，确保长 reasoning 可在 logcat 重组且不因 Android 单条长度限制被截断。
+5. Host 建立唯一 `DebugTraceEmitter`：每个模型轮次、reasoning、候选工具、PolicyEngine 判定、工具请求、工具结果、readback、错误码和耗时先经过 `DebugTraceRedactor`，然后**无条件**以 `Log.i("MatrixAgent", ...)` 写入 logcat；仅当 Host 侧 UI 标志为 true 时，再复制到内存 ring buffer 并经 `IDebugTraceCallback` 下发。单条日志按 3 KiB 上限切分，附带 `traceId`、`taskId`、`partIndex/partCount`、阶段和时间，确保长 reasoning 可在 logcat 重组且不因 Android 单条长度限制被截断。
 6. `DebugTraceRedactor` 是日志与 UI 的共同边界：系统提示词、密钥、认证头、原始审计 payload、完整位置/联系人/URI 等即使在 true 模式也不输出。`FORCE_TOOL`、PolicyEngine 拒绝、工具超时和 readback 不一致必须显式区分“模型建议”“策略允许”“请求已送达”“设备已核验”，避免日志和调试页自身传播“请求即事实”的错误。
-7. 量产模式只显示用户可理解的最终安全事实，例如“请求音量 30% → 核验为 33%”；不显示模型思考、逐步工具调用或调试关联 ID。**量产 UI 隐藏不等于停止日志**：开关为 false 时仍按第 5 条输出脱敏的 reasoning/工具流程日志，但不创建 `DebugTraceEventRecord`，也不允许查询历史调试轨迹；Host 启动时清除既有 debug trace 行，防止 internal 构建遗留的细节在量产/关闭模式继续留存。`EXECUTION_UNKNOWN` 的最小核验信息不能因关闭调试模式而被隐藏。
+7. 量产模式只显示用户可理解的最终安全事实，例如“请求音量 30% → 核验为 33%”；不显示模型思考、逐步工具调用或调试关联 ID。**量产 UI 隐藏不等于停止日志**：开关为 false 时仍按第 5 条输出脱敏的 reasoning/工具流程日志。`EXECUTION_UNKNOWN` 的最小核验信息不能因关闭调试模式而被隐藏。
 
-验收矩阵至少覆盖：`debugTraceUi=false` 的 debug 构建无 UI/持久轨迹但仍有脱敏 logcat 事件、`true` 的 debug/internal 构建同时有日志、加密持久事件和绑定宿主用户消息的可折叠内嵌面板、internal 不依赖 `BuildConfig.DEBUG` 仍可订阅、任何 release 变体即使属性为 true 仍无 UI/持久轨迹但仍输出脱敏日志、Host/Launcher 任一侧关闭都无法订阅、长 reasoning 分片可由 traceId 重组、重新进入会话可按宿主轮次恢复历史面板、generation 变更后迟到事件不进入新一轮面板、`clearUserData` 与宿主删除会级联清除调试轨迹、普通导出绝不包含调试内容。
+验收矩阵至少覆盖：`debugTraceUi=false` 的 debug 构建无 UI 轨迹但仍有脱敏 logcat 事件、`true` 的 debug/internal 构建同时有日志和内存轨迹、internal 不依赖 `BuildConfig.DEBUG` 仍可订阅、任何 release 变体即使属性为 true 仍无 UI 轨迹但仍输出脱敏日志、Host/Launcher 任一侧关闭都无法订阅、长 reasoning 分片可由 traceId 重组、进程重启/导出/重新进入会话均不能恢复调试内容。
 
 ### 4.4 消息操作：收藏、复制、引用、编辑与删除
 
@@ -367,10 +356,9 @@ Launcher 文本 / PTT final / 唤醒 final
 | `ConversationQuote` | 新用户 messageId、quoted messageId、可见引用快照 | Host 校验同属同用户会话，assembler 决定是否使用 |
 | `CapabilityExecutionTrace` | capability ID、白名单参数摘要、`requestedDisplay`、`verifiedDisplay`、`verificationState`、结果态 | 不是可编辑消息或独立审计表；以 `ConversationTaskLinkEntity.execution_trace_json` 作为写时净化的持久投影，并作为 `ConversationMessage.executionTraces` 追加字段传给客户端 |
 | `ConversationTransientUpdate` | message/task ID、阶段、partial 文本、generation、过期时间 | 只在内存/`oneway` 回调中存在；Host 节流合并、退订即丢弃，重启后不恢复、不写最终历史 |
-| `DebugTraceEventRecord` | `traceId`、conversation/task/host user message ID、generation、顺序号、阶段、脱敏 payload、时间、事件 schema | 仅 `MATRIX_DEBUG_TRACE_UI=true` 的 internal/debug Host 写入同一 SQLCipher 数据库；按 task 设置有界事件数/字节数，超限写入显式 `TRUNCATED` 事件；是可恢复的调试历史，不是正式对话消息、审计原文或模型上下文 |
 | `ConversationExportJob` | owner、范围、格式、进度、加密临时文件、过期时间 | 可取消、可审计、不可跨用户读取 |
 
-所有表均需要 owner/user scope、SQLCipher、迁移、清理策略和 `clearUserData` 覆盖测试。更重要的是把跨表关系写进迁移：`ConversationMessageAnnotation` 与 `ConversationQuote` 对 message 使用明确的外键 `CASCADE`；`execution_trace_json` 属于既有 task link 行，随 link 删除而天然消失，不能另建无 owner 的轨迹孤表；`DebugTraceEventRecord` 以 `host_user_message_id` 和 `conversation_task_id` 建索引并随宿主用户消息/task link 级联删除；子会话删除时其 `ConversationLineage` 级联删除，父会话删除时已物化的种子快照仍可让子会话自洽，父引用以 `SET NULL` + “来源已清除”标记收敛；导出任务及临时文件随 owner 清理。新表必须带入与主会话相同的用户清理 epoch，由一次事务/清理编排同时失效，不能留下跨 epoch 的孤儿标记或可见引用。会话正文是用户数据，可以加密保存；审计投影、logcat 与模型上下文仍必须独立脱敏。
+所有表均需要 owner/user scope、SQLCipher、迁移、清理策略和 `clearUserData` 覆盖测试。更重要的是把跨表关系写进迁移：`ConversationMessageAnnotation` 与 `ConversationQuote` 对 message 使用明确的外键 `CASCADE`；`execution_trace_json` 属于既有 task link 行，随 link 删除而天然消失，不能另建无 owner 的轨迹孤表；子会话删除时其 `ConversationLineage` 级联删除，父会话删除时已物化的种子快照仍可让子会话自洽，父引用以 `SET NULL` + “来源已清除”标记收敛；导出任务及临时文件随 owner 清理。新表必须带入与主会话相同的用户清理 epoch，由一次事务/清理编排同时失效，不能留下跨 epoch 的孤儿标记或可见引用。会话正文是用户数据，可以加密保存；审计投影、logcat 与模型上下文仍必须独立脱敏。
 
 ### 5.3 SDK 与 UI 的演进原则
 

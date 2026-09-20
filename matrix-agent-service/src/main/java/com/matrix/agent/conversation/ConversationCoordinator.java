@@ -188,8 +188,7 @@ public final class ConversationCoordinator {
         // 才能看到同一 conversation 的前一条终态，且不会把排队时间烧进 Agent budget。
         ConversationTaskSubmitter.PreparedTask prepared = submitter.prepare(
                 new ConversationTaskSubmitter.SubmitInput(
-                        conversationTaskId, runtimeRequestId, command.conversationId(),
-                        userMessageId, text,
+                        conversationTaskId, runtimeRequestId, command.conversationId(), text,
                         command.actor(), command.agentSessionId(), command.arbitrationKey(),
                         metadata.inputSource(), languageTag, metadata.asrConfidence(),
                         metadata.confidenceAvailable()));

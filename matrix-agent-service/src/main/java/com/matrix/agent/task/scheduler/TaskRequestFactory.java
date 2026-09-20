@@ -96,8 +96,7 @@ public final class TaskRequestFactory {
                 .readOnlyHint(task.classification().readOnlyHint())
                 .memorySaveAllowed(task.classification().memorySaveAllowed())
                 .epoch(capturedEpoch)
-                .conversationSeed(task.seed())
-                .debugTraceBinding(task.userMessageId(), task.conversationTaskId());
+                .conversationSeed(task.seed());
     }
 
     public void setIntentClassifier(IntentClassifier classifier) {

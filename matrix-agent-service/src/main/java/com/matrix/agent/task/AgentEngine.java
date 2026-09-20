@@ -235,10 +235,7 @@ public final class AgentEngine {
                 com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_ROUND_START,
                 request.getRequestId(),
                 "textChars=" + safeLength(request.getText())
-                        + " deadlineMs=" + request.getDeadlineAtMillis(),
-                request.getDebugTraceHostUserMessageId(),
-                request.getDebugTraceConversationTaskId() == null ? 0 : 1,
-                0);
+                        + " deadlineMs=" + request.getDeadlineAtMillis());
         Trajectory trajectory = new Trajectory();
         SessionContext sessionContext = sessionManager.getOrCreate(request.getSessionId());
         Log.d(TAG, "[Engine] session context ready turns=" + sessionContext.getRecentTurns().size());
@@ -359,8 +356,7 @@ public final class AgentEngine {
                     "iter=" + iteration + " finish=" + turn.getFinishReason()
                             + " toolCalls=" + turn.getToolCalls().size()
                             + " contentChars="
-                            + safeLength(turn.getAssistantMessage().getContent()),
-                    request.getDebugTraceHostUserMessageId(), 1, iteration);
+                            + safeLength(turn.getAssistantMessage().getContent()));
 
             // assistant message 加入前同样过预算检查(单条截断 + 条数/字符上限)
             if (!appendMessageWithBudget(conversation, turn.getAssistantMessage(), request)) {
@@ -515,9 +511,7 @@ public final class AgentEngine {
                         request.getRequestId(),
                         "cap=" + call.getCapabilityName()
                                 + " allowed=" + decision.isAllowed()
-                                + " reason=" + decision.getReason(),
-                        request.getDebugTraceHostUserMessageId(), 1,
-                        100 + totalToolCalls);
+                                + " reason=" + decision.getReason());
                 if (!decision.isAllowed()) {
                     boolean capabilityBlock =
                             decision.getRejectionType() == PolicyDecision.RejectionType.CAPABILITY;
@@ -549,9 +543,7 @@ public final class AgentEngine {
                         com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_REQUEST_DELIVERED,
                         request.getRequestId(),
                         "cap=" + call.getCapabilityName()
-                                + " args=" + call.getArguments(),
-                        request.getDebugTraceHostUserMessageId(), 1,
-                        200 + totalToolCalls);
+                                + " args=" + call.getArguments());
                 // PRE_TOOL 增量事件——policy ALLOW 后,toolExecutor.execute 前。
                 // args 走 AuditRedactor 字段级脱敏,与 TrajectoryEntity snapshots 同保护级别。
                 Map<String, Object> redactedArgsForAudit = auditRedactor.redactArguments(
@@ -578,9 +570,7 @@ public final class AgentEngine {
                                 + " status=" + toolResult.getStatus()
                                 + " verified=" + toolResult.isVerified()
                                 + " durationMs=" + toolResult.getDurationMillis()
-                                + " observed=" + toolResult.getObservedState(),
-                        request.getDebugTraceHostUserMessageId(), 1,
-                        300 + totalToolCalls);
+                                + " observed=" + toolResult.getObservedState());
                 // POST_TOOL 增量事件——toolExecutor 返回后,observation 加入前。
                 // result message 走 AuditRedactor 文本脱敏(避免"导航到 XX 失败"等业务字段泄漏)。
                 auditEventRecorder.recordPostTool(request.getRequestId(),
@@ -657,8 +647,7 @@ public final class AgentEngine {
                 request.getRequestId(),
                 "stopReason=" + stopReason + " toolCalls=" + totalToolCalls
                         + " finalState=" + finalState
-                        + " durationMs=" + elapsedMillis(started),
-                request.getDebugTraceHostUserMessageId(), 1, 900);
+                        + " durationMs=" + elapsedMillis(started));
         Log.i(TAG, "[Engine] END req=" + request.getRequestId()
                 + " finalState=" + finalState
                 + " stopReason=" + stopReason
@@ -786,8 +775,7 @@ public final class AgentEngine {
                 com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_ROUND_END,
                 request.getRequestId(),
                 "stopReason=" + reason + " durationMs=" + elapsedMillis(started)
-                        + " terminal=" + state,
-                request.getDebugTraceHostUserMessageId(), 1, 900);
+                        + " terminal=" + state);
         trajectory.finish(reason, elapsedMillis(started), 0);
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(), state, reason, trajectory,
                 elapsedMillis(started));

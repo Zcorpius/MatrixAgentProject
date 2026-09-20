@@ -64,10 +64,9 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class,
                 com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity.class,
                 com.matrix.agent.data.conversation.ConversationQuoteEntity.class,
-                com.matrix.agent.data.conversation.ConversationLineageEntity.class,
-                com.matrix.agent.data.debugtrace.DebugTraceEventRecordEntity.class
+                com.matrix.agent.data.conversation.ConversationLineageEntity.class
         },
-        version = 10,
+        version = 9,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -87,7 +86,6 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract com.matrix.agent.data.conversation.ConversationMessageAnnotationDao conversationMessageAnnotationDao();
     public abstract com.matrix.agent.data.conversation.ConversationQuoteDao conversationQuoteDao();
     public abstract com.matrix.agent.data.conversation.ConversationLineageDao conversationLineageDao();
-    public abstract com.matrix.agent.data.debugtrace.DebugTraceEventRecordDao debugTraceEventRecordDao();
 
     /**
      * schema v1 → v2 迁移——audit_event 加 userId 列 + idx_audit_user_zone 索引。
@@ -339,34 +337,6 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
-     * v9 → v10（评估 v1.0 §4.3 契约 2/5）：调试轨迹持久化表。仅 UI 门控开启时写入；
-     * debugTraceUi=false 的 Host 启动即清全表（契约 7：量产不留调试细节）。
-     * FK CASCADE 随宿主用户消息删除。
-     */
-    public static final Migration MIGRATION_9_10 = new Migration(9, 10) {
-        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `debug_trace_event_record` ("
-                    + "`row_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "
-                    + "`trace_id` TEXT NOT NULL, "
-                    + "`host_user_message_id` TEXT NOT NULL, "
-                    + "`conversation_task_id` TEXT NOT NULL, "
-                    + "`generation` INTEGER NOT NULL, "
-                    + "`event_sequence` INTEGER NOT NULL, "
-                    + "`phase` TEXT NOT NULL, "
-                    + "`payload` TEXT NOT NULL, "
-                    + "`part_index` INTEGER NOT NULL, "
-                    + "`part_count` INTEGER NOT NULL, "
-                    + "`timestamp_ms` INTEGER NOT NULL, "
-                    + "FOREIGN KEY(`host_user_message_id`)"
-                    + " REFERENCES `conversation_message`(`message_id`)"
-                    + " ON UPDATE NO ACTION ON DELETE CASCADE )");
-            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_debug_trace_host_task_seq` "
-                    + "ON `debug_trace_event_record` (`host_user_message_id`,"
-                    + " `conversation_task_id`, `event_sequence`)");
-        }
-    };
-
-    /**
      * 加密数据库单例获取。
      *
      * <p>以下任一条件必须抛 IllegalStateException:
@@ -407,12 +377,12 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v2→v3 Migration(audit_event requestEpoch)。
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10);
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=10 entities=15 journalMode=WAL");
+                    + " version=9 entities=14 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

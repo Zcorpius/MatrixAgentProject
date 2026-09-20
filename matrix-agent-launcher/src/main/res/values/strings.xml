@@ -4,7 +4,6 @@
     <string name="nav_tasks">任务工作</string>
     <string name="nav_voice">语音功能</string>
     <string name="nav_models">模型接入</string>
-    <string name="nav_debug_trace">调试轨迹</string>
     <string name="nav_downloads">模型市场</string>
     <string name="launcher_menu">≡</string>
     <string name="launcher_workspace_caption">MATRIX AGENT / WORKSPACE</string>

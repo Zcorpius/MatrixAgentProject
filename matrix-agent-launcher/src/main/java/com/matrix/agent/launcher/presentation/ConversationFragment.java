@@ -18,7 +18,6 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.matrix.agent.api.conversation.ConversationMessage;
-import com.matrix.agent.api.debug.DebugTraceWireEvent;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
 
@@ -274,12 +273,6 @@ public final class ConversationFragment extends Fragment {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
-        // 内嵌调试面板（评估 v1.0 §4.3 契约 2）：仅 debug 构建显示
-        if (isUser && com.matrix.agent.launcher.BuildConfig.MATRIX_DEBUG_TRACE_UI
-                && message.conversationTaskId() != null) {
-            row.addView(buildDebugPanel(message, maxBubbleWidth));
-        }
-
         // steer 附属输入注记（评估 v1.0 §4.3）：“已并入”只由 OFFERED 声称
         if (isUser && message.inputKind() == ConversationMessage.INPUT_STEER) {
             TextView steerNote = new TextView(requireContext());
@@ -295,6 +288,15 @@ public final class ConversationFragment extends Fragment {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
+        // 能力事实轨迹（评估 v1.0 §4.3）：两段式“请求 X → 核验为 Y”，不一致以 Y 为准
+        if (isUser && message.executionTraces() != null
+                && !message.executionTraces().isEmpty()) {
+            for (com.matrix.agent.api.conversation.CapabilityTraceEntry trace
+                    : message.executionTraces()) {
+                row.addView(buildTraceRow(trace, maxBubbleWidth, density));
+            }
+        }
+
         // 长按菜单（阶段 3/4 入口）：收藏 / 引用回复 / 分支 / 朗读 / 复制
         row.setOnLongClickListener(view -> {
             showActions(message);
@@ -304,7 +306,46 @@ public final class ConversationFragment extends Fragment {
         return row;
     }
 
+    private View buildTraceRow(com.matrix.agent.api.conversation.CapabilityTraceEntry trace,
+            int maxBubbleWidth, float density) {
+        LinearLayout line = new LinearLayout(requireContext());
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        TextView text = new TextView(requireContext());
+        text.setTextSize(10);
+        text.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
+        StringBuilder sb = new StringBuilder("· ");
+        sb.append(trace.friendlyName == null ? trace.capabilityId : trace.friendlyName);
+        if (trace.requestedDisplay != null) {
+            sb.append("：请求 ").append(trace.requestedDisplay);
+        }
+        if (trace.verifiedDisplay != null) {
+            sb.append(" → 核验为 ").append(trace.verifiedDisplay);
+        }
+        sb.append("（").append(verifyText(trace.verificationState)).append("）");
+        text.setText(sb.toString());
+        text.setMaxWidth(maxBubbleWidth);
+        line.addView(text, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        return line;
+    }
 
+    private String verifyText(String verificationState) {
+        String state = verificationState == null ? "" : verificationState;
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_MISMATCH
+                .equals(state)) {
+            return getString(R.string.conversation_trace_mismatch);
+        }
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNKNOWN
+                .equals(state)) {
+            return getString(R.string.conversation_trace_unknown);
+        }
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNAVAILABLE
+                .equals(state)) {
+            return getString(R.string.conversation_trace_unavailable);
+        }
+        return getString(R.string.conversation_trace_verified);
+    }
 
     private String steerNoteText(int steerDeliveryState, int status) {
         if (status == ConversationMessage.STATUS_FAILED) {
@@ -320,89 +361,6 @@ public final class ConversationFragment extends Fragment {
                         : getString(R.string.conversation_steer_pending);
             default:
                 return getString(R.string.conversation_steer_failed);
-        }
-    }
-
-    /** 内嵌可折叠调试面板（Operit 风格）：历史 + 实时合并。 */
-    private View buildDebugPanel(ConversationViewModel.UiMessage message, int maxBubbleWidth) {
-        LinearLayout panel = new LinearLayout(requireContext());
-        panel.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(8);
-        panel.setPadding(pad, dp(4), pad, pad);
-        android.graphics.drawable.GradientDrawable bg =
-                new android.graphics.drawable.GradientDrawable();
-        bg.setCornerRadius(dp(6));
-        bg.setColor(0xFFF5F5F0);
-        bg.setStroke(1, 0xFFD5D8D2);
-        panel.setBackground(bg);
-
-        // 标题行（可折叠）
-        LinearLayout header = new LinearLayout(requireContext());
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(requireContext());
-        title.setTextSize(10);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(ContextCompat.getColor(requireContext(),
-                R.color.matrix_primary));
-        title.setText("调试过程 ▾");
-        title.setPadding(dp(4), 0, 0, 0);
-        header.addView(title);
-        header.setOnClickListener(v -> {
-            boolean expanded = panel.findViewWithTag("content").getVisibility() == View.VISIBLE;
-            panel.findViewWithTag("content").setVisibility(
-                    expanded ? View.GONE : View.VISIBLE);
-            title.setText(expanded ? "调试过程 ▸" : "调试过程 ▾");
-        });
-        panel.addView(header);
-
-        // 内容区（默认折叠）
-        LinearLayout content = new LinearLayout(requireContext());
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setTag("content");
-        content.setVisibility(View.GONE);
-        content.setPadding(dp(12), dp(4), 0, 0);
-        panel.addView(content);
-
-        // 加载历史（宿主消息 + 任务 id）
-        loadDebugHistory(message, content);
-
-        return panel;
-    }
-
-    /** 从 Host 按宿主消息读取已持久化调试轨迹。 */
-    private void loadDebugHistory(ConversationViewModel.UiMessage message,
-            LinearLayout content) {
-        viewModel.loadDebugHistory(message.messageId(), message.conversationTaskId(),
-                events -> {
-                    if (events == null || events.isEmpty()) return;
-                    for (DebugTraceWireEvent event : events) {
-                        content.addView(buildDebugEventRow(event));
-                    }
-                });
-    }
-
-    private View buildDebugEventRow(DebugTraceWireEvent event) {
-        TextView text = new TextView(requireContext());
-        text.setTextSize(9);
-        text.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
-        String phaseLabel = debugPhaseLabel(event.phase);
-        text.setText(phaseLabel + "  " + event.payload);
-        text.setPadding(0, dp(2), 0, dp(2));
-        return text;
-    }
-
-    private String debugPhaseLabel(String phase) {
-        if (phase == null) return "·";
-        switch (phase) {
-            case "MODEL_REASONING": return "🧠";
-            case "MODEL_PROPOSED": return "📋";
-            case "POLICY_DECIDED": return "⚖️";
-            case "REQUEST_DELIVERED": return "📤";
-            case "DEVICE_VERIFIED": return "✅";
-            case "ROUND_START": return "▶️";
-            case "ROUND_END": return "⏹️";
-            default: return "·";
         }
     }
 
@@ -537,10 +495,6 @@ java.util.List<String> options = new java.util.ArrayList<>();
             return getString(R.string.conversation_status_running);
         }
         return "";
-    }
-
-    private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density + .5f);
     }
 
     private LauncherActivity activity() {

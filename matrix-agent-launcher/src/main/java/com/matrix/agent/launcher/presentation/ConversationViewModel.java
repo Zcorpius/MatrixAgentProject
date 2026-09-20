@@ -28,22 +28,21 @@ public final class ConversationViewModel extends ViewModel {
     public record UiMessage(String messageId, long sequence, int role, int status, int channel,
             String text, int failureCode, int inputKind, String steerHostUserMessageId,
             int steerDeliveryState,
-            List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces,
-            String conversationTaskId) {
+            List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces) {
 
         /** 兼容构造（v5 元数据缺省）。 */
         public UiMessage(String messageId, long sequence, int role, int status, int channel,
                 String text, int failureCode) {
             this(messageId, sequence, role, status, channel, text, failureCode,
                     ConversationMessage.INPUT_PRIMARY, null,
-                    ConversationMessage.STEER_DELIVERY_PENDING, List.of(), null);
+                    ConversationMessage.STEER_DELIVERY_PENDING, List.of());
         }
 
         /** 状态迁移拷贝（保留全部元数据）。 */
         public UiMessage withStatus(int newStatus, int newFailureCode) {
             return new UiMessage(messageId, sequence, role, newStatus, channel, text,
                     newFailureCode, inputKind, steerHostUserMessageId, steerDeliveryState,
-                    executionTraces, conversationTaskId);
+                    executionTraces);
         }
     }
 
@@ -456,21 +455,6 @@ public final class ConversationViewModel extends ViewModel {
         });
     }
 
-    /** 内嵌调试面板：按宿主消息读取持久化轨迹。 */
-    public void loadDebugHistory(String hostUserMessageId, String conversationTaskId,
-            java.util.function.Consumer<java.util.List<
-                    com.matrix.agent.api.debug.DebugTraceWireEvent>> receiver) {
-        if (!com.matrix.agent.launcher.BuildConfig.MATRIX_DEBUG_TRACE_UI
-                || hostUserMessageId == null || conversationTaskId == null) {
-            receiver.accept(java.util.List.of());
-            return;
-        }
-        repository.loadDebugHistory(hostUserMessageId, conversationTaskId, result -> {
-            receiver.accept(result.isSuccess() && result.value != null
-                    ? result.value : java.util.List.of());
-        });
-    }
-
     public void closeSubscription() {
         AutoCloseable handle = subscription;
         subscription = null;
@@ -553,8 +537,7 @@ public final class ConversationViewModel extends ViewModel {
                 message.status, message.channel, message.text, message.failureCode,
                 message.inputKind, message.steerHostUserMessageId,
                 message.steerDeliveryState,
-                message.executionTraces == null ? List.of() : message.executionTraces,
-                message.conversationTaskId);
+                message.executionTraces == null ? List.of() : message.executionTraces);
         UiMessage existing = bySequence.get(message.sequenceNo);
         if (existing == null || existing.status() != message.status
                 || !existing.text().equals(message.text)) {

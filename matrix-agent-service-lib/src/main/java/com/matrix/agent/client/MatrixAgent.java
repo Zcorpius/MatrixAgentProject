@@ -200,11 +200,6 @@ public final class MatrixAgent {
         return (DownloadManager) getMatrixManager(MatrixServiceConstants.DOWNLOAD_SERVICE);
     }
 
-    public com.matrix.agent.client.DebugTraceManager getDebugTraceManager() {
-        return (com.matrix.agent.client.DebugTraceManager) getMatrixManager(
-                MatrixServiceConstants.DEBUG_TRACE_SERVICE);
-    }
-
     public ConversationManager getConversationManager() {
         return (ConversationManager) getMatrixManager(MatrixServiceConstants.CONVERSATION_SERVICE);
     }
@@ -557,8 +552,6 @@ public final class MatrixAgent {
                 return new DownloadManager(this, serviceBinder);
             case MatrixServiceConstants.CONVERSATION_SERVICE:
                 return new ConversationManager(this, serviceBinder);
-            case MatrixServiceConstants.DEBUG_TRACE_SERVICE:
-                return new com.matrix.agent.client.DebugTraceManager(this, serviceBinder);
             default:
                 Log.w(TAG, "unknown matrix service: " + serviceName);
                 return null;

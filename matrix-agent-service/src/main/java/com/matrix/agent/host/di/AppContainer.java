@@ -200,49 +200,9 @@ public final class AppContainer implements DownloadRuntime {
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
         // 调试轨迹发射器（评估 v1.0 §4.3）：无条件日志 + UI 门控 ring buffer。
         // BuildConfig 门控——false 时日志汇照常输出，UI 汇关闭。
-        // 持久化端口：UI 开启时写 SQLCipher；关闭时构造后即清全表（契约 7）
-        com.matrix.agent.debugtrace.DebugTraceEmitter.PersistencePort tracePersistence =
-                database == null ? null
-                        : new com.matrix.agent.debugtrace.DebugTraceEmitter.PersistencePort() {
-                            private final com.matrix.agent.data.debugtrace.DebugTraceEventRecordDao dao =
-                                    database.debugTraceEventRecordDao();
-                            @Override public void persist(String traceId,
-                                    String hostUserMessageId, String conversationTaskId,
-                                    long generation, long eventSequence, String phase,
-                                    String payload, int partIndex, int partCount,
-                                    long timestampMs) {
-                                com.matrix.agent.data.debugtrace.DebugTraceEventRecordEntity e =
-                                        new com.matrix.agent.data.debugtrace.DebugTraceEventRecordEntity();
-                                e.traceId = traceId;
-                                e.hostUserMessageId = hostUserMessageId;
-                                e.conversationTaskId = conversationTaskId;
-                                e.generation = generation;
-                                e.eventSequence = eventSequence;
-                                e.phase = phase;
-                                e.payload = payload;
-                                e.partIndex = partIndex;
-                                e.partCount = partCount;
-                                e.timestampMs = timestampMs;
-                                dao.insert(e);
-                            }
-                            @Override public int countForTask(String conversationTaskId) {
-                                return dao.countForTask(conversationTaskId);
-                            }
-                        };
-        if (!com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI && database != null) {
-            // 契约 7：量产/关闭模式 Host 启动清除既有调试记录
-            try {
-                database.debugTraceEventRecordDao().clearAll();
-                Log.i(TAG, "[DebugTrace] UI 关闭，已清除既有调试轨迹记录");
-            } catch (RuntimeException clearFailure) {
-                Log.w(TAG, "[DebugTrace] 清除调试轨迹失败: "
-                        + clearFailure.getClass().getSimpleName());
-            }
-        }
         com.matrix.agent.debugtrace.DebugTraceHolder.set(
                 new com.matrix.agent.debugtrace.DebugTraceEmitter(
-                        com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI,
-                        tracePersistence));
+                        com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI));
 
         // 功能型轻量调用端口（摘要/标题共用）：与任务主路径同一 ModelApiClient + 配置源
         titleModelClient = taskDependencies.modelClient;

@@ -36,24 +36,6 @@ public final class MatrixServiceGraph {
                 container.getExecutorRegistry().conversationExecutor(),
                 container.getExecutorRegistry().dbExecutor(), persistence, callers,
                 container.getTitleModelClient(), container.getTitleConfigSupplier());
-
-        // 调试轨迹 Stub：UI 开启时从 Room 读历史（契约 3 分页读）
-        debugTraceStub = new com.matrix.agent.host.rpc.DebugTraceServiceStub(
-                com.matrix.agent.debugtrace.DebugTraceHolder.get(),
-                com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI,
-                container.getMatrixDatabase() == null ? null
-                        : (hostMessageId, taskId, limit) -> {
-                            java.util.List<com.matrix.agent.api.debug.DebugTraceWireEvent> events =
-                                    new java.util.ArrayList<>();
-                            for (com.matrix.agent.data.debugtrace.DebugTraceEventRecordEntity e
-                                    : container.getMatrixDatabase().debugTraceEventRecordDao()
-                                            .loadForHostMessage(hostMessageId, taskId, limit)) {
-                                events.add(new com.matrix.agent.api.debug.DebugTraceWireEvent(
-                                        e.timestampMs, e.phase, e.conversationTaskId,
-                                        e.traceId, e.partIndex, e.partCount, e.payload));
-                            }
-                            return events;
-                        });
         if (conversation.isAvailable()) {
             voice.setBindingStore(conversation.bindingStore());
             voice.addControllerConfigurer(conversation.controllerConfigurer());
@@ -70,7 +52,10 @@ public final class MatrixServiceGraph {
     public IBinder conversationBinder() { return conversation.binder(); }
     public IBinder debugTraceBinder() { return debugTraceStub; }
 
-    private final com.matrix.agent.host.rpc.DebugTraceServiceStub debugTraceStub;
+    private final com.matrix.agent.host.rpc.DebugTraceServiceStub debugTraceStub =
+            new com.matrix.agent.host.rpc.DebugTraceServiceStub(
+                    com.matrix.agent.debugtrace.DebugTraceHolder.get(),
+                    com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI);
     public int featureFlags() {
         int flags = MatrixServiceConstants.FEATURE_DURABLE_TASKS
                 | MatrixServiceConstants.FEATURE_MODEL_DOMAIN

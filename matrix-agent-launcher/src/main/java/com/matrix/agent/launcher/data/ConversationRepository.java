@@ -184,18 +184,6 @@ public final class ConversationRepository {
         }, receiver);
     }
 
-    public void loadDebugHistory(@NonNull String hostUserMessageId,
-            @NonNull String conversationTaskId,
-            @NonNull Consumer<Result<java.util.List<
-                    com.matrix.agent.api.debug.DebugTraceWireEvent>>> receiver) {
-        gateway.execute(agent -> {
-            com.matrix.agent.client.DebugTraceManager manager =
-                    agent.getDebugTraceManager();
-            return manager == null ? null
-                    : manager.loadHistory(hostUserMessageId, conversationTaskId, 200);
-        }, receiver);
-    }
-
     public void cancelMessage(@NonNull String conversationId, @NonNull String messageId,
             @NonNull String clientOperationId,
             @NonNull Consumer<Result<com.matrix.agent.api.conversation.ConversationOperationResult>> receiver) {
