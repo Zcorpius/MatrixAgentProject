@@ -79,4 +79,24 @@ public final class SteerMailboxPeekTest {
         SteerMailbox mailbox = new SteerMailbox();
         assertFalse(mailbox.peekDeferred(null));
     }
+
+    /** steerId 去重（评估 v1.0 §4.3 第三层幂等）：同 id 重复 offer 只消费一次；空 id 不去重。 */
+    @Test
+    public void duplicateSteerIdIsOfferedOnlyOnce() {
+        SteerMailbox mailbox = new SteerMailbox();
+        mailbox.offer("s1", Steer.reprompt("第一次", "steer-msg-1"));
+        mailbox.offer("s1", Steer.reprompt("安全重试（同 id）", "steer-msg-1"));
+        mailbox.offer("s1", Steer.reprompt("第二条", "steer-msg-2"));
+        // 空 steerId（旧路径）不去重
+        mailbox.offer("s1", Steer.reprompt("无 id A"));
+        mailbox.offer("s1", Steer.reprompt("无 id B"));
+
+        java.util.List<com.matrix.agent.task.steer.Steer> drained = mailbox.drain("s1");
+        org.junit.Assert.assertEquals("去重后恰好 4 条（1+1+无id×2）", 4, drained.size());
+        org.junit.Assert.assertEquals("第一次", drained.get(0).getPayload());
+        org.junit.Assert.assertEquals("第二条", drained.get(1).getPayload());
+        // 会话隔离：另一 session 的同 id 不受影响
+        mailbox.offer("s2", Steer.reprompt("另一会话", "steer-msg-1"));
+        org.junit.Assert.assertEquals(1, mailbox.drain("s2").size());
+    }
 }

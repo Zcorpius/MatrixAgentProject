@@ -55,6 +55,10 @@ public final class SteerMailbox {
 
     private final ConcurrentMap<String, Queue<StampedSteer>> queues = new ConcurrentHashMap<>();
 
+    /** 会话级已见 steerId（评估 v1.0 §4.3 第三层幂等：重复 offer 去重）。 */
+    private final ConcurrentMap<String, java.util.Set<String>> seenSteerIds =
+            new ConcurrentHashMap<>();
+
     /**
      * SteerMailbox 的 currentEpoch——由 Repository.clearUserData 推进。
      *
@@ -119,6 +123,19 @@ public final class SteerMailbox {
             Queue<StampedSteer> fresh = new ConcurrentLinkedQueue<>();
             Queue<StampedSteer> existing = queues.putIfAbsent(sessionId, fresh);
             queue = existing == null ? fresh : existing;
+        }
+        // steerId 去重（评估 v1.0 §4.3）：非空 steerId 的重复 offer 直接丢弃——
+        // “已投递但尚未来得及标记”的安全重试最多被引擎消费一次。
+        String steerId = steer.getSteerId();
+        if (steerId != null && !steerId.isEmpty()) {
+            java.util.Set<String> seen = seenSteerIds.computeIfAbsent(sessionId,
+                    key -> java.util.Collections.newSetFromMap(
+                            new ConcurrentHashMap<>()));
+            if (!seen.add(steerId)) {
+                Log.i(TAG, "[Steer] 重复 steerId 丢弃 session=" + sessionId
+                        + " steerId=" + steerId);
+                return;
+            }
         }
         queue.offer(new StampedSteer(steer, epoch));
         Log.i(TAG, "[Steer] offered session=" + sessionId + " type=" + steer.getType()
