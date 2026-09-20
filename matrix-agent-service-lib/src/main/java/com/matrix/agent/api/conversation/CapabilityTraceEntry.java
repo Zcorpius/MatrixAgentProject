@@ -9,6 +9,16 @@ import android.os.Parcelable;
  */
 public final class CapabilityTraceEntry implements Parcelable {
 
+    /** Frozen verification states（与 Host 投影一致）。 */
+    public static final String OUTCOME_SUCCESS = "SUCCESS";
+    public static final String OUTCOME_FAILED = "FAILED";
+    public static final String OUTCOME_REJECTED = "REJECTED";
+    public static final String OUTCOME_UNKNOWN = "UNKNOWN";
+    public static final String VERIFY_VERIFIED = "VERIFIED";
+    public static final String VERIFY_MISMATCH = "MISMATCH";
+    public static final String VERIFY_UNAVAILABLE = "UNAVAILABLE";
+    public static final String VERIFY_UNKNOWN = "UNKNOWN";
+
     public final String capabilityId;
     public final String friendlyName;
     /** SUCCESS / FAILED / REJECTED / UNKNOWN。 */

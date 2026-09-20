@@ -141,6 +141,29 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
+    public boolean wouldSummarizeOnNextRound(String conversationId) {
+        IConversationService s = service;
+        if (s == null) return false;
+        try {
+            return Boolean.TRUE.equals(s.wouldSummarizeOnNextRound(conversationId));
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return false;
+        }
+    }
+
+    /** 只读导出：返回受授予 content URI；失败/降级 null。 */
+    public String exportConversation(String conversationId, String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.exportConversation(conversationId, clientOperationId);
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return null;
+        }
+    }
+
     public ConversationPage getMessages(String conversationId, long beforeSequenceExclusive,
             int limit) {
         IConversationService s = service;

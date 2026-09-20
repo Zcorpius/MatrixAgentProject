@@ -24,9 +24,27 @@ import java.util.UUID;
  */
 public final class ConversationViewModel extends ViewModel {
 
-    /** 可渲染消息（Host 投影的不可变快照）。 */
+    /** 可渲染消息（Host 投影的不可变快照；v5 元数据随行）。 */
     public record UiMessage(String messageId, long sequence, int role, int status, int channel,
-            String text, int failureCode) { }
+            String text, int failureCode, int inputKind, String steerHostUserMessageId,
+            int steerDeliveryState,
+            List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces) {
+
+        /** 兼容构造（v5 元数据缺省）。 */
+        public UiMessage(String messageId, long sequence, int role, int status, int channel,
+                String text, int failureCode) {
+            this(messageId, sequence, role, status, channel, text, failureCode,
+                    ConversationMessage.INPUT_PRIMARY, null,
+                    ConversationMessage.STEER_DELIVERY_PENDING, List.of());
+        }
+
+        /** 状态迁移拷贝（保留全部元数据）。 */
+        public UiMessage withStatus(int newStatus, int newFailureCode) {
+            return new UiMessage(messageId, sequence, role, newStatus, channel, text,
+                    newFailureCode, inputKind, steerHostUserMessageId, steerDeliveryState,
+                    executionTraces);
+        }
+    }
 
     public static final class State {
         public final String conversationId;
@@ -38,10 +56,15 @@ public final class ConversationViewModel extends ViewModel {
         public final boolean hasRunningTask;
         public final boolean recording;
         public final String liveTranscript;
+        /** 摘要续聊标记（读时重算；评估 v1.0 §4.6）。 */
+        public final boolean summaryActive;
+        /** 当前会话标题（自动/用户来源由 Host 维护）。 */
+        public final String conversationTitle;
 
         State(String conversationId, List<UiMessage> messages, boolean sending,
                 boolean loadingHistory, boolean hasMoreHistory, String transientError,
-                boolean hasRunningTask, boolean recording, String liveTranscript) {
+                boolean hasRunningTask, boolean recording, String liveTranscript,
+                boolean summaryActive, String conversationTitle) {
             this.conversationId = conversationId;
             this.messages = messages;
             this.sending = sending;
@@ -51,6 +74,8 @@ public final class ConversationViewModel extends ViewModel {
             this.hasRunningTask = hasRunningTask;
             this.recording = recording;
             this.liveTranscript = liveTranscript;
+            this.summaryActive = summaryActive;
+            this.conversationTitle = conversationTitle;
         }
     }
 
@@ -58,7 +83,8 @@ public final class ConversationViewModel extends ViewModel {
 
     private final ConversationRepository repository;
     private final MutableLiveData<State> state = new MutableLiveData<>(
-            new State(null, List.of(), false, false, false, null, false, false, null));
+            new State(null, List.of(), false, false, false, null, false, false, null,
+                    false, null));
     /** 渲染缓冲：sequence 升序（TreeMap），事件按 messageId 等值合并。 */
     private final TreeMap<Long, UiMessage> bySequence = new TreeMap<>();
 
@@ -75,6 +101,8 @@ public final class ConversationViewModel extends ViewModel {
     private boolean hasRunningTask;
     /** Host 已连上但 ConversationGraph 仍在恢复对账时的短暂 gate；只做有界重试。 */
     private int bootstrapRetryCount;
+    private boolean summaryActive;
+    private String conversationTitle;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public ConversationViewModel(ConversationRepository repository) {
@@ -303,6 +331,130 @@ public final class ConversationViewModel extends ViewModel {
         });
     }
 
+    /** 用户重命名（titleOrigin→USER，AUTO 永不覆盖）。 */
+    public void rename(String title) {
+        if (conversationId == null || title == null || title.isBlank()) return;
+        repository.renameConversation(conversationId, title.strip(), result -> {
+            if (result.isSuccess() && result.value != null
+                    && result.value.code == MatrixErrorCode.SUCCESS) {
+                conversationTitle = title.strip();
+                publish(null);
+            } else {
+                publish("重命名未生效");
+            }
+        });
+    }
+
+    /** 收藏/取消收藏。 */
+    public void toggleFavorite(String messageId, boolean favorite) {
+        if (conversationId == null) return;
+        repository.annotateMessage(conversationId, messageId, favorite, null, result -> {
+            if (!result.isSuccess() || result.value == null
+                    || result.value.code != MatrixErrorCode.SUCCESS) {
+                publish("收藏操作未生效");
+            } else {
+                publish(null);
+            }
+        });
+    }
+
+    /** 引用回复发送（quotedMessageId 走 Host 校验 + 快照）。 */
+    public void sendQuoting(String quotedMessageId, String rawText) {
+        String text = rawText == null ? "" : rawText.strip();
+        if (text.isEmpty() || conversationId == null || sending) return;
+        sending = true;
+        publish(null);
+        repository.sendQuotedText(conversationId, text, quotedMessageId, result -> {
+            sending = false;
+            if (!result.isSuccess() || result.value == null
+                    || result.value.code != MatrixErrorCode.SUCCESS) {
+                publish("引用回复发送被拒绝");
+            } else {
+                publish(null);
+            }
+        });
+    }
+
+    /** 快照式分支：在已完成消息处"从这里继续"。 */
+    public void forkFromHere(long atSequenceNo,
+            java.util.function.Consumer<String> onChildReady) {
+        if (conversationId == null) return;
+        repository.forkConversation(conversationId, atSequenceNo, result -> {
+            if (result.isSuccess() && result.value != null) {
+                // 切换到子会话
+                switchConversation(result.value);
+                if (onChildReady != null) onChildReady.accept(result.value);
+            } else {
+                publish("分支创建失败（切点需为已完成消息）");
+            }
+        });
+    }
+
+    /** 切换会话（列表点击/分支后）。 */
+    public void switchConversation(String targetConversationId) {
+        if (targetConversationId == null) return;
+        conversationId = targetConversationId;
+        bySequence.clear();
+        hasMoreHistory = false;
+        conversationTitle = null;
+        summaryActive = false;
+        subscribeCurrent();
+        loadHistory();
+        refreshTitleAndMarker();
+        publish(null);
+    }
+
+    /** 导出当前会话（返回 content URI 给 UI 发分享 intent）。 */
+    public void exportCurrent(java.util.function.Consumer<String> onUri) {
+        if (conversationId == null || onUri == null) return;
+        repository.exportConversation(conversationId, result -> {
+            if (result.isSuccess() && result.value != null) {
+                onUri.accept(result.value);
+            } else {
+                publish("导出未完成（Host 未就绪或会话为空）");
+            }
+        });
+    }
+
+    /** 朗读一条助手最终回复。 */
+    public void readAloud(String assistantMessageId) {
+        if (conversationId == null) return;
+        repository.speakAssistantMessage(conversationId, assistantMessageId, result -> {
+            if (!result.isSuccess() || result.value == null) {
+                publish("朗读不可用（Host 未就绪）");
+            } else if (result.value.code == MatrixErrorCode.INVALID_STATE) {
+                publish("语音会话进行中，暂不能朗读");
+            } else if (result.value.code != MatrixErrorCode.SUCCESS) {
+                publish("该消息暂不能朗读（需已完成的助手回复）");
+            } else {
+                publish(null);
+            }
+        });
+    }
+
+    /** 标题 + 摘要标记刷新（切换/进入/终态后）。 */
+    public void refreshTitleAndMarker() {
+        if (conversationId == null) return;
+        repository.listConversations(result -> {
+            if (result.isSuccess() && result.value != null) {
+                for (ConversationInfo info : result.value) {
+                    if (info.conversationId.equals(conversationId)) {
+                        conversationTitle = info.title == null || info.title.isBlank()
+                                ? "未命名对话" : info.title;
+                        break;
+                    }
+                }
+                publish(null);
+            }
+        });
+        repository.wouldSummarizeOnNextRound(conversationId, result -> {
+            if (result.isSuccess() && result.value != null) {
+                summaryActive = result.value;
+                publish(null);
+            }
+        });
+    }
+
     public void closeSubscription() {
         AutoCloseable handle = subscription;
         subscription = null;
@@ -342,9 +494,8 @@ public final class ConversationViewModel extends ViewModel {
                 if (!target.equals(conversationId)) return;
                 for (UiMessage existing : bySequence.values()) {
                     if (existing.messageId().equals(messageId)) {
-                        bySequence.put(existing.sequence(), new UiMessage(existing.messageId(),
-                                existing.sequence(), existing.role(), status, existing.channel(),
-                                existing.text(), errorCode));
+                        bySequence.put(existing.sequence(),
+                                existing.withStatus(status, errorCode));
                         publish(null);
                         return;
                     }
@@ -375,14 +526,18 @@ public final class ConversationViewModel extends ViewModel {
                 merge(message);
             }
             hasMoreHistory = result.value.hasMore;
+            refreshTitleAndMarker();
             publish(null);
         });
     }
 
     private void merge(ConversationMessage message) {
-        // SDK DTO 是显式字段（非 record 访问器）
+        // SDK DTO 是显式字段（非 record 访问器）；v5 元数据（steer 注记 + 轨迹）随行
         UiMessage mapped = new UiMessage(message.messageId, message.sequenceNo, message.role,
-                message.status, message.channel, message.text, message.failureCode);
+                message.status, message.channel, message.text, message.failureCode,
+                message.inputKind, message.steerHostUserMessageId,
+                message.steerDeliveryState,
+                message.executionTraces == null ? List.of() : message.executionTraces);
         UiMessage existing = bySequence.get(message.sequenceNo);
         if (existing == null || existing.status() != message.status
                 || !existing.text().equals(message.text)) {
@@ -415,6 +570,6 @@ public final class ConversationViewModel extends ViewModel {
         }
         state.postValue(new State(conversationId, List.copyOf(all), sending, loadingHistory,
                 hasMoreHistory, error, hasRunningTask, recording || recordingStarting,
-                liveTranscript));
+                liveTranscript, summaryActive, conversationTitle));
     }
 }

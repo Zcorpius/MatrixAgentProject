@@ -1,8 +1,10 @@
 package com.matrix.agent.launcher.data;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.matrix.agent.api.conversation.ConversationInfo;
+import com.matrix.agent.api.conversation.ConversationOperationResult;
 import com.matrix.agent.api.conversation.ConversationListQuery;
 import com.matrix.agent.client.ConversationManager;
 import com.matrix.agent.api.conversation.ConversationMessage;
@@ -87,6 +89,98 @@ public final class ConversationRepository {
             ConversationManager manager = agent.getConversationManager();
             return manager == null ? null : manager.appendMessage(conversationId, text,
                     clientOperationId);
+        }, receiver);
+    }
+
+    public void renameConversation(@NonNull String conversationId, @NonNull String title,
+            @NonNull Consumer<Result<ConversationOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.renameConversation(conversationId, title,
+                            java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    public void annotateMessage(@NonNull String conversationId, @NonNull String messageId,
+            boolean favorite, String userNote,
+            @NonNull Consumer<Result<ConversationOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.annotateMessage(conversationId, messageId, favorite,
+                            userNote, java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    public void forkConversation(@NonNull String parentConversationId, long atSequenceNo,
+            @NonNull Consumer<Result<String>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.forkConversation(parentConversationId, atSequenceNo,
+                            java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    public void getLineageSummary(@NonNull String conversationId,
+            @NonNull Consumer<Result<String>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.getLineageSummary(conversationId);
+        }, receiver);
+    }
+
+    public void exportConversation(@NonNull String conversationId,
+            @NonNull Consumer<Result<String>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.exportConversation(conversationId,
+                            java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    public void speakAssistantMessage(@NonNull String conversationId,
+            @NonNull String assistantMessageId,
+            @NonNull Consumer<Result<ConversationOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.speakAssistantMessage(conversationId, assistantMessageId,
+                            java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    public void wouldSummarizeOnNextRound(@NonNull String conversationId,
+            @NonNull Consumer<Result<Boolean>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null
+                    : manager.wouldSummarizeOnNextRound(conversationId);
+        }, receiver);
+    }
+
+    public void sendQuotedText(@NonNull String conversationId, @NonNull String text,
+            @Nullable String quotedMessageId,
+            @NonNull Consumer<Result<ConversationSubmission>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ConversationManager manager =
+                    agent.getConversationManager();
+            return manager == null ? null : manager.sendText(
+                    new com.matrix.agent.api.conversation.SendTextRequest(
+                            conversationId, text,
+                            java.util.Locale.getDefault().toLanguageTag(),
+                            quotedMessageId),
+                    java.util.UUID.randomUUID().toString());
         }, receiver);
     }
 

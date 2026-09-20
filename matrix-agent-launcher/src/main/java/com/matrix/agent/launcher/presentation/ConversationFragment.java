@@ -37,6 +37,9 @@ public final class ConversationFragment extends Fragment {
     private View sendButton;
     private View cancelButton;
     private android.widget.Button voiceButton;
+    private TextView dynamicTitle;
+    private TextView summaryBadge;
+    private View exportButton;
     private ConversationViewModel viewModel;
     private int renderedCount;
 
@@ -52,6 +55,14 @@ public final class ConversationFragment extends Fragment {
         sendButton = root.findViewById(R.id.conversation_send);
         cancelButton = root.findViewById(R.id.conversation_cancel);
         voiceButton = root.findViewById(R.id.conversation_voice);
+        dynamicTitle = root.findViewById(R.id.conversation_dynamic_title);
+        summaryBadge = root.findViewById(R.id.conversation_summary_badge);
+        exportButton = root.findViewById(R.id.conversation_export);
+        exportButton.setOnClickListener(ignored -> exportCurrentConversation());
+        dynamicTitle.setOnLongClickListener(ignored -> {
+            promptRename();
+            return true;
+        });
 
         sendButton.setOnClickListener(ignored -> submitInput());
         input.setOnEditorActionListener((view, actionId, event) -> {
@@ -122,6 +133,12 @@ public final class ConversationFragment extends Fragment {
         voiceButton.setEnabled(value.conversationId != null);
         voiceButton.setText(value.recording
                 ? R.string.conversation_voice_recording : R.string.conversation_voice_hold);
+        if (value.conversationTitle != null) {
+            dynamicTitle.setText(value.conversationTitle);
+        }
+        summaryBadge.setVisibility(value.summaryActive ? View.VISIBLE : View.GONE);
+        exportButton.setEnabled(value.conversationId != null
+                && !value.messages.isEmpty());
     }
 
     private void renderNotice(ConversationViewModel.State value) {
@@ -256,7 +273,189 @@ public final class ConversationFragment extends Fragment {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
+        // steer 附属输入注记（评估 v1.0 §4.3）：“已并入”只由 OFFERED 声称
+        if (isUser && message.inputKind() == ConversationMessage.INPUT_STEER) {
+            TextView steerNote = new TextView(requireContext());
+            steerNote.setTextSize(10);
+            steerNote.setTypeface(Typeface.DEFAULT_BOLD);
+            steerNote.setTextColor(ContextCompat.getColor(requireContext(),
+                    R.color.matrix_primary));
+            steerNote.setText(steerNoteText(message.steerDeliveryState(),
+                            message.status()));
+            steerNote.setMaxWidth(maxBubbleWidth);
+            row.addView(steerNote, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        // 能力事实轨迹（评估 v1.0 §4.3）：两段式“请求 X → 核验为 Y”，不一致以 Y 为准
+        if (isUser && message.executionTraces() != null
+                && !message.executionTraces().isEmpty()) {
+            for (com.matrix.agent.api.conversation.CapabilityTraceEntry trace
+                    : message.executionTraces()) {
+                row.addView(buildTraceRow(trace, maxBubbleWidth, density));
+            }
+        }
+
+        // 长按菜单（阶段 3/4 入口）：收藏 / 引用回复 / 分支 / 朗读 / 复制
+        row.setOnLongClickListener(view -> {
+            showActions(message);
+            return true;
+        });
+
         return row;
+    }
+
+    private View buildTraceRow(com.matrix.agent.api.conversation.CapabilityTraceEntry trace,
+            int maxBubbleWidth, float density) {
+        LinearLayout line = new LinearLayout(requireContext());
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        TextView text = new TextView(requireContext());
+        text.setTextSize(10);
+        text.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
+        StringBuilder sb = new StringBuilder("· ");
+        sb.append(trace.friendlyName == null ? trace.capabilityId : trace.friendlyName);
+        if (trace.requestedDisplay != null) {
+            sb.append("：请求 ").append(trace.requestedDisplay);
+        }
+        if (trace.verifiedDisplay != null) {
+            sb.append(" → 核验为 ").append(trace.verifiedDisplay);
+        }
+        sb.append("（").append(verifyText(trace.verificationState)).append("）");
+        text.setText(sb.toString());
+        text.setMaxWidth(maxBubbleWidth);
+        line.addView(text, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        return line;
+    }
+
+    private String verifyText(String verificationState) {
+        String state = verificationState == null ? "" : verificationState;
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_MISMATCH
+                .equals(state)) {
+            return getString(R.string.conversation_trace_mismatch);
+        }
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNKNOWN
+                .equals(state)) {
+            return getString(R.string.conversation_trace_unknown);
+        }
+        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNAVAILABLE
+                .equals(state)) {
+            return getString(R.string.conversation_trace_unavailable);
+        }
+        return getString(R.string.conversation_trace_verified);
+    }
+
+    private String steerNoteText(int steerDeliveryState, int status) {
+        if (status == ConversationMessage.STATUS_FAILED) {
+            return getString(R.string.conversation_steer_failed);
+        }
+        switch (steerDeliveryState) {
+            case ConversationMessage.STEER_DELIVERY_OFFERED:
+                return getString(R.string.conversation_steer_offered);
+            case ConversationMessage.STEER_DELIVERY_PENDING:
+                // 恢复后仍 PENDING：诚实显示“未确认”，宿主终态不谎称并入
+                return isTerminalStatus(status)
+                        ? getString(R.string.conversation_steer_recovered)
+                        : getString(R.string.conversation_steer_pending);
+            default:
+                return getString(R.string.conversation_steer_failed);
+        }
+    }
+
+    private void showActions(ConversationViewModel.UiMessage message) {
+        boolean isUser = message.role() == ConversationMessage.ROLE_USER;
+        boolean assistantCompleted = message.role() == ConversationMessage.ROLE_ASSISTANT
+                && message.status() == ConversationMessage.STATUS_COMPLETED;
+        boolean userCompleted = isUser && isTerminalStatus(message.status());
+java.util.List<String> options = new java.util.ArrayList<>();
+        options.add(getString(R.string.conversation_menu_quote));
+        options.add(getString(R.string.conversation_menu_copy));
+        if (userCompleted) options.add(getString(R.string.conversation_menu_fork));
+        if (assistantCompleted) {
+            options.add(getString(R.string.conversation_menu_read_aloud));
+        }
+        String[] items = options.toArray(new String[0]);
+        if (items.length == 0) return;
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.conversation_menu_actions)
+                .setItems(items, (dialog, which) -> {
+                    String chosen = items[which];
+                    if (getString(R.string.conversation_menu_quote).equals(chosen)) {
+                        quoteReply(message);
+                    } else if (getString(R.string.conversation_menu_copy).equals(chosen)) {
+                        copyText(message.text());
+                    } else if (getString(R.string.conversation_menu_fork).equals(chosen)) {
+                        viewModel.forkFromHere(message.sequence(), childId ->
+                                android.widget.Toast.makeText(requireContext(),
+                                        R.string.conversation_fork_created,
+                                        android.widget.Toast.LENGTH_SHORT).show());
+                    } else if (getString(R.string.conversation_menu_read_aloud)
+                            .equals(chosen)) {
+                        viewModel.readAloud(message.messageId());
+                    }
+                })
+                .show();
+    }
+
+    private void quoteReply(ConversationViewModel.UiMessage message) {
+        input.setText("");
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.conversation_quote_prompt)
+                .setView(input)
+                .setPositiveButton(R.string.conversation_send, (dialog, which) -> {
+                    String text = input.getText().toString();
+                    input.setText("");
+                    if (!text.isBlank()) {
+                        viewModel.sendQuoting(message.messageId(), text);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, (dialog, which) ->
+                        input.setText(""))
+                .show();
+    }
+
+    private void copyText(String text) {
+        android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) requireContext()
+                        .getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                    "conversation", text));
+        }
+    }
+
+    private void promptRename() {
+        android.widget.EditText edit = new android.widget.EditText(requireContext());
+        ConversationViewModel.State current = viewModel.state().getValue();
+        if (current != null && current.conversationTitle != null) {
+            edit.setText(current.conversationTitle);
+        }
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.conversation_menu_rename)
+                .setView(edit)
+                .setPositiveButton(R.string.conversation_send, (dialog, which) -> {
+                    String title = edit.getText().toString();
+                    if (!title.isBlank()) {
+                        viewModel.rename(title);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void exportCurrentConversation() {
+        viewModel.exportCurrent(uri -> {
+            android.content.Intent share = new android.content.Intent(
+                    android.content.Intent.ACTION_SEND);
+            share.setType("text/markdown");
+            share.putExtra(android.content.Intent.EXTRA_STREAM,
+                    android.net.Uri.parse(uri));
+            share.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(android.content.Intent.createChooser(share,
+                    getString(R.string.conversation_export)));
+        });
     }
 
     private static String signatureOf(ConversationViewModel.UiMessage message) {
