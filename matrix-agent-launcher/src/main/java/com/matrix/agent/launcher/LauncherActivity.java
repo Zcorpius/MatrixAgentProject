@@ -21,6 +21,7 @@ import com.matrix.agent.api.common.ConnectionState;
 import com.matrix.agent.api.common.MatrixServiceConstants;
 import com.matrix.agent.launcher.presentation.AgentTaskFragment;
 import com.matrix.agent.launcher.presentation.ConversationFragment;
+import com.matrix.agent.launcher.presentation.DebugTraceFragment;
 import com.matrix.agent.launcher.presentation.DownloadFragment;
 import com.matrix.agent.launcher.presentation.LauncherViewModel;
 import com.matrix.agent.launcher.presentation.LauncherViewModelFactory;
@@ -37,6 +38,7 @@ public final class LauncherActivity extends AppCompatActivity {
     private Button voice;
     private Button models;
     private Button downloads;
+    private Button debugTrace;
     private View conversationIndicator;
     private View tasksIndicator;
     private View voiceIndicator;
@@ -71,6 +73,13 @@ public final class LauncherActivity extends AppCompatActivity {
         voice.setOnClickListener(v -> show(new VoiceFragment(), voice, R.string.nav_voice));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
         downloads.setOnClickListener(v -> show(new DownloadFragment(), downloads, R.string.nav_downloads));
+        // 调试轨迹入口（评估 v1.0 §4.3）：仅 MATRIX_DEBUG_TRACE_UI=true 的构建显示
+        if (com.matrix.agent.launcher.BuildConfig.MATRIX_DEBUG_TRACE_UI) {
+            debugTrace = findViewById(R.id.nav_debug_trace);
+            debugTrace.setVisibility(View.VISIBLE);
+            debugTrace.setOnClickListener(v -> show(new DebugTraceFragment(),
+                    debugTrace, R.string.nav_debug_trace));
+        }
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
                 if (drawer.isDrawerOpen(GravityCompat.START)) drawer.closeDrawer(GravityCompat.START);

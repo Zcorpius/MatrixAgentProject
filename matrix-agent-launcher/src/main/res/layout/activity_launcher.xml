@@ -45,5 +45,8 @@
    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="start|center_vertical" android:layout_marginStart="18dp" android:text="@string/launcher_nav_index_market" android:textColor="#9EC0B8" android:textSize="11sp" android:textStyle="bold"/>
   </FrameLayout>
   <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1"/><View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="17dp" android:text="@string/launcher_boundary" android:textColor="#A79C8D" android:textSize="11sp" android:letterSpacing="0.09"/><TextView android:id="@+id/drawer_version" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:textColor="#6F675D" android:textSize="11sp"/>
+        <FrameLayout android:layout_width="match_parent" android:layout_height="64dp" android:layout_marginTop="6dp">
+            <Button android:id="@+id/nav_debug_trace" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="52dp" android:paddingEnd="16dp" android:text="@string/nav_debug_trace" android:textAllCaps="false" android:textColor="#F4FCF9" android:textSize="17sp" android:textStyle="bold" android:visibility="gone" />
+        </FrameLayout>
  </LinearLayout>
 </androidx.drawerlayout.widget.DrawerLayout>
