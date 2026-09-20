@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 会话导出产物分发：仅 cache-path/exports 子树（评估 v1.0 §4.9 受授予 URI） -->
+<cache-path name="conversation_exports" path="exports/" />

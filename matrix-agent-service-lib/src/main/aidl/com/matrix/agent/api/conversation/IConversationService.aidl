@@ -69,6 +69,9 @@ interface IConversationService {
     /** 子会话的来源说明（可空：非分支会话或父已清除）。 */
     String getLineageSummary(String childConversationId);
 
+    /** 只读导出为 Markdown：返回受授予 content URI（FileProvider）；失败/降级返回 null。 */
+    String exportConversation(String conversationId, String clientOperationId);
+
     void subscribeConversation(String conversationId, in IConversationCallback callback);
 
     void unsubscribeConversation(in IConversationCallback callback);

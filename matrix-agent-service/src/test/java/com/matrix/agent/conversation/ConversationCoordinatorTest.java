@@ -92,7 +92,7 @@ public final class ConversationCoordinatorTest {
                 StopReason.NO_TOOL_CALL, trajectory, 1L, List.of(), text);
     }
 
-    private static ConversationCoordinator buildHarness(FakeConversationStore store,
+    static ConversationCoordinator buildHarness(FakeConversationStore store,
             ConversationCoordinator.TaskExecutor executor) {
         ConversationHistorySource emptyHistory = new ConversationHistorySource() {
             @Override public List<HistoryEntry> latestCompleted(String conversationId,
@@ -112,7 +112,7 @@ public final class ConversationCoordinatorTest {
     }
 
     /** harness 重载：注入自定义 steer 落点。 */
-    private static ConversationCoordinator buildHarness(FakeConversationStore store,
+    static ConversationCoordinator buildHarness(FakeConversationStore store,
             ConversationCoordinator.TaskExecutor executor,
             ConversationCoordinator.SteerSink sink) {
         ConversationHistorySource emptyHistory = new ConversationHistorySource() {

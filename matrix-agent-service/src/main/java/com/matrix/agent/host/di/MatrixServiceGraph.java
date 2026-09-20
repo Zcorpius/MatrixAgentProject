@@ -28,7 +28,8 @@ public final class MatrixServiceGraph {
         download = new DownloadGraph(container, persistence, callers);
         voice = new VoiceGraph((Application) container.getAppContext(), container.getModelDownloadDao(),
                 container.getExecutorRegistry().voiceDownloadExecutor(), persistence, callers);
-        conversation = new ConversationGraph(container.getMatrixDatabase(),
+        conversation = new ConversationGraph(container.getAppContext(),
+                container.getMatrixDatabase(),
                 container.getAgentRuntimeRepository(),
                 container.getConversationTaskSubmitter(),
                 container.getExecutorRegistry().conversationExecutor(),

@@ -7,6 +7,7 @@ import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.conversation.ConversationIds;
 import com.matrix.agent.conversation.ConversationRecoveryCoordinator;
 import com.matrix.agent.conversation.ConversationServiceGate;
+import com.matrix.agent.conversation.ConversationExporter;
 import com.matrix.agent.conversation.ConversationTitleService;
 import com.matrix.agent.contract.LlmClient;
 import com.matrix.agent.contract.ModelConfig;
@@ -49,13 +50,16 @@ final class ConversationGraph {
     private final ConversationCoordinator coordinator;
     /** 恢复对账的标题触发（降级装配为 null）。 */
     private final ConversationCoordinator.TerminalRoundSink recoveryTitleSink;
+    /** 会话只读导出（评估 v1.0 §4.9；降级装配为 null）。 */
+    private final ConversationExporter exporter;
     private final ConversationVoiceBindingStore bindingStore;
     private final VoiceConversationBridge voiceBridge;
     private final ConversationServiceStub service;
     private final ConversationServiceGate gate;
     private final AtomicBoolean recoveryAttempted = new AtomicBoolean(false);
 
-    ConversationGraph(@Nullable MatrixDatabase database,
+    ConversationGraph(@Nullable android.content.Context appContext,
+            @Nullable MatrixDatabase database,
             AgentRuntimeRepository runtime,
             ConversationTaskSubmitter submitter,
             ExecutorService conversationLane,
@@ -71,6 +75,7 @@ final class ConversationGraph {
             this.bindingStore = null;
             this.voiceBridge = null;
             this.recoveryTitleSink = null;
+            this.exporter = null;
             this.gate = new ConversationServiceGate();
             return;
         }
@@ -89,13 +94,20 @@ final class ConversationGraph {
                 titleModelClient, titleConfigSupplier);
         this.coordinator.setTerminalRoundSink(titleService::onTerminalRound);
         this.recoveryTitleSink = titleService::onTerminalRound;
+        this.exporter = new ConversationExporter(store, databaseExecutor);
         this.bindingStore = new ConversationVoiceBindingStore();
         runtime.addConversationClearHook(bindingStore::clearAll);
-        this.service = new ConversationServiceStub(coordinator, gate, persistence, callers, bindingStore);
+        this.service = new ConversationServiceStub(coordinator, gate, persistence, callers,
+                bindingStore, exporter, appContext);
         // 阶段 C：创建对话桥；配置器由 MatrixServiceGraph 注册到 VoiceRuntime，保证当前
         // 与未来（引擎切换后重建）的 Controller 都会接到同一套治理。
         this.voiceBridge = createVoiceBridge();
         recoverOffMainThread(databaseExecutor, store);
+    }
+
+    /** 会话导出器（对话域可用时非空）。 */
+    ConversationExporter exporter() {
+        return exporter;
     }
 
     boolean isAvailable() {
