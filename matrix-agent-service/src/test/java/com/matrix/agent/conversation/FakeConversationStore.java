@@ -333,6 +333,22 @@ public final class FakeConversationStore implements ConversationStore {
     }
 
     @Override
+    public boolean autoTitleIfDefault(String conversationId, String title) {
+        ConversationRow row = conversations.get(conversationId);
+        if (row == null
+                || row.titleOrigin()
+                        != com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_DEFAULT) {
+            return false;
+        }
+        conversations.put(conversationId, new ConversationRow(row.conversationId(),
+                row.ownerUserId(), row.vehicleZone(), title, row.archived(),
+                row.createdAtMs(), System.currentTimeMillis(),
+                com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_AUTO,
+                row.pinned(), row.lastInputChannel()));
+        return true;
+    }
+
+    @Override
     public boolean renameConversation(String conversationId, String title) {
         ConversationRow row = conversations.get(conversationId);
         if (row == null) {

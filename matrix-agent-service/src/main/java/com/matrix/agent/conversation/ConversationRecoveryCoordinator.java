@@ -22,9 +22,14 @@ public final class ConversationRecoveryCoordinator {
     private static final String TAG = "MatrixAgent";
 
     private final ConversationStore store;
+    /** 自动标题触发（评估 v1.0 §4.1）：恢复收敛的 EXECUTION_UNKNOWN 同样算首轮终态。 */
+    private final ConversationCoordinator.TerminalRoundSink titleSink;
 
-    public ConversationRecoveryCoordinator(ConversationStore store) {
+    public ConversationRecoveryCoordinator(ConversationStore store,
+            ConversationCoordinator.TerminalRoundSink titleSink) {
         this.store = Objects.requireNonNull(store, "store");
+        this.titleSink = titleSink == null
+                ? (conv, msg, status) -> { } : titleSink;
     }
 
     /** 收敛在途消息；返回受影响的消息数（幂等，重跑为 0）。 */
@@ -40,6 +45,8 @@ public final class ConversationRecoveryCoordinator {
                     : PersistedMessageStatus.EXECUTION_UNKNOWN;
             store.writeRecoveryOutcome(link.conversationTaskId(), status.wire(),
                     MatrixErrorCode.PROCESS_INTERRUPTED);
+            titleSink.onTerminalRound(link.conversationId(), link.userMessageId(),
+                    status.wire());
             try {
                 store.appendSystemNote(link.conversationId(),
                         link.readOnlyHint()

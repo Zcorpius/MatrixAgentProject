@@ -7,6 +7,11 @@ import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.conversation.ConversationIds;
 import com.matrix.agent.conversation.ConversationRecoveryCoordinator;
 import com.matrix.agent.conversation.ConversationServiceGate;
+import com.matrix.agent.conversation.ConversationTitleService;
+import com.matrix.agent.contract.LlmClient;
+import com.matrix.agent.contract.ModelConfig;
+
+import java.util.function.Supplier;
 import com.matrix.agent.conversation.ConversationStore;
 import com.matrix.agent.conversation.persistence.RoomConversationStore;
 import com.matrix.agent.voice.VoiceConversationBridge;
@@ -42,6 +47,8 @@ final class ConversationGraph {
     private static final int DISPATCHER_MAX_PENDING = 16;
 
     private final ConversationCoordinator coordinator;
+    /** 恢复对账的标题触发（降级装配为 null）。 */
+    private final ConversationCoordinator.TerminalRoundSink recoveryTitleSink;
     private final ConversationVoiceBindingStore bindingStore;
     private final VoiceConversationBridge voiceBridge;
     private final ConversationServiceStub service;
@@ -54,13 +61,16 @@ final class ConversationGraph {
             ExecutorService conversationLane,
             ExecutorService databaseExecutor,
             PersistenceGate persistence,
-            ModelServiceStub.CallerResolver callers) {
+            ModelServiceStub.CallerResolver callers,
+            LlmClient titleModelClient,
+            Supplier<ModelConfig> titleConfigSupplier) {
         if (database == null) {
             // 降级模式：不装配任何组件，gate 永不 open，featureFlags 不通告该位。
             this.coordinator = null;
             this.service = null;
             this.bindingStore = null;
             this.voiceBridge = null;
+            this.recoveryTitleSink = null;
             this.gate = new ConversationServiceGate();
             return;
         }
@@ -73,6 +83,12 @@ final class ConversationGraph {
                 conversationId -> ConversationIds.agentSessionId(conversationId,
                         "DRIVER", "DRIVER"),
                 runtime::offerSteer);
+        // 自动标题（评估 v1.0 §4.1）：功能型轻量调用——同一 LlmClient + 配置 supplier，
+        // 单线程低优先级，比较交换写入；协调器与恢复对账两路终态都汇入同一服务。
+        ConversationTitleService titleService = new ConversationTitleService(store,
+                titleModelClient, titleConfigSupplier);
+        this.coordinator.setTerminalRoundSink(titleService::onTerminalRound);
+        this.recoveryTitleSink = titleService::onTerminalRound;
         this.bindingStore = new ConversationVoiceBindingStore();
         runtime.addConversationClearHook(bindingStore::clearAll);
         this.service = new ConversationServiceStub(coordinator, gate, persistence, callers, bindingStore);
@@ -166,7 +182,8 @@ final class ConversationGraph {
                     return;
                 }
                 try {
-                    int recovered = new ConversationRecoveryCoordinator(store).recover();
+                    int recovered = new ConversationRecoveryCoordinator(store,
+                            recoveryTitleSink).recover();
                     gate.open();
                     Log.i(TAG, "[ConversationGraph] 恢复对账完成 interrupted=" + recovered);
                 } catch (RuntimeException failure) {

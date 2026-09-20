@@ -475,6 +475,12 @@ public final class RoomConversationStore implements ConversationStore {
     }
 
     @Override
+    public boolean autoTitleIfDefault(String conversationId, String title) {
+        return conversations.autoTitleIfDefault(conversationId, title,
+                System.currentTimeMillis()) > 0;
+    }
+
+    @Override
     public boolean renameConversation(String conversationId, String title) {
         final boolean[] renamed = {false};
         long now = System.currentTimeMillis();

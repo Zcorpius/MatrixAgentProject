@@ -42,7 +42,7 @@ public final class ConversationCoordinatorTest {
     private static final String OWNER = "demo-driver";
 
     /** 直驱执行器：lane 任务在调用线程同步执行（确定性 FIFO）。 */
-    private static class DirectPool implements java.util.concurrent.ExecutorService {
+    static class DirectPool implements java.util.concurrent.ExecutorService {
         @Override public void execute(Runnable command) {
             command.run();
         }

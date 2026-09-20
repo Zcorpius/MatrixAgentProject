@@ -27,6 +27,12 @@ public interface ConversationDao {
             + " updated_at_ms = :updatedAtMs WHERE conversation_id = :conversationId")
     int rename(String conversationId, String title, long updatedAtMs);
 
+    /** 自动标题比较交换：仅 DEFAULT(0) 行生效，写入 AUTO(1)——用户命名永不覆盖。 */
+    @Query("UPDATE conversation SET title = :title, title_origin = 1,"
+            + " updated_at_ms = :updatedAtMs WHERE conversation_id = :conversationId"
+            + " AND title_origin = 0")
+    int autoTitleIfDefault(String conversationId, String title, long updatedAtMs);
+
     /** 最近一次用户输入通道（复用冻结 CHANNEL_* 值）。 */
     @Query("UPDATE conversation SET last_input_channel = :channel WHERE conversation_id"
             + " = :conversationId")

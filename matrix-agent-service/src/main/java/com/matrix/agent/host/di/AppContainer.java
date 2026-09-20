@@ -198,6 +198,9 @@ public final class AppContainer implements DownloadRuntime {
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
+        // 功能型轻量调用端口（摘要/标题共用）：与任务主路径同一 ModelApiClient + 配置源
+        titleModelClient = taskDependencies.modelClient;
+        titleConfigSupplier = taskDependencies.configStore::load;
 
         // 对话域 task 端口装配：分类器/记忆意图与 TaskRequestFactory 同源实例，
         // 历史=已完成 user/assistant 投影；SQLCipher 降级时端口不装配（域整体关闭）。
@@ -260,9 +263,23 @@ public final class AppContainer implements DownloadRuntime {
      * {@link MatrixAgentApplication#onTerminate()} 调用,真机依赖进程级回收兜底。
      */
     /** 对话域 task 端口；SQLCipher 降级时为 null（对话域不装配）。 */
+    private com.matrix.agent.contract.LlmClient titleModelClient;
+    private java.util.function.Supplier<com.matrix.agent.contract.ModelConfig>
+            titleConfigSupplier;
+
     public ConversationTaskSubmitter getConversationTaskSubmitter() {
         return conversationTaskSubmitter;
     }
+    /** 自动标题的功能型轻量调用端口（与 LlmSummaryProvider 同源 client/config）。 */
+    public com.matrix.agent.contract.LlmClient getTitleModelClient() {
+        return titleModelClient;
+    }
+
+    public java.util.function.Supplier<com.matrix.agent.contract.ModelConfig>
+    getTitleConfigSupplier() {
+        return titleConfigSupplier;
+    }
+
     /** 全局线程预算登记处；download/voice 等域统一取池，不自建。 */
     public MatrixExecutorRegistry getExecutorRegistry() { return executorRegistry; }
     /** Process-owned network client family; only Host graphs may consume this dependency. */

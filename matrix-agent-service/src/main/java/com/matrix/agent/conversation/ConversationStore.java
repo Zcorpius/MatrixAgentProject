@@ -65,6 +65,12 @@ public interface ConversationStore {
      */
     boolean renameConversation(String conversationId, String title);
 
+    /**
+     * 自动标题比较交换：仅当 titleOrigin 仍为 DEFAULT 时写入并置 AUTO，
+     * 任何其他来源（USER / 既有 AUTO）永不覆盖。返回是否实际写入。
+     */
+    boolean autoTitleIfDefault(String conversationId, String title);
+
     // ---- 提交（原子事务：幂等检查 + sequence 分配 + 消息 + task link） ----
 
     /**

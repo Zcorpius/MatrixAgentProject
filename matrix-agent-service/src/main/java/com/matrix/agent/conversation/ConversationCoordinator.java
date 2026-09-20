@@ -87,7 +87,16 @@ public final class ConversationCoordinator {
     public interface SteerSink {
         boolean offerSteer(String sessionId, Steer steer);
     }
+
+    /**
+     * 终态轮次通知（评估 v1.0 §4.1 自动标题触发）。lane 线程回调，实现方自行异步；
+     * 默认 no-op（未装配即不生成标题，不影响任何执行路径）。
+     */
+    public interface TerminalRoundSink {
+        void onTerminalRound(String conversationId, String userMessageId, int statusWire);
+    }
     private final SteerSink steerSink;
+    private volatile TerminalRoundSink terminalRoundSink = (conv, msg, status) -> { };
     private final ConcurrentHashMap<String, CancellationToken> activeTokens =
             new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<TerminalListener> terminalListeners =
@@ -110,6 +119,11 @@ public final class ConversationCoordinator {
 
     public void setListener(Listener value) {
         this.listener = (value == null) ? new Listener() { } : value;
+    }
+
+    /** 自动标题等终态观察者装配（评估 v1.0 §4.1）；未装配为 no-op。 */
+    public void setTerminalRoundSink(TerminalRoundSink sink) {
+        this.terminalRoundSink = sink == null ? (conv, msg, status) -> { } : sink;
     }
 
     public ConversationStore store() {
@@ -419,6 +433,9 @@ public final class ConversationCoordinator {
             notifyUpsert(assistant);
         }
         notifyStatus(conversationId, userMessageId, status.wire(), failureCode);
+        // 自动标题触发点（评估 v1.0 §4.1）：第一条到达终态的用户轮次；sink 自行异步
+        // 且比较交换——多次触发至多一次写入，REJECTED/CANCELLED 由 sink 过滤。
+        terminalRoundSink.onTerminalRound(conversationId, userMessageId, status.wire());
     }
 
     // ---------------------------------------------------------------- 映射与校验

@@ -32,7 +32,8 @@ public final class MatrixServiceGraph {
                 container.getAgentRuntimeRepository(),
                 container.getConversationTaskSubmitter(),
                 container.getExecutorRegistry().conversationExecutor(),
-                container.getExecutorRegistry().dbExecutor(), persistence, callers);
+                container.getExecutorRegistry().dbExecutor(), persistence, callers,
+                container.getTitleModelClient(), container.getTitleConfigSupplier());
         if (conversation.isAvailable()) {
             voice.setBindingStore(conversation.bindingStore());
             voice.addControllerConfigurer(conversation.controllerConfigurer());
