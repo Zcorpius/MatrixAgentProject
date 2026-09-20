@@ -9,9 +9,8 @@ import android.util.Log;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
-import com.matrix.agent.task.DynamicThreadPool;
 import com.matrix.agent.task.ModelCallExecutor;
-import com.matrix.agent.data.session.SessionLockManager;
+import com.matrix.agent.session.SessionLockManager;
 import com.matrix.agent.task.scheduler.TaskScheduler;
 import com.matrix.agent.task.tool.ToolExecutor;
 
@@ -26,8 +25,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * DynamicThreadPool 并发压力测试——8 并发任务同时跑过 3 个共享 executor
- * (TaskScheduler + ModelCallExecutor + ToolExecutor),验证无死锁 + 任务不丢。
+ * Host executor registry 并发压力测试——8 并发任务同时跑过任务、网络与模型 lane，
+ * 验证共享依赖的三个执行器可构造、任务不丢且由唯一 registry 统一收口。
  *
  * <p>必须 androidTest 跑(JVM 单测的 fake executor 测不出真实 ThreadPoolExecutor 拒绝策略 +
  * 多 owner 共享时的 shutdown 行为,需要在真机 / emulator 上的 ART 跑)。
@@ -38,11 +37,12 @@ public final class DynamicThreadPoolConcurrencyTest {
 
     @Test
     public void eightConcurrentTasksAcrossThreeOwnersNoDeadlock() throws Exception {
-        // 模拟 AppContainer 装配——3 个 executor 共享一个池
-        DynamicThreadPool shared = new DynamicThreadPool(2, 8, 32);
-        TaskScheduler scheduler = new TaskScheduler(2, new SessionLockManager(), shared);
-        ToolExecutor toolExecutor = new ToolExecutor(2, shared);
-        ModelCallExecutor modelCallExecutor = new ModelCallExecutor(2, shared);
+        MatrixExecutorRegistry registry = new MatrixExecutorRegistry();
+        TaskScheduler scheduler = new TaskScheduler(2, new SessionLockManager(),
+                registry.taskExecutor());
+        ToolExecutor toolExecutor = new ToolExecutor(2, registry.networkExecutor());
+        ModelCallExecutor modelCallExecutor = new ModelCallExecutor(2,
+                registry.networkExecutor(), registry.modelExecutor());
 
         try {
             int taskCount = 8;
@@ -51,9 +51,9 @@ public final class DynamicThreadPoolConcurrencyTest {
 
             List<Future<?>> futures = new ArrayList<>();
 
-            // 8 个任务给 TaskScheduler 的池
+            // 8 个任务给任务 lane
             for (int i = 0; i < taskCount; i++) {
-                futures.add(shared.asExecutorService().submit(() -> {
+                futures.add(registry.taskExecutor().submit(() -> {
                     try {
                         Log.d(TAG, "[ConcTest] scheduler-task on " + Thread.currentThread().getName());
                         allDone.countDown();
@@ -62,9 +62,9 @@ public final class DynamicThreadPoolConcurrencyTest {
                     }
                 }));
             }
-            // 8 个任务给 ToolExecutor(走同一个池)
+            // 8 个任务给网络 lane（ToolExecutor 所在 lane）
             for (int i = 0; i < taskCount; i++) {
-                futures.add(shared.asExecutorService().submit(() -> {
+                futures.add(registry.networkExecutor().submit(() -> {
                     try {
                         Log.d(TAG, "[ConcTest] tool-task on " + Thread.currentThread().getName());
                         allDone.countDown();
@@ -73,9 +73,9 @@ public final class DynamicThreadPoolConcurrencyTest {
                     }
                 }));
             }
-            // 8 个任务给 ModelCallExecutor(走同一个池)
+            // 8 个任务给端侧模型 lane（ModelCallExecutor 所在 lane）
             for (int i = 0; i < taskCount; i++) {
-                futures.add(shared.asExecutorService().submit(() -> {
+                futures.add(registry.modelExecutor().submit(() -> {
                     try {
                         Log.d(TAG, "[ConcTest] model-task on " + Thread.currentThread().getName());
                         allDone.countDown();
@@ -89,18 +89,12 @@ public final class DynamicThreadPoolConcurrencyTest {
             assertTrue("24 个任务应在 10s 内全部完成,剩余=" + allDone.getCount(),
                     allDone.await(10, TimeUnit.SECONDS));
             assertEquals("不应有任务抛异常", 0, errors.get());
-            assertTrue("poolSize 应至少扩到 core=2,actual=" + shared.getPoolSize(),
-                    shared.getPoolSize() >= 2);
-
-            // 引用一下三个 executor 避免 IDE unused 警告(它们都持有 shared,验证构造无异常)
+            // 三个 owner 都只取得 registry 注入的 lane，验证构造无异常。
             assertTrue("TaskScheduler 应初始化", scheduler != null);
             assertTrue("ToolExecutor 应初始化", toolExecutor != null);
             assertTrue("ModelCallExecutor 应初始化", modelCallExecutor != null);
         } finally {
-            // 关键:外部 shared 池持有者统一关闭,3 个 executor 不应自己关
-            shared.shutdown();
-            boolean terminated = shared.awaitTermination(5);
-            assertTrue("shared 池应在 5s 内 terminate", terminated);
+            registry.shutdown();
         }
     }
 }

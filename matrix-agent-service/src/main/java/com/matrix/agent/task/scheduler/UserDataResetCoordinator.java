@@ -25,6 +25,8 @@ public final class UserDataResetCoordinator {
     private final InFlightTaskRegistry inFlightTasks;
     private volatile SteerMailbox steerMailbox;
     private volatile AuditEventRecorder auditEventRecorder = AuditEventRecorder.NOOP;
+    /** 对话表清理（clearUserData 覆盖范围）；null 时记 warn 不阻塞主流程。 */
+    private volatile Runnable conversationClearHook;
 
     public UserDataResetCoordinator(MemoryStore memoryStore, SessionManager sessionManager,
             AuditRepository auditRepository, InFlightTaskRegistry inFlightTasks) {
@@ -37,6 +39,17 @@ public final class UserDataResetCoordinator {
     public void setSteerMailbox(SteerMailbox value) { steerMailbox = value; }
     public void setAuditEventRecorder(AuditEventRecorder value) {
         auditEventRecorder = value == null ? AuditEventRecorder.NOOP : value;
+    }
+    public void setConversationClearHook(Runnable hook) {
+        conversationClearHook = hook;
+    }
+    public synchronized void addConversationClearHook(Runnable hook) {
+        if (hook == null) return;
+        Runnable previous = conversationClearHook;
+        conversationClearHook = previous == null ? hook : () -> {
+            previous.run();
+            hook.run();
+        };
     }
     public void offerSteer(String sessionId, Steer steer) {
         SteerMailbox mailbox = steerMailbox;
@@ -56,6 +69,14 @@ public final class UserDataResetCoordinator {
         inFlightTasks.awaitDrain(1_000L);
         if (mailbox != null) mailbox.clearAll();
         sessionManager.clear();
+        // 对话正文与 link 属于同级用户数据。钩子失败不能伪装成完整清理：主流程无法回滚
+        // 已清 memory，但必须向调用者暴露失败，避免敏感对话悄然残留。
+        Runnable conversationHook = conversationClearHook;
+        if (conversationHook != null) {
+            conversationHook.run();
+        } else {
+            Log.w(TAG, "[Reset] conversation clear hook unavailable");
+        }
         try {
             recorder.dropByUserZone(DRIVER_USER, "DRIVER", epoch);
             recorder.dropByUserZone(PASSENGER_USER, "PASSENGER", epoch);

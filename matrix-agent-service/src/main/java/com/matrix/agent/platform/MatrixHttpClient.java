@@ -31,10 +31,12 @@ public final class MatrixHttpClient {
                 .followRedirects(false)
                 .followSslRedirects(false)
                 .build();
-        // Large model archives are range-resumed by the caller. There is no whole-call timeout,
-        // but a stalled socket remains bounded by readTimeout and cancellation calls Call.cancel.
+        // Large model archives are range-resumed by the caller. There is no whole-call timeout:
+        // a 60 MB mobile download must not be cut off just because one TLS/CDN read stalls for the
+        // ordinary API timeout. A genuinely stalled socket is still bounded, and callers retain
+        // the partial archive for a Range retry.
         download = provider.newBuilder()
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .callTimeout(0, TimeUnit.MILLISECONDS)
                 .build();

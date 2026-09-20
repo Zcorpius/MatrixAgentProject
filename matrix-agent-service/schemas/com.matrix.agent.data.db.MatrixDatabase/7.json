@@ -1,0 +1,960 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "98a2b1e7a3acbddc1bf5fa78834eadfc",
+    "entities": [
+      {
+        "tableName": "trajectory",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`requestId` TEXT NOT NULL, `sessionId` TEXT, `arbitrationKey` TEXT, `actor` TEXT, `zone` TEXT, `userId` TEXT, `startedMs` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `iterationCount` INTEGER NOT NULL, `totalToolCalls` INTEGER NOT NULL, `successToolCalls` INTEGER NOT NULL, `stopReason` TEXT, `finalState` TEXT, `trajectoryJson` TEXT, `createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`requestId`))",
+        "fields": [
+          {
+            "fieldPath": "requestId",
+            "columnName": "requestId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "arbitrationKey",
+            "columnName": "arbitrationKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "actor",
+            "columnName": "actor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "zone",
+            "columnName": "zone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedMs",
+            "columnName": "startedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "iterationCount",
+            "columnName": "iterationCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalToolCalls",
+            "columnName": "totalToolCalls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "successToolCalls",
+            "columnName": "successToolCalls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stopReason",
+            "columnName": "stopReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "finalState",
+            "columnName": "finalState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trajectoryJson",
+            "columnName": "trajectoryJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "requestId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_trajectory_session_started",
+            "unique": false,
+            "columnNames": [
+              "sessionId",
+              "startedMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_trajectory_session_started` ON `${TABLE_NAME}` (`sessionId`, `startedMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "session_history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `zone` TEXT NOT NULL, `sessionId` TEXT NOT NULL, `startedAtMillis` INTEGER NOT NULL, `actor` TEXT, `finalState` TEXT, `stopReason` TEXT, `durationMs` INTEGER NOT NULL, `turnCount` INTEGER NOT NULL, `trajectoryJson` TEXT, PRIMARY KEY(`userId`, `zone`, `sessionId`, `startedAtMillis`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zone",
+            "columnName": "zone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMillis",
+            "columnName": "startedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actor",
+            "columnName": "actor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "finalState",
+            "columnName": "finalState",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stopReason",
+            "columnName": "stopReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "turnCount",
+            "columnName": "turnCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trajectoryJson",
+            "columnName": "trajectoryJson",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId",
+            "zone",
+            "sessionId",
+            "startedAtMillis"
+          ]
+        }
+      },
+      {
+        "tableName": "memory_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `zone` TEXT NOT NULL, `layer` TEXT NOT NULL, `key` TEXT NOT NULL, `value` TEXT, `score` REAL NOT NULL, `capturedAtMs` INTEGER NOT NULL, `sourceSessionId` TEXT, PRIMARY KEY(`userId`, `zone`, `layer`, `key`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zone",
+            "columnName": "zone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "layer",
+            "columnName": "layer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "score",
+            "columnName": "score",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturedAtMs",
+            "columnName": "capturedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSessionId",
+            "columnName": "sourceSessionId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId",
+            "zone",
+            "layer",
+            "key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_memory_user_layer",
+            "unique": false,
+            "columnNames": [
+              "userId",
+              "layer"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_memory_user_layer` ON `${TABLE_NAME}` (`userId`, `layer`)"
+          }
+        ]
+      },
+      {
+        "tableName": "audit_event",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `requestId` TEXT, `type` TEXT, `actor` TEXT, `zone` TEXT, `happenedAtMs` INTEGER NOT NULL, `payloadJson` TEXT, `userId` TEXT NOT NULL, `requestEpoch` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestId",
+            "columnName": "requestId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "actor",
+            "columnName": "actor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "zone",
+            "columnName": "zone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "happenedAtMs",
+            "columnName": "happenedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestEpoch",
+            "columnName": "requestEpoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_audit_request",
+            "unique": false,
+            "columnNames": [
+              "requestId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_audit_request` ON `${TABLE_NAME}` (`requestId`)"
+          },
+          {
+            "name": "idx_audit_user_zone",
+            "unique": false,
+            "columnNames": [
+              "userId",
+              "zone"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_audit_user_zone` ON `${TABLE_NAME}` (`userId`, `zone`)"
+          }
+        ]
+      },
+      {
+        "tableName": "model_download",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`modelName` TEXT NOT NULL, `displayName` TEXT, `sourceRepo` TEXT, `marketUrl` TEXT, `totalBytes` INTEGER NOT NULL, `downloadedBytes` INTEGER NOT NULL, `status` TEXT, `sha256` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`modelName`))",
+        "fields": [
+          {
+            "fieldPath": "modelName",
+            "columnName": "modelName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceRepo",
+            "columnName": "sourceRepo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "marketUrl",
+            "columnName": "marketUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "totalBytes",
+            "columnName": "totalBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "downloadedBytes",
+            "columnName": "downloadedBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "modelName"
+          ]
+        }
+      },
+      {
+        "tableName": "agent_task",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `ownerUid` INTEGER NOT NULL, `ownerPackage` TEXT NOT NULL, `ownerUserId` INTEGER NOT NULL, `clientRequestId` TEXT NOT NULL, `clientSessionId` TEXT NOT NULL, `requestHash` TEXT NOT NULL, `requestText` TEXT NOT NULL, `state` INTEGER NOT NULL, `lastSequence` INTEGER NOT NULL, `safeText` TEXT NOT NULL, `errorCode` INTEGER NOT NULL, `pendingConfirmationId` TEXT, `createdAtMs` INTEGER NOT NULL, `updatedAtMs` INTEGER NOT NULL, `terminalAtMs` INTEGER NOT NULL, PRIMARY KEY(`taskId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUid",
+            "columnName": "ownerUid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerPackage",
+            "columnName": "ownerPackage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientRequestId",
+            "columnName": "clientRequestId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientSessionId",
+            "columnName": "clientSessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestHash",
+            "columnName": "requestHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestText",
+            "columnName": "requestText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSequence",
+            "columnName": "lastSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "safeText",
+            "columnName": "safeText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "errorCode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingConfirmationId",
+            "columnName": "pendingConfirmationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updatedAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalAtMs",
+            "columnName": "terminalAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_agent_task_owner_request",
+            "unique": true,
+            "columnNames": [
+              "ownerUid",
+              "clientRequestId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `idx_agent_task_owner_request` ON `${TABLE_NAME}` (`ownerUid`, `clientRequestId`)"
+          },
+          {
+            "name": "idx_agent_task_owner_updated",
+            "unique": false,
+            "columnNames": [
+              "ownerUid",
+              "updatedAtMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_agent_task_owner_updated` ON `${TABLE_NAME}` (`ownerUid`, `updatedAtMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "agent_task_event",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `elapsedRealtimeMs` INTEGER NOT NULL, `type` INTEGER NOT NULL, `state` INTEGER NOT NULL, `safePayload` TEXT NOT NULL, PRIMARY KEY(`taskId`, `sequence`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "elapsedRealtimeMs",
+            "columnName": "elapsedRealtimeMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "safePayload",
+            "columnName": "safePayload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_agent_task_event_replay",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "sequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_agent_task_event_replay` ON `${TABLE_NAME}` (`taskId`, `sequence`)"
+          }
+        ]
+      },
+      {
+        "tableName": "agent_task_operation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`taskId` TEXT NOT NULL, `clientOperationId` TEXT NOT NULL, `operationType` TEXT NOT NULL, `requestHash` TEXT NOT NULL, `resultCode` INTEGER NOT NULL, `acceptedSequence` INTEGER NOT NULL, `taskState` INTEGER NOT NULL, `createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`taskId`, `clientOperationId`))",
+        "fields": [
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clientOperationId",
+            "columnName": "clientOperationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationType",
+            "columnName": "operationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestHash",
+            "columnName": "requestHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultCode",
+            "columnName": "resultCode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedSequence",
+            "columnName": "acceptedSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskState",
+            "columnName": "taskState",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "createdAtMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "taskId",
+            "clientOperationId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_agent_task_operation_time",
+            "unique": false,
+            "columnNames": [
+              "taskId",
+              "createdAtMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_agent_task_operation_time` ON `${TABLE_NAME}` (`taskId`, `createdAtMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "conversation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`conversation_id` TEXT NOT NULL, `owner_user_id` TEXT NOT NULL, `vehicle_zone` TEXT NOT NULL, `title` TEXT, `created_at_ms` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, `archived_at_ms` INTEGER, `schema_version` INTEGER NOT NULL, PRIMARY KEY(`conversation_id`))",
+        "fields": [
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "owner_user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vehicleZone",
+            "columnName": "vehicle_zone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archivedAtMs",
+            "columnName": "archived_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schema_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "conversation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "idx_conversation_owner_zone",
+            "unique": false,
+            "columnNames": [
+              "owner_user_id",
+              "vehicle_zone"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_conversation_owner_zone` ON `${TABLE_NAME}` (`owner_user_id`, `vehicle_zone`)"
+          }
+        ]
+      },
+      {
+        "tableName": "conversation_message",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`message_id` TEXT NOT NULL, `conversation_id` TEXT NOT NULL, `sequence_no` INTEGER NOT NULL, `role` INTEGER NOT NULL, `status` INTEGER NOT NULL, `channel` INTEGER, `text` TEXT NOT NULL, `language_tag` TEXT, `conversation_task_id` TEXT, `reply_to_message_id` TEXT, `failure_code` INTEGER NOT NULL, `created_at_ms` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, `idempotency_key` TEXT, `schema_version` INTEGER NOT NULL, PRIMARY KEY(`message_id`))",
+        "fields": [
+          {
+            "fieldPath": "messageId",
+            "columnName": "message_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequenceNo",
+            "columnName": "sequence_no",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "languageTag",
+            "columnName": "language_tag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "conversationTaskId",
+            "columnName": "conversation_task_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replyToMessageId",
+            "columnName": "reply_to_message_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failureCode",
+            "columnName": "failure_code",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotency_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "schemaVersion",
+            "columnName": "schema_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "message_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "uq_conversation_message_seq",
+            "unique": true,
+            "columnNames": [
+              "conversation_id",
+              "sequence_no"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_message_seq` ON `${TABLE_NAME}` (`conversation_id`, `sequence_no`)"
+          },
+          {
+            "name": "idx_conversation_message_task",
+            "unique": false,
+            "columnNames": [
+              "conversation_task_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_conversation_message_task` ON `${TABLE_NAME}` (`conversation_task_id`)"
+          },
+          {
+            "name": "uq_conversation_message_idem",
+            "unique": true,
+            "columnNames": [
+              "idempotency_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_message_idem` ON `${TABLE_NAME}` (`idempotency_key`)"
+          }
+        ]
+      },
+      {
+        "tableName": "conversation_task_link",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`conversation_task_id` TEXT NOT NULL, `runtime_request_id` TEXT NOT NULL, `conversation_id` TEXT NOT NULL, `user_message_id` TEXT NOT NULL, `assistant_message_id` TEXT, `read_only_hint` INTEGER NOT NULL, `terminal_status` INTEGER, `created_at_ms` INTEGER NOT NULL, `started_at_ms` INTEGER, `terminal_at_ms` INTEGER, PRIMARY KEY(`conversation_task_id`))",
+        "fields": [
+          {
+            "fieldPath": "conversationTaskId",
+            "columnName": "conversation_task_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runtimeRequestId",
+            "columnName": "runtime_request_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversationId",
+            "columnName": "conversation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userMessageId",
+            "columnName": "user_message_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assistantMessageId",
+            "columnName": "assistant_message_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "readOnlyHint",
+            "columnName": "read_only_hint",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "terminalStatus",
+            "columnName": "terminal_status",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtMs",
+            "columnName": "started_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "terminalAtMs",
+            "columnName": "terminal_at_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "conversation_task_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "uq_conversation_link_request",
+            "unique": true,
+            "columnNames": [
+              "runtime_request_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_link_request` ON `${TABLE_NAME}` (`runtime_request_id`)"
+          },
+          {
+            "name": "idx_conversation_link_conversation",
+            "unique": false,
+            "columnNames": [
+              "conversation_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `idx_conversation_link_conversation` ON `${TABLE_NAME}` (`conversation_id`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '98a2b1e7a3acbddc1bf5fa78834eadfc')"
+    ]
+  }
+}

@@ -4,7 +4,6 @@ import android.app.Application;
 import android.util.Log;
 
 import com.matrix.agent.voice.platform.AndroidAudioFocusAdapter;
-import com.matrix.agent.voice.platform.AndroidTtsAdapter;
 import com.matrix.agent.voice.platform.VoiceCaptureController;
 import com.matrix.agent.voice.platform.VoskResultParser;
 import com.matrix.agent.voice.AgentRunner;
@@ -20,6 +19,8 @@ import com.matrix.agent.data.db.ModelDownloadDao;
 import com.matrix.agent.voice.VoskModelDownloader;
 import com.matrix.agent.voice.VoskModelSpec;
 import com.matrix.agent.voice.VoiceSessionController;
+import com.matrix.agent.voice.port.ManagedTtsPort;
+import com.matrix.agent.voice.sherpa.VoiceTtsFactory;
 
 import java.io.File;
 import java.util.concurrent.Executor;
@@ -44,6 +45,7 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
     private final Application app;
     private final VoskModelDownloader downloader;
     private final ThreadFactory captureThreadFactory;
+    private final VoiceTtsFactory ttsFactory;
 
     public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao) {
         this(app, dao, runnable -> {
@@ -63,10 +65,18 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
     /** Production Host injects its process-owned download client. */
     public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao,
             ThreadFactory captureThreadFactory, OkHttpClient httpClient) {
+        this(app, dao, captureThreadFactory, httpClient, httpClient);
+    }
+
+    /** Production path supplies distinct download and bounded cloud-call clients. */
+    public VoskVoiceAssemblyFactory(Application app, ModelDownloadDao dao,
+            ThreadFactory captureThreadFactory, OkHttpClient downloadClient,
+            OkHttpClient cloudClient) {
         if (app == null) throw new IllegalArgumentException("app 不能为空");
         if (captureThreadFactory == null) throw new IllegalArgumentException("captureThreadFactory 不能为空");
         this.app = app;
-        this.downloader = new VoskModelDownloader(app, dao, httpClient); // dao 可空:数据库降级时进度降级
+        this.downloader = new VoskModelDownloader(app, dao, downloadClient); // dao 可空:数据库降级时进度降级
+        this.ttsFactory = new VoiceTtsFactory(app, dao, downloadClient, cloudClient);
         this.captureThreadFactory = captureThreadFactory;
     }
 
@@ -140,7 +150,7 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
         VoskAsrAdapter asr = null;
         VoskEndpointAdapter endpoint = null;
         VoskWakeAdapter wake = null;
-        AndroidTtsAdapter tts = null;
+        ManagedTtsPort tts = null;
         try {
             Log.i(TAG, "[VoiceAssembly] create begin");
             holder = new VoskModelHolder(new File(app.getFilesDir(), "vosk-model"));
@@ -148,7 +158,7 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
             asr = new VoskAsrAdapter(engine);
             endpoint = new VoskEndpointAdapter(engine);
             wake = new VoskWakeAdapter(holder.enModel());
-            tts = new AndroidTtsAdapter(app);
+            tts = ttsFactory.create(context.agentExecutor());
             AndroidAudioFocusAdapter focusPort = new AndroidAudioFocusAdapter(app);
             VoiceSessionController controller = new VoiceSessionController(
                     wake, asr, tts, endpoint, focusPort, context.runner(), new ResponsePresenter(),
@@ -174,11 +184,11 @@ public final class VoskVoiceAssemblyFactory implements VoiceAssemblyFactory {
         private final VoiceCapturePort capture;
         private final VoskWakeAdapter wake;
         private final VoskAsrAdapter asr;
-        private final AndroidTtsAdapter tts;
+        private final ManagedTtsPort tts;
         private final VoskModelHolder holder;
 
         VoskAssembly(VoiceSessionController controller, VoiceCapturePort capture,
-                VoskWakeAdapter wake, VoskAsrAdapter asr, AndroidTtsAdapter tts, VoskModelHolder holder) {
+                VoskWakeAdapter wake, VoskAsrAdapter asr, ManagedTtsPort tts, VoskModelHolder holder) {
             this.controller = controller;
             this.capture = capture;
             this.wake = wake;

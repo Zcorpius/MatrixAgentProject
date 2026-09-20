@@ -60,6 +60,8 @@ public final class MatrixAgentManagerService extends Service {
             return MatrixServiceConstants.MODEL_SERVICE.equals(serviceName) ? modelServiceBinder()
                     : MatrixServiceConstants.DOWNLOAD_SERVICE.equals(serviceName) ? downloadServiceBinder()
                     : MatrixServiceConstants.VOICE_SERVICE.equals(serviceName) ? voiceServiceBinder()
+                    : MatrixServiceConstants.CONVERSATION_SERVICE.equals(serviceName)
+                        ? conversationServiceBinder()
                     : null;
         }
 
@@ -222,6 +224,10 @@ public final class MatrixAgentManagerService extends Service {
 
     private IBinder voiceServiceBinder() {
         return graph == null ? null : graph.voiceBinder();
+    }
+
+    private IBinder conversationServiceBinder() {
+        return graph == null ? null : graph.conversationBinder();
     }
 
     private static String requireTaskId(String taskId) {

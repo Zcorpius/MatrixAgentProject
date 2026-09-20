@@ -36,6 +36,12 @@
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
+        <!-- 按需 microphone 前台服务：采音 lease 获取前启动，归零后停止（设计文档 §7.3）。 -->
+        <service
+            android:name="com.matrix.agent.voice.platform.VoiceCaptureForegroundService"
+            android:foregroundServiceType="microphone"
+            android:exported="false" />
+
         <service
             android:name="com.matrix.agent.host.MatrixAgentManagerService"
             android:exported="true"

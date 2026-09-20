@@ -125,6 +125,9 @@ dependencies {
     // Host 正式语音运行时；release 也携带 Vosk native 库，才能实际装配 PTT/系统语音入口。
     implementation(libs.vosk)
 
+    // Sherpa 模型上游发布为 tar.bz2（k2-fsa asr-models/kws-models），模型管道解压用
+    implementation(libs.commons.compress)
+
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.okhttp.mockwebserver)

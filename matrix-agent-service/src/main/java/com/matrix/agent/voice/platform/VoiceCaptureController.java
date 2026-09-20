@@ -65,6 +65,8 @@ public final class VoiceCaptureController implements VoiceCapturePort {
     private final AtomicBoolean starting = new AtomicBoolean();
     /** 会话 id 序列:每次 start 递增,captureLoop finally 通知携带,Runtime 校验防旧会话。 */
     private final java.util.concurrent.atomic.AtomicLong sessionSeq = new java.util.concurrent.atomic.AtomicLong();
+    /** 预滚缓冲（阶段 C-3）；null 时跳过 append。 */
+    private volatile com.matrix.agent.voice.AudioPrerollBuffer prerollBuffer;
 
     /** 采音线程退出时通知 Runtime(sid + reason);正常 stop=STOPPED,错误=精确 CAPTURE_* 码。
      * 采音线程不直连 Controller 报错——Runtime 校验 sid 后才转交(防迟到错误影响恢复后的新会话)。
@@ -124,6 +126,10 @@ public final class VoiceCaptureController implements VoiceCapturePort {
                 Log.e(TAG, "[VoiceCapture] permission check granted=false");
                 throw new SecurityException("RECORD_AUDIO 未授予,无法采音");
             }
+            // microphone FGS 前置（设计文档 §7.3）：采音 lease 获取 → startForeground
+            if (!VoiceCaptureForegroundService.acquire(context, "ptt")) {
+                throw new SecurityException("RECORD_AUDIO 前台服务启动被拒,无法采音");
+            }
             int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
             int bufSize = Math.max(minBuf, FRAME_BYTES * 4);
@@ -167,7 +173,7 @@ public final class VoiceCaptureController implements VoiceCapturePort {
                 throw new IllegalStateException("AudioRecord did not enter recording state");
             }
             long sid = sessionSeq.incrementAndGet();
-            final Session session = new Session(ar, aec, sid);
+            final Session session = new Session(ar, aec, sid, context);
             s = session;
             Thread t = captureThreadFactory.newThread(() -> captureLoop(session));
             if (t == null) throw new IllegalStateException("captureThreadFactory returned null");
@@ -194,7 +200,12 @@ public final class VoiceCaptureController implements VoiceCapturePort {
     }
 
     /** 依次尝试识别音源和 MIC；失败的候选立即释放，成功者由调用方接管。 */
-    private static AudioRecord createAsrAudioRecord(int bufferSize) {
+    private AudioRecord createAsrAudioRecord(int bufferSize) {
+        // 权限可能被运行时即时撤销；构造前在同一方法内显式检查（lint MissingPermission 契约）
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context,
+                Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("RECORD_AUDIO 未授予,无法采音");
+        }
         for (int source : ASR_AUDIO_SOURCES) {
             AudioRecord candidate = new AudioRecord(source, SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
@@ -316,6 +327,11 @@ public final class VoiceCaptureController implements VoiceCapturePort {
                         }
                     },
                     (pcm, n) -> {
+                        // 预滚 append（阶段 C-3）：每帧都进环形缓冲，不论状态
+                        com.matrix.agent.voice.AudioPrerollBuffer preroll = prerollBuffer;
+                        if (preroll != null) {
+                            preroll.append(pcm, n);
+                        }
                         VoiceSessionState.State state = controller.currentState();
                         if (state != prev[0]) {
                             detector.reset(); // 状态变化清零,防跨 SPEAKING 残留 loudFrames 误触发
@@ -400,14 +416,17 @@ public final class VoiceCaptureController implements VoiceCapturePort {
         final AudioRecord audioRecord;
         final AcousticEchoCanceler aec;
         final long sid;
+        final Context sessionContext; // FGS release 需要
         volatile Thread thread;
         volatile boolean running = true;
         private final AtomicBoolean released = new AtomicBoolean();
 
-        Session(AudioRecord audioRecord, AcousticEchoCanceler aec, long sid) {
+        Session(AudioRecord audioRecord, AcousticEchoCanceler aec, long sid,
+                Context sessionContext) {
             this.audioRecord = audioRecord;
             this.aec = aec;
             this.sid = sid;
+            this.sessionContext = sessionContext;
         }
 
         /** 幂等释放(AtomicBoolean CAS)。captureLoop finally 或 stop() 调用,只执行一次。 */
@@ -418,6 +437,7 @@ public final class VoiceCaptureController implements VoiceCapturePort {
             } catch (Exception e) {
                 Log.w(TAG, "[Voice] AudioRecord.release: " + e.getMessage());
             }
+            VoiceCaptureForegroundService.release(sessionContext, "ptt");
             if (aec != null) {
                 try {
                     aec.release();

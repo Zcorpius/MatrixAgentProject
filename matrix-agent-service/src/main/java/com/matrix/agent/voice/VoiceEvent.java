@@ -49,6 +49,8 @@ public final class VoiceEvent {
         ASR_ERROR,
         /** 识别文本通过校验,可提交 Agent。 */
         ACCEPTED,
+        /** 已接受的语音 final 即将交给 ConversationCoordinator，进入异步提交等待态。 */
+        SUBMISSION_STARTED,
         /** 识别文本未通过校验(低置信度/空),请求一次澄清。 */
         REJECTED,
         /** 当前能力需要 pre-execution 确认(VerifyMethod.USER_CONFIRM)。Demo 直接拒绝,不进 CONFIRMING。 */
@@ -66,7 +68,11 @@ public final class VoiceEvent {
         /** 通用错误。 */
         ERROR,
         /** 过渡态(CANCELLED / ERROR_ANNOUNCING)清理完成,回 IDLE。 */
-        RESET
+        RESET,
+        /** 对话提交事务成功(SubmissionReceipt 返回),SUBMITTING→THINKING。 */
+        SUBMISSION_ACCEPTED,
+        /** 对话提交事务失败(持久化/队列/超时),SUBMITTING→ERROR_ANNOUNCING。 */
+        SUBMISSION_FAILED
     }
 
     /** 唤醒事件。 */
@@ -115,6 +121,11 @@ public final class VoiceEvent {
         return new VoiceEvent(EventType.ACCEPTED, null, 0f, null);
     }
 
+    /** 对话桥提交开始。与 ACCEPTED 区分，避免把 SUBMITTING 跳过为 THINKING。 */
+    public static VoiceEvent submissionStarted() {
+        return new VoiceEvent(EventType.SUBMISSION_STARTED, null, 0f, null);
+    }
+
     /** 识别未通过,请求澄清。 */
     public static VoiceEvent rejected() {
         return new VoiceEvent(EventType.REJECTED, null, 0f, null);
@@ -158,6 +169,16 @@ public final class VoiceEvent {
     /** 过渡态清理完成,回 IDLE。 */
     public static VoiceEvent reset() {
         return new VoiceEvent(EventType.RESET, null, 0f, null);
+    }
+
+    /** 对话提交事务成功。 */
+    public static VoiceEvent submissionAccepted() {
+        return new VoiceEvent(EventType.SUBMISSION_ACCEPTED, null, 0f, null);
+    }
+
+    /** 对话提交事务失败。 */
+    public static VoiceEvent submissionFailed(String errorCode) {
+        return new VoiceEvent(EventType.SUBMISSION_FAILED, null, 0f, errorCode);
     }
 
     public EventType getType() {

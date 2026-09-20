@@ -11,6 +11,8 @@ public final class VoiceServiceStubTest {
     @Test public void ttsInitializationFailureIsNotFlattenedIntoGenericTaskFailure() {
         assertEquals(MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE,
                 VoiceServiceStub.publicVoiceFailureCode("TTS_INIT_FAILED"));
+        assertEquals(MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE,
+                VoiceServiceStub.publicVoiceFailureCode("TTS_PLAYBACK_FAILED"));
         assertEquals(MatrixErrorCode.TASK_FAILED,
                 VoiceServiceStub.publicVoiceFailureCode("AGENT_RUNNER_FAILED"));
     }

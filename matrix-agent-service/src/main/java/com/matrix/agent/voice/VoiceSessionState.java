@@ -43,6 +43,8 @@ public final class VoiceSessionState {
         THINKING,
         /** Demo 不进入(遇 NEEDS_CONFIRM 直接回 IDLE);保留以与量产状态机一致。 */
         CONFIRMING,
+        /** final 已提交给 ConversationCoordinator,等待 SubmissionReceipt(设计文档 §6.4)。 */
+        SUBMITTING,
         /** 播报 SpeakableResponse。 */
         SPEAKING,
         /** SPEAKING 中 barge-in 的瞬态,Controller 停 TTS + token.cancel() 后进 LISTENING。 */
@@ -129,9 +131,18 @@ public final class VoiceSessionState {
             case RECOGNIZING:
                 switch (type) {
                     case ACCEPTED: return State.THINKING;
+                    case SUBMISSION_STARTED: return State.SUBMITTING;
                     case REJECTED: return State.LISTENING;
                     // Demo 绕过 CONFIRMING:需确认的能力直接拒绝回 IDLE。
                     case NEEDS_CONFIRM: return State.IDLE;
+                    case CANCEL: return State.CANCELLED;
+                    case ERROR: return State.ERROR_ANNOUNCING;
+                    default: return null;
+                }
+            case SUBMITTING:
+                switch (type) {
+                    case SUBMISSION_ACCEPTED: return State.THINKING;
+                    case SUBMISSION_FAILED: return State.ERROR_ANNOUNCING;
                     case CANCEL: return State.CANCELLED;
                     case ERROR: return State.ERROR_ANNOUNCING;
                     default: return null;

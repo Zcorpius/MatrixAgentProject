@@ -122,7 +122,7 @@ public final class VoiceSessionControllerTest {
     @Test
     public void wakeFlow_singleCapability_usesFriendlyName() {
         AgentRunner runner = req -> outcome(TaskState.SUCCEEDED, StopReason.DONE,
-                successObs("climate.set_temperature"));
+                successObs("vehicle.climate.set_temperature"));
         VoiceSessionController c = newController(runner, direct(), direct());
         wake.fireWake();
         fireFinalThenEndpoint("开空调");

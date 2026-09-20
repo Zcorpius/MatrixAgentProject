@@ -9,9 +9,11 @@ import android.app.Application;
 import android.os.IBinder;
 
 import java.util.concurrent.ExecutorService;
+import java.util.function.Consumer;
 
 import com.matrix.agent.voice.VoiceRuntime;
 import com.matrix.agent.voice.VoiceRuntimeHolder;
+import com.matrix.agent.voice.VoiceSessionController;
 import com.matrix.agent.voice.system.VoiceRuntimeBootstrap;
 
 /** Voice domain boundary; PCM and runtime implementation never cross this graph. */
@@ -28,6 +30,14 @@ final class VoiceGraph {
     IBinder binder() { return service.asBinder(); }
     boolean isAvailable() { return VoiceRuntimeHolder.get() != null; }
     void shutdown() { service.shutdown(); }
+    void setBindingStore(com.matrix.agent.conversation.ConversationVoiceBindingStore store) {
+        service.setBindingStore(store);
+    }
+    void addControllerConfigurer(Consumer<VoiceSessionController> configurer) {
+        service.setControllerConfigurer(configurer);
+        VoiceRuntime runtime = VoiceRuntimeHolder.get();
+        if (runtime != null) runtime.addControllerConfigurer(configurer);
+    }
 
     /**
      * Create only the lightweight owner. Model download, Vosk assembly and microphone access

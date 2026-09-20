@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.matrix.agent.api.common.ConnectionState;
 import com.matrix.agent.api.common.MatrixServiceConstants;
 import com.matrix.agent.launcher.presentation.AgentTaskFragment;
+import com.matrix.agent.launcher.presentation.ConversationFragment;
 import com.matrix.agent.launcher.presentation.DownloadFragment;
 import com.matrix.agent.launcher.presentation.LauncherViewModel;
 import com.matrix.agent.launcher.presentation.LauncherViewModelFactory;
@@ -31,10 +32,12 @@ public final class LauncherActivity extends AppCompatActivity {
     private DrawerLayout drawer;
     private TextView status;
     private TextView pageTitle;
+    private Button conversation;
     private Button tasks;
     private Button voice;
     private Button models;
     private Button downloads;
+    private View conversationIndicator;
     private View tasksIndicator;
     private View voiceIndicator;
     private View modelsIndicator;
@@ -48,10 +51,12 @@ public final class LauncherActivity extends AppCompatActivity {
         applySystemBarInsets();
         status = findViewById(R.id.host_status);
         pageTitle = findViewById(R.id.page_title);
+        conversation = findViewById(R.id.nav_conversation);
         tasks = findViewById(R.id.nav_tasks);
         voice = findViewById(R.id.nav_voice);
         models = findViewById(R.id.nav_models);
         downloads = findViewById(R.id.nav_downloads);
+        conversationIndicator = findViewById(R.id.nav_conversation_indicator);
         tasksIndicator = findViewById(R.id.nav_tasks_indicator);
         voiceIndicator = findViewById(R.id.nav_voice_indicator);
         modelsIndicator = findViewById(R.id.nav_models_indicator);
@@ -60,6 +65,8 @@ public final class LauncherActivity extends AppCompatActivity {
         findViewById(R.id.drawer_close).setOnClickListener(ignored -> drawer.closeDrawer(GravityCompat.START));
         ((TextView) findViewById(R.id.drawer_version)).setText(
                 getString(R.string.launcher_version, versionName()));
+        conversation.setOnClickListener(v -> show(new ConversationFragment(), conversation,
+                R.string.nav_conversation));
         tasks.setOnClickListener(v -> show(new AgentTaskFragment(), tasks, R.string.nav_tasks));
         voice.setOnClickListener(v -> show(new VoiceFragment(), voice, R.string.nav_voice));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
@@ -89,7 +96,7 @@ public final class LauncherActivity extends AppCompatActivity {
         if (intent != null && MatrixServiceConstants.ACTION_OPEN_DOWNLOADS.equals(intent.getAction())) {
             show(new DownloadFragment(), downloads, R.string.nav_downloads);
         } else {
-            show(new AgentTaskFragment(), tasks, R.string.nav_tasks);
+            show(new ConversationFragment(), conversation, R.string.nav_conversation);
         }
     }
 
@@ -110,8 +117,9 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void selectNavigation(Button selected) {
-        Button[] buttons = {tasks, voice, models, downloads};
-        View[] indicators = {tasksIndicator, voiceIndicator, modelsIndicator, downloadsIndicator};
+        Button[] buttons = {conversation, tasks, voice, models, downloads};
+        View[] indicators = {conversationIndicator, tasksIndicator, voiceIndicator,
+                modelsIndicator, downloadsIndicator};
         for (int index = 0; index < buttons.length; index++) {
             Button button = buttons[index];
             boolean active = button == selected;

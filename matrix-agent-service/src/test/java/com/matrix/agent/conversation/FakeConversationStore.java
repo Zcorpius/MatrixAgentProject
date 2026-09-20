@@ -1,0 +1,296 @@
+package com.matrix.agent.conversation;
+
+import com.matrix.agent.conversation.ConversationDomain.PersistedMessageStatus;
+import com.matrix.agent.conversation.ConversationStore.ConversationRow;
+import com.matrix.agent.conversation.ConversationStore.InterruptedLink;
+import com.matrix.agent.conversation.ConversationStore.MessagePage;
+import com.matrix.agent.conversation.ConversationStore.MessageRow;
+import com.matrix.agent.conversation.ConversationStore.SubmittedUserMessage;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/** JVM 内存版 Store：复刻 Room 事务语义（幂等判重 / sequence 递增 / 终态丢弃已清线程）。 */
+public final class FakeConversationStore implements ConversationStore {
+
+    public final Map<String, ConversationRow> conversations = new LinkedHashMap<>();
+    public final Map<String, MessageRow> messages = new LinkedHashMap<>();
+    public final Map<String, String> idempotencyIndex = new HashMap<>();
+    public final Map<String, LinkRow> links = new LinkedHashMap<>();
+    public final List<String> systemNotes = new ArrayList<>();
+    public int clearCalls;
+
+    public static final class LinkRow {
+        public final String conversationTaskId;
+        public final String runtimeRequestId;
+        public final String conversationId;
+        public final String userMessageId;
+        public final boolean readOnlyHint;
+        public Integer terminalStatus;
+        public Long startedAtMs;
+
+        LinkRow(String conversationTaskId, String runtimeRequestId, String conversationId,
+                String userMessageId, boolean readOnlyHint) {
+            this.conversationTaskId = conversationTaskId;
+            this.runtimeRequestId = runtimeRequestId;
+            this.conversationId = conversationId;
+            this.userMessageId = userMessageId;
+            this.readOnlyHint = readOnlyHint;
+        }
+    }
+
+    public ConversationRow seedConversation(String conversationId, String ownerUserId) {
+        ConversationRow row = new ConversationRow(conversationId, ownerUserId, "DRIVER",
+                null, false, 1L, 1L);
+        conversations.put(conversationId, row);
+        return row;
+    }
+
+    @Override
+    public ConversationRow createConversation(NewConversation command) {
+        ConversationRow row = new ConversationRow(command.conversationId(),
+                command.ownerUserId(), command.vehicleZone(), command.title(), false,
+                System.currentTimeMillis(), System.currentTimeMillis());
+        conversations.put(row.conversationId(), row);
+        return row;
+    }
+
+    @Override
+    public ConversationRow findConversation(String conversationId) {
+        return conversations.get(conversationId);
+    }
+
+    @Override
+    public List<ConversationRow> listConversations(String ownerUserId, boolean includeArchived,
+            int limit) {
+        List<ConversationRow> rows = new ArrayList<>();
+        for (ConversationRow row : conversations.values()) {
+            if (row.ownerUserId().equals(ownerUserId) && (includeArchived || !row.archived())) {
+                rows.add(row);
+            }
+        }
+        return rows.size() > limit ? rows.subList(0, limit) : rows;
+    }
+
+    @Override
+    public MessageRow findMessage(String messageId) {
+        return messages.get(messageId);
+    }
+
+    @Override
+    public MessageRow findMessageByIdempotencyKey(String idempotencyKey) {
+        String messageId = idempotencyIndex.get(idempotencyKey);
+        return messageId == null ? null : messages.get(messageId);
+    }
+
+    @Override
+    public List<MessageRow> latestMessages(String conversationId, int limit) {
+        return ascending(conversationId, limit);
+    }
+
+    @Override
+    public List<MessageRow> latestCompletedForSeed(String conversationId, int maxEntries) {
+        List<MessageRow> completed = new ArrayList<>();
+        for (MessageRow row : ascending(conversationId, Integer.MAX_VALUE)) {
+            if (row.statusWire() == PersistedMessageStatus.COMPLETED.wire()
+                    && (row.roleWire() == 0 || row.roleWire() == 1)) {
+                completed.add(row);
+            }
+        }
+        return completed.size() > maxEntries
+                ? new ArrayList<>(completed.subList(completed.size() - maxEntries,
+                        completed.size()))
+                : completed;
+    }
+
+    @Override
+    public MessagePage pageMessages(String conversationId, long beforeSequenceExclusive,
+            int limit) {
+        List<MessageRow> all = ascending(conversationId, Integer.MAX_VALUE);
+        List<MessageRow> filtered = new ArrayList<>();
+        for (MessageRow row : all) {
+            if (beforeSequenceExclusive < 0 || row.sequenceNo() < beforeSequenceExclusive) {
+                filtered.add(row);
+            }
+        }
+        boolean hasMore = filtered.size() > limit;
+        return new MessagePage(
+                hasMore ? new ArrayList<>(filtered.subList(0, limit)) : filtered, hasMore);
+    }
+
+    @Override
+    public synchronized SubmittedUserMessage submitUserMessage(UserSubmission command) {
+        if (command.idempotencyKey() != null
+                && idempotencyIndex.containsKey(command.idempotencyKey())) {
+            return new SubmittedUserMessage(
+                    messages.get(idempotencyIndex.get(command.idempotencyKey())).sequenceNo(),
+                    true);
+        }
+        ConversationRow conversation = conversations.get(command.conversationId());
+        if (conversation == null) {
+            throw new IllegalArgumentException("conversation 不存在: " + command.conversationId());
+        }
+        if (conversation.archived()) {
+            throw new IllegalArgumentException("conversation 已归档: " + command.conversationId());
+        }
+        long sequence = 1;
+        for (MessageRow row : messages.values()) {
+            if (row.conversationId().equals(command.conversationId())
+                    && row.sequenceNo() >= sequence) {
+                sequence = row.sequenceNo() + 1;
+            }
+        }
+        long now = System.currentTimeMillis();
+        messages.put(command.messageId(), new MessageRow(command.messageId(),
+                command.conversationId(), sequence, ROLE_USER,
+                PersistedMessageStatus.ACCEPTED.wire(), command.channelWire(), command.text(),
+                command.languageTag(), command.conversationTaskId(), 0, now, now));
+        if (command.idempotencyKey() != null) {
+            idempotencyIndex.put(command.idempotencyKey(), command.messageId());
+        }
+        links.put(command.conversationTaskId(), new LinkRow(command.conversationTaskId(),
+                command.runtimeRequestId(), command.conversationId(), command.messageId(),
+                command.readOnlyHint()));
+        return new SubmittedUserMessage(sequence, false);
+    }
+
+    @Override
+    public boolean markRunning(String conversationTaskId) {
+        LinkRow link = links.get(conversationTaskId);
+        if (link == null || link.terminalStatus != null) {
+            return false;
+        }
+        link.startedAtMs = System.currentTimeMillis();
+        MessageRow user = messages.get(link.userMessageId);
+        messages.put(link.userMessageId, withStatus(user,
+                PersistedMessageStatus.RUNNING.wire(), 0));
+        return true;
+    }
+
+    @Override
+    public boolean writeTerminal(TerminalWrite command) {
+        LinkRow link = links.get(command.conversationTaskId());
+        if (link == null) {
+            return false;
+        }
+        if (!conversations.containsKey(link.conversationId)) {
+            return false; // 清库后丢弃
+        }
+        long now = System.currentTimeMillis();
+        MessageRow user = messages.get(link.userMessageId);
+        messages.put(link.userMessageId,
+                withStatus(user, command.userStatusWire(), command.failureCode()));
+        if (command.assistantText() != null && !command.assistantText().isBlank()) {
+            long sequence = 1;
+            for (MessageRow row : messages.values()) {
+                if (row.conversationId().equals(link.conversationId)
+                        && row.sequenceNo() >= sequence) {
+                    sequence = row.sequenceNo() + 1;
+                }
+            }
+            messages.put(command.assistantMessageId(), new MessageRow(
+                    command.assistantMessageId(), link.conversationId, sequence, ROLE_ASSISTANT,
+                    command.userStatusWire(), MessageRow.CHANNEL_NONE_WIRE,
+                    command.assistantText(), null, command.conversationTaskId(),
+                    command.failureCode(), now, now));
+        }
+        link.terminalStatus = command.userStatusWire();
+        return true;
+    }
+
+    @Override
+    public long appendSystemNote(String conversationId, String text) {
+        long sequence = 1;
+        for (MessageRow row : messages.values()) {
+            if (row.conversationId().equals(conversationId) && row.sequenceNo() >= sequence) {
+                sequence = row.sequenceNo() + 1;
+            }
+        }
+        messages.put(java.util.UUID.randomUUID().toString(), new MessageRow(
+                java.util.UUID.randomUUID().toString(), conversationId, sequence, ROLE_SYSTEM,
+                PersistedMessageStatus.COMPLETED.wire(), MessageRow.CHANNEL_NONE_WIRE, text,
+                null, null, 0, System.currentTimeMillis(), System.currentTimeMillis()));
+        systemNotes.add(text);
+        return sequence;
+    }
+
+    @Override
+    public List<InterruptedLink> loadNonTerminalLinks() {
+        List<InterruptedLink> rows = new ArrayList<>();
+        for (LinkRow link : links.values()) {
+            if (link.terminalStatus == null) {
+                rows.add(new InterruptedLink(link.conversationTaskId, link.conversationId,
+                        link.userMessageId, link.readOnlyHint));
+            }
+        }
+        return rows;
+    }
+
+    @Override
+    public void writeRecoveryOutcome(String conversationTaskId, int userStatusWire,
+            int failureCode) {
+        LinkRow link = links.get(conversationTaskId);
+        if (link == null || link.terminalStatus != null) {
+            return;
+        }
+        MessageRow user = messages.get(link.userMessageId);
+        messages.put(link.userMessageId,
+                withStatus(user, userStatusWire, failureCode));
+        link.terminalStatus = userStatusWire;
+    }
+
+    @Override
+    public String findRunningTaskId(String conversationId) {
+        for (LinkRow link : links.values()) {
+            if (link.conversationId.equals(conversationId) && link.terminalStatus == null
+                    && link.startedAtMs != null) {
+                return link.conversationTaskId;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public int clearForUsers(List<String> userIds) {
+        clearCalls++;
+        int removed = 0;
+        for (String userId : userIds) {
+            for (ConversationRow row : new ArrayList<>(conversations.values())) {
+                if (row.ownerUserId().equals(userId)) {
+                    conversations.remove(row.conversationId());
+                    removed++;
+                }
+            }
+        }
+        messages.values().removeIf(row -> !conversations.containsKey(row.conversationId()));
+        links.values().removeIf(link -> !conversations.containsKey(link.conversationId));
+        return removed;
+    }
+
+    private static final int ROLE_USER = 0;
+    private static final int ROLE_ASSISTANT = 1;
+    private static final int ROLE_SYSTEM = 2;
+
+    private static MessageRow withStatus(MessageRow row, int status, int failureCode) {
+        return new MessageRow(row.messageId(), row.conversationId(), row.sequenceNo(),
+                row.roleWire(), status, row.channelWire(), row.text(), row.languageTag(),
+                row.conversationTaskId(), failureCode, row.createdAtMs(),
+                System.currentTimeMillis());
+    }
+
+    private List<MessageRow> ascending(String conversationId, int limit) {
+        List<MessageRow> rows = new ArrayList<>();
+        for (MessageRow row : messages.values()) {
+            if (row.conversationId().equals(conversationId)) {
+                rows.add(row);
+            }
+        }
+        rows.sort(Comparator.comparingLong(MessageRow::sequenceNo));
+        return rows.size() > limit ? new ArrayList<>(rows.subList(rows.size() - limit,
+                rows.size())) : rows;
+    }
+}

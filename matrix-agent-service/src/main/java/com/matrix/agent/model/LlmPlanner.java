@@ -40,8 +40,11 @@ import java.util.TreeSet;
 public final class LlmPlanner {
     private static final String TAG = "MatrixAgent";
     private static final String PROMPT_PREFIX =
-            "你是车机任务规划器。只输出一个 JSON 对象，不要 Markdown。"
+            "你是车机助手。只输出一个 JSON 对象，不要 Markdown。"
             + "格式：{\"summary\":\"...\",\"steps\":[{\"capability\":\"...\",\"arguments\":{}}]}。"
+            + "如果用户的请求是聊天、询问身份、问候等不需要执行操作的对话，"
+            + "直接在 summary 中用自然语言回答，steps 返回空数组 []。"
+            + "只有需要实际控制设备或查询数据时才调用能力。"
             + "只能使用下面注册的能力，不允许创造能力名。最多8步。\n";
 
     private final LlmClient client;

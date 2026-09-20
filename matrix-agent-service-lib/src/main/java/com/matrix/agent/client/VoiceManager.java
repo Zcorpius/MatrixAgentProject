@@ -1,6 +1,7 @@
 package com.matrix.agent.client;
 
 import android.os.IBinder;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.util.Log;
 
@@ -11,12 +12,18 @@ import com.matrix.agent.api.voice.VoiceOperationResult;
 import com.matrix.agent.api.voice.VoiceServiceStatus;
 import com.matrix.agent.api.voice.VoiceSessionHandle;
 import com.matrix.agent.api.voice.VoiceSessionRequest;
+import com.matrix.agent.api.voice.TencentTtsConfig;
+import com.matrix.agent.api.voice.TencentTtsProvisionInput;
+import com.matrix.agent.api.voice.IVoiceTtsConfigCallback;
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.download.ModelDownloadInfo;
 
 import java.util.List;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -124,6 +131,19 @@ public final class VoiceManager extends MatrixManagerBase {
         }
     }
 
+    /** PTT 松开发送：停止采音并冲刷当前识别结果（设计文档 §6.2 契约变更）。 */
+    public VoiceOperationResult finishSession(String sessionId, String clientOperationId) {
+        IVoiceService s = service;
+        if (s == null) {
+            return unavailable(clientOperationId, sessionId);
+        }
+        try {
+            return s.finishSession(sessionId, clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailable(clientOperationId, sessionId));
+        }
+    }
+
     /** Returns the Host-owned, persisted state of the bundled offline speech models. */
     public List<ModelDownloadInfo> listOfflineModels() {
         IVoiceService s = service;
@@ -155,6 +175,143 @@ public final class VoiceManager extends MatrixManagerBase {
         } catch (RemoteException e) {
             return handleRemoteException(e, unavailable(clientOperationId, null));
         }
+    }
+
+    /** 当前 ASR 引擎名（"VOSK" / "SHERPA"）；断线期返回 null。 */
+    public String getAsrEngine() {
+        IVoiceService s = service;
+        if (s == null) return null;
+        try {
+            return s.getAsrEngine();
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return null;
+        }
+    }
+
+    /** 切换 ASR 引擎（空闲期调用；下次语音装配生效）。 */
+    public VoiceOperationResult setAsrEngine(String engine, String clientOperationId) {
+        IVoiceService s = service;
+        if (s == null) return unavailable(clientOperationId, null);
+        try {
+            return s.setAsrEngine(engine, clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailable(clientOperationId, null));
+        }
+    }
+
+    /** Returns only safe configuration metadata; Host credentials are intentionally non-readable. */
+    public TencentTtsConfig getTencentTtsConfig() {
+        IVoiceService s = service;
+        if (s == null) return new TencentTtsConfig(false, TencentTtsConfig.DEFAULT_VOICE_TYPE,
+                TencentTtsConfig.DEFAULT_EMOTION, TencentTtsConfig.DEFAULT_EMOTION_INTENSITY);
+        try {
+            return s.getTencentTtsConfig();
+        } catch (RemoteException e) {
+            return handleRemoteException(e, new TencentTtsConfig(false,
+                    TencentTtsConfig.DEFAULT_VOICE_TYPE, TencentTtsConfig.DEFAULT_EMOTION,
+                    TencentTtsConfig.DEFAULT_EMOTION_INTENSITY));
+        }
+    }
+
+    /**
+     * Sends SecretId/SecretKey through a one-shot pipe. They are never placed in a Binder parcel
+     * or returned by any API; callers retain ownership and should wipe both arrays after return.
+     */
+    public VoiceOperationResult provisionTencentTts(TencentTtsProvisionInput input,
+            char[] secretId, char[] secretKey, String clientOperationId,
+            TencentTtsConfigListener listener) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(secretId, "secretId");
+        Objects.requireNonNull(secretKey, "secretKey");
+        Objects.requireNonNull(listener, "listener");
+        IVoiceService target = service;
+        if (target == null) return unavailable(clientOperationId, null);
+        ParcelFileDescriptor readEnd = null;
+        ParcelFileDescriptor writeEnd = null;
+        byte[] payload = null;
+        try {
+            ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
+            readEnd = pipe[0];
+            writeEnd = pipe[1];
+            payload = encodeTencentCredential(secretId, secretKey);
+            IVoiceTtsConfigCallback bridge = new IVoiceTtsConfigCallback.Stub() {
+                @Override public void onTencentTtsConfigured(String operationId, int code) {
+                    eventHandler().post(() -> listener.onFinished(operationId, code));
+                }
+            };
+            VoiceOperationResult accepted;
+            try {
+                accepted = target.provisionTencentTts(input, readEnd, clientOperationId, bridge);
+            } finally {
+                closeQuietly(readEnd);
+                readEnd = null;
+            }
+            if (accepted == null || accepted.code != MatrixErrorCode.SUCCESS) return accepted;
+            final ParcelFileDescriptor writer = writeEnd;
+            final byte[] bytes = payload;
+            if (!matrixAgent.executeCredentialPipe(() -> {
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                        writer.getFileDescriptor())) {
+                    out.write(bytes);
+                    out.flush();
+                } catch (Exception ignored) {
+                    // The Host receives EOF and returns a stable failure through the callback.
+                } finally {
+                    Arrays.fill(bytes, (byte) 0);
+                    closeQuietly(writer);
+                }
+            })) {
+                Arrays.fill(bytes, (byte) 0);
+                closeQuietly(writer);
+                return unavailable(clientOperationId, null);
+            }
+            writeEnd = null;
+            payload = null;
+            return accepted;
+        } catch (Exception error) {
+            closeQuietly(readEnd);
+            closeQuietly(writeEnd);
+            if (payload != null) Arrays.fill(payload, (byte) 0);
+            return unavailable(clientOperationId, null);
+        }
+    }
+
+    public VoiceOperationResult clearTencentTts(String clientOperationId) {
+        IVoiceService s = service;
+        if (s == null) return unavailable(clientOperationId, null);
+        try {
+            return s.clearTencentTts(clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailable(clientOperationId, null));
+        }
+    }
+
+    private static byte[] encodeTencentCredential(char[] secretId, char[] secretKey)
+            throws CharacterCodingException {
+        byte[] id = null;
+        byte[] key = null;
+        try {
+            id = ModelManager.encodeUtf8Secret(secretId);
+            key = ModelManager.encodeUtf8Secret(secretKey);
+            if (id.length == 0 || key.length == 0 || id.length > 256 || key.length > 512) {
+                throw new IllegalArgumentException("invalid Tencent credential length");
+            }
+            return ByteBuffer.allocate(Integer.BYTES + id.length + key.length)
+                    .putInt(id.length).put(id).put(key).array();
+        } finally {
+            if (id != null) Arrays.fill(id, (byte) 0);
+            if (key != null) Arrays.fill(key, (byte) 0);
+        }
+    }
+
+    private static void closeQuietly(ParcelFileDescriptor descriptor) {
+        if (descriptor == null) return;
+        try { descriptor.close(); } catch (Exception ignored) { }
+    }
+
+    public interface TencentTtsConfigListener {
+        void onFinished(String clientOperationId, int code);
     }
 
     /** listener 重载（常规入口）：close() 显式退订；重连后自动重注册。 */

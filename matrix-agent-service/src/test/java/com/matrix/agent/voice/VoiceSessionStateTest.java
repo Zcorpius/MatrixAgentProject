@@ -62,6 +62,13 @@ public final class VoiceSessionStateTest {
     }
 
     @Test
+    public void recognizing_submissionStarted_goesToSubmitting_thenReceiptGoesToThinking() {
+        VoiceSessionState s = reach(VoiceSessionState.State.RECOGNIZING);
+        assertEquals(VoiceSessionState.State.SUBMITTING, s.transit(VoiceEvent.submissionStarted()));
+        assertEquals(VoiceSessionState.State.THINKING, s.transit(VoiceEvent.submissionAccepted()));
+    }
+
+    @Test
     public void recognizing_rejected_goesBackToListening() {
         VoiceSessionState s = reach(VoiceSessionState.State.RECOGNIZING);
         assertEquals(VoiceSessionState.State.LISTENING, s.transit(VoiceEvent.rejected()));
@@ -195,6 +202,13 @@ public final class VoiceSessionStateTest {
                 s.transit(VoiceEvent.finalTranscript("x", 0.9f));
                 s.transit(VoiceEvent.accepted());
                 break;
+            case SUBMITTING:
+                s.transit(VoiceEvent.wake());
+                s.transit(VoiceEvent.captureStarted());
+                s.transit(VoiceEvent.silenceTimeout());
+                s.transit(VoiceEvent.finalTranscript("x", 0.9f));
+                s.transit(VoiceEvent.submissionStarted());
+                break;
             case SPEAKING:
                 s.transit(VoiceEvent.wake());
                 s.transit(VoiceEvent.captureStarted());
@@ -238,6 +252,7 @@ public final class VoiceSessionStateTest {
             case FINAL: return VoiceEvent.finalTranscript("x", 0.9f);
             case ASR_ERROR: return VoiceEvent.asrError("E");
             case ACCEPTED: return VoiceEvent.accepted();
+            case SUBMISSION_STARTED: return VoiceEvent.submissionStarted();
             case REJECTED: return VoiceEvent.rejected();
             case NEEDS_CONFIRM: return VoiceEvent.needsConfirm();
             case TERMINAL: return VoiceEvent.terminal();
@@ -247,6 +262,8 @@ public final class VoiceSessionStateTest {
             case FOCUS_LOSS: return VoiceEvent.focusLoss();
             case ERROR: return VoiceEvent.error("E");
             case RESET: return VoiceEvent.reset();
+            case SUBMISSION_ACCEPTED: return VoiceEvent.submissionAccepted();
+            case SUBMISSION_FAILED: return VoiceEvent.submissionFailed("E");
             default: throw new IllegalArgumentException(type.name());
         }
     }

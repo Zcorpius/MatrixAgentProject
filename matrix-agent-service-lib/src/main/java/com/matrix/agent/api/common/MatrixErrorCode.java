@@ -37,6 +37,10 @@ public final class MatrixErrorCode {
     public static final int CONTRACT_MISMATCH = 13;
     /** Speech was recognized and handled, but this device has no usable system TTS engine. */
     public static final int VOICE_OUTPUT_UNAVAILABLE = 14;
+    /** Durable conversation message could not converge after a Host process death. */
+    public static final int PROCESS_INTERRUPTED = 15;
+    /** Operation is valid but the target state does not allow it right now (e.g. no running task to append to). */
+    public static final int INVALID_STATE = 16;
 
     private MatrixErrorCode() {
     }

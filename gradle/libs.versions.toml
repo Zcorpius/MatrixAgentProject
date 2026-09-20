@@ -37,6 +37,14 @@ okhttp = "4.12.0"
 jtokkit = "1.1.0"
 vosk = "0.3.75"
 
+# 端侧语音 [新增]
+# sherpa-onnx 官方 AAR 只从 GitHub releases 分发（无 Maven 坐标），经 :ondevice 的
+# 下载任务钉死版本 + SHA-256 后以本地 AAR 消费；其 Kotlin API 类运行时需要 kotlin-stdlib
+# （本地 AAR 无 POM 传递依赖，须显式声明）。
+kotlinStdlib = "2.1.21"
+# Sherpa 模型上游（k2-fsa asr-models/kws-models）发布为 tar.bz2，java.util.zip 不解此格式
+commonsCompress = "1.27.1"
+
 # 测试 [老工程已验证]
 junit = "4.13.2"
 orgJson = "20240303"
@@ -73,6 +81,10 @@ okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver",
 # 业务
 jtokkit = { group = "com.knuddels", name = "jtokkit", version.ref = "jtokkit" }
 vosk = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
+
+# 端侧语音（:ondevice sherpa-onnx AAR 运行时依赖 / :matrix-agent-service tar.bz2 解压）
+kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlinStdlib" }
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 
 # JVM 单测
 junit = { group = "junit", name = "junit", version.ref = "junit" }

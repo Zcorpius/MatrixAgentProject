@@ -1,5 +1,6 @@
 package com.matrix.agent.task.scheduler;
 
+import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.task.redact.SafeLog;
 import com.matrix.agent.task.*;
 
@@ -60,6 +61,42 @@ public final class TaskRequestFactory {
                 .readOnlyHint(intentReadOnly)
                 .epoch(capturedEpoch)
                 .memorySaveAllowed(memorySaveAllowed);
+    }
+
+    /**
+     * 对话任务的 request 构造入口（keyed lane 出队时调用，设计文档 §4.3 M-1/M-2 裁决）。
+     *
+     * <p>与 {@link #newRequestBuilder} 的关键差异：
+     * <ul>
+     *   <li><b>不重跑分类器</b>——readOnlyHint / memorySaveAllowed 取提交期快照，
+     *       恢复对账与实际执行同源不漂移；</li>
+     *   <li><b>requestId 注入</b>——复用提交期持久化的稳定 UUID（审计/轨迹 id 不漂移）；</li>
+     *   <li><b>deadline 从本次构造起算</b>——排队等待不消耗任务预算；</li>
+     *   <li><b>种子注入</b>——跨任务对话历史（出队时装配，见 ConversationTaskSubmitter）。</li>
+     * </ul></p>
+     */
+    public AgentRequest.Builder newPreparedRequestBuilder(
+            ConversationTaskSubmitter.PreparedTask task,
+            com.matrix.agent.identity.CancellationToken token) {
+        com.matrix.agent.identity.VehicleZone zone = task.actor() == Actor.DRIVER
+                ? VehicleZone.DRIVER : VehicleZone.PASSENGER;
+        long capturedEpoch = memoryStore == null ? 0L : memoryStore.currentEpoch();
+        return AgentRequest.builder(task.text(), task.actor())
+                .requestId(task.runtimeRequestId())
+                .sessionId(task.agentSessionId())
+                .arbitrationKey(task.arbitrationKey())
+                .occupantZone(zone)
+                .inputSource(task.inputSource())
+                .languageTag(task.languageTag())
+                .asrConfidence(task.asrConfidence())
+                .confidenceAvailable(task.confidenceAvailable())
+                .timeoutMillis(budget.getTotalDeadlineMillis())
+                .cancellationToken(token)
+                .vehicleState(vehicleStateSource.snapshot())
+                .readOnlyHint(task.classification().readOnlyHint())
+                .memorySaveAllowed(task.classification().memorySaveAllowed())
+                .epoch(capturedEpoch)
+                .conversationSeed(task.seed());
     }
 
     public void setIntentClassifier(IntentClassifier classifier) {

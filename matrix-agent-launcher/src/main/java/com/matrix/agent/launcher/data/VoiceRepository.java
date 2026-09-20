@@ -6,6 +6,8 @@ import com.matrix.agent.api.voice.VoiceOperationResult;
 import com.matrix.agent.api.voice.VoiceServiceStatus;
 import com.matrix.agent.api.voice.VoiceSessionHandle;
 import com.matrix.agent.api.voice.VoiceSessionRequest;
+import com.matrix.agent.api.voice.TencentTtsConfig;
+import com.matrix.agent.api.voice.TencentTtsProvisionInput;
 import com.matrix.agent.api.download.ModelDownloadInfo;
 import com.matrix.agent.client.VoiceManager;
 import com.matrix.agent.client.VoiceSessionListener;
@@ -61,6 +63,15 @@ public final class VoiceRepository {
         }, receiver);
     }
 
+    /** User completes PTT: flush ASR final instead of cancelling it. */
+    public void finish(@NonNull String sessionId, @NonNull String operationId,
+            @NonNull Consumer<LauncherHostGateway.Result<VoiceOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.finishSession(sessionId, operationId);
+        }, receiver);
+    }
+
     public void interrupt(@NonNull String operationId,
             @NonNull Consumer<LauncherHostGateway.Result<VoiceOperationResult>> receiver) {
         gateway.execute(agent -> {
@@ -89,6 +100,48 @@ public final class VoiceRepository {
         gateway.execute(agent -> {
             VoiceManager manager = agent.getVoiceManager();
             return manager == null ? null : manager.installOfflineModels(operationId);
+        }, receiver);
+    }
+
+    /** 当前 ASR 引擎名（"VOSK" / "SHERPA"）；Host 未连接时回调 null。 */
+    public void asrEngine(@NonNull Consumer<LauncherHostGateway.Result<String>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.getAsrEngine();
+        }, receiver);
+    }
+
+    public void setAsrEngine(@NonNull String engine, @NonNull String operationId,
+            @NonNull Consumer<LauncherHostGateway.Result<VoiceOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.setAsrEngine(engine, operationId);
+        }, receiver);
+    }
+
+    public void tencentTtsConfig(@NonNull Consumer<LauncherHostGateway.Result<TencentTtsConfig>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.getTencentTtsConfig();
+        }, receiver);
+    }
+
+    public void provisionTencentTts(@NonNull TencentTtsProvisionInput input, @NonNull char[] secretId,
+            @NonNull char[] secretKey, @NonNull String operationId,
+            @NonNull VoiceManager.TencentTtsConfigListener listener,
+            @NonNull Consumer<LauncherHostGateway.Result<VoiceOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.provisionTencentTts(input, secretId, secretKey,
+                    operationId, listener);
+        }, receiver);
+    }
+
+    public void clearTencentTts(@NonNull String operationId,
+            @NonNull Consumer<LauncherHostGateway.Result<VoiceOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            VoiceManager manager = agent.getVoiceManager();
+            return manager == null ? null : manager.clearTencentTts(operationId);
         }, receiver);
     }
 

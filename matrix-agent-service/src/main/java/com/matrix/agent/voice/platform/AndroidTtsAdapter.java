@@ -6,7 +6,7 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 
 import com.matrix.agent.voice.SpeakableResponse;
-import com.matrix.agent.voice.port.TtsPort;
+import com.matrix.agent.voice.port.ManagedTtsPort;
 
 import java.util.Locale;
 
@@ -22,7 +22,7 @@ import java.util.Locale;
  * (P2-B: shutdown 与迟到 onInit TOCTOU)。progress callback 不持锁(避免与 speak 死锁),靠 volatile
  * closed + listener 快照 + Controller 侧 utteranceMatches/generation 兜底。
  */
-public final class AndroidTtsAdapter implements TtsPort {
+public final class AndroidTtsAdapter implements ManagedTtsPort {
     private static final String TAG = "MatrixAgent";
 
     private TextToSpeech tts;

@@ -23,7 +23,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * 语音运行时(main 源集;引擎无关)。
@@ -111,6 +113,11 @@ public final class VoiceRuntime {
     private volatile long generation;
     private volatile VoiceAssembly assembly;
     private volatile VoiceSessionController controller;
+    /** 跨引擎重建仍需重放的 controller 配置（对话桥/预滚/路由等）。 */
+    private final CopyOnWriteArrayList<Consumer<VoiceSessionController>> controllerConfigurers =
+            new CopyOnWriteArrayList<>();
+    private volatile String pendingVoiceSessionId;
+    private volatile String pendingBoundConversationId;
     /** 依赖接口(测试注入假件驱动恢复路径;生产经装配工厂)。 */
     private volatile VoiceCapturePort capture;
     private volatile StatusListener statusListener;
@@ -254,6 +261,7 @@ public final class VoiceRuntime {
             }
             this.assembly = built;
             this.controller = built.controller();
+            applyControllerConfiguration(controller);
             this.capture = built.capture();
             this.capture.setTerminationListener(this::onCaptureTerminated); // #5:采音终止→恢复链入口
             this.built = true;
@@ -354,6 +362,62 @@ public final class VoiceRuntime {
     public boolean isSessionActive() {
         VoiceSessionController c = controller;
         return c != null && c.currentState() != VoiceSessionState.State.IDLE;
+    }
+
+    /** 当前装配的 Controller（未装配返回 null）；VoiceServiceStub 用此注入对话桥。 */
+    public VoiceSessionController getController() {
+        return controller;
+    }
+
+    /**
+     * 注册一次、应用到当前及未来 controller。引擎切换会重建 VoiceRuntime 内部 assembly，
+     * 因此不能只在“当前 controller 非空”时做一次性注入。
+     */
+    public void addControllerConfigurer(Consumer<VoiceSessionController> configurer) {
+        if (configurer == null) throw new IllegalArgumentException("configurer 不能为空");
+        controllerConfigurers.addIfAbsent(configurer);
+        VoiceSessionController current = controller;
+        if (current != null) configureController(configurer, current);
+    }
+
+    /** PTT session/binding 是一次会话上下文；controller 尚未装配时先暂存，装配后原子补注入。 */
+    public void setVoiceSessionContext(String voiceSessionId, String boundConversationId) {
+        this.pendingVoiceSessionId = voiceSessionId;
+        this.pendingBoundConversationId = boundConversationId;
+        VoiceSessionController current = controller;
+        if (current != null) {
+            current.setVoiceSessionId(voiceSessionId);
+            current.setBoundConversationId(boundConversationId);
+        }
+    }
+
+    public void clearVoiceSessionContext(String voiceSessionId) {
+        if (voiceSessionId == null || !voiceSessionId.equals(pendingVoiceSessionId)) return;
+        pendingVoiceSessionId = null;
+        pendingBoundConversationId = null;
+        VoiceSessionController current = controller;
+        if (current != null) current.setBoundConversationId(null);
+    }
+
+    private void applyControllerConfiguration(VoiceSessionController value) {
+        String session = pendingVoiceSessionId;
+        if (session != null) {
+            value.setVoiceSessionId(session);
+            value.setBoundConversationId(pendingBoundConversationId);
+        }
+        for (Consumer<VoiceSessionController> configurer : controllerConfigurers) {
+            configureController(configurer, value);
+        }
+    }
+
+    private static void configureController(Consumer<VoiceSessionController> configurer,
+            VoiceSessionController value) {
+        try {
+            configurer.accept(value);
+        } catch (RuntimeException failure) {
+            Log.e(TAG, "[VoiceRuntime] controller 配置失败", failure);
+            throw failure;
+        }
     }
 
     /** True once native recognizers/models have been assembled and must not be deleted on disk. */
@@ -564,6 +628,7 @@ public final class VoiceRuntime {
             StatusListener statusListener) {
         synchronized (lifecycleLock) {
             this.controller = controller;
+            applyControllerConfiguration(controller);
             this.capture = capture;
             this.statusListener = statusListener;
             this.built = true;

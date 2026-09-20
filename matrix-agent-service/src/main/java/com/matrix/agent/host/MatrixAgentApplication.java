@@ -6,9 +6,12 @@ import android.app.Application;
 
 import com.matrix.agent.download.DownloadRuntime;
 import com.matrix.agent.download.DownloadRuntimeProvider;
+import com.matrix.agent.voice.VoiceAssemblyFactory;
 import com.matrix.agent.voice.VoiceRuntime;
 import com.matrix.agent.voice.system.VoiceRuntimeProvider;
+import com.matrix.agent.voice.VoiceEnginePreference;
 import com.matrix.agent.voice.vosk.VoskVoiceAssemblyFactory;
+import com.matrix.agent.voice.sherpa.SherpaVoiceAssemblyFactory;
 
 public final class MatrixAgentApplication extends Application implements DownloadRuntimeProvider,
         VoiceRuntimeProvider {
@@ -43,9 +46,18 @@ public final class MatrixAgentApplication extends Application implements Downloa
     public VoiceRuntime createVoiceRuntime(Application application) {
         AppContainer c = getContainer();
         MatrixExecutorRegistry registry = c.getExecutorRegistry();
+        // ASR 引擎按偏好装配（语音页可切换；下次 VoiceRuntime 构建生效）。
+        // Sherpa 需要 ASR 模型就绪（prepare fail-closed），缺模型时装配失败由
+        // VoiceRuntime 语义收敛——不静默回退 Vosk，保证用户对"当前引擎"的预期。
+        VoiceAssemblyFactory factory = new VoiceEnginePreference(this).isSherpaSelected()
+                ? new SherpaVoiceAssemblyFactory(application, c.getModelDownloadDao(),
+                        registry.voiceCaptureThreadFactory(), c.getHttpClient().download(),
+                        c.getHttpClient().provider())
+                : new VoskVoiceAssemblyFactory(application, c.getModelDownloadDao(),
+                        registry.voiceCaptureThreadFactory(), c.getHttpClient().download(),
+                        c.getHttpClient().provider());
         return new VoiceRuntime(application, c.getAgentRuntimeRepository(),
-                new VoskVoiceAssemblyFactory(application, c.getModelDownloadDao(), registry.voiceCaptureThreadFactory(),
-                        c.getHttpClient().download()),
+                factory,
                 registry.voiceDownloadExecutor(), registry.voiceStateExecutor(),
                 registry.voiceAgentExecutor(), registry.voiceLifecycleExecutor(),
                 registry.voiceTimeoutScheduler());

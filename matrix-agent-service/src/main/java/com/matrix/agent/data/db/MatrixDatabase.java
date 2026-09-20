@@ -58,9 +58,12 @@ import java.util.Arrays;
                 ModelDownloadEntity.class,
                 AgentTaskEntity.class,
                 AgentTaskEventEntity.class,
-                AgentTaskOperationEntity.class
+                AgentTaskOperationEntity.class,
+                com.matrix.agent.data.conversation.ConversationEntity.class,
+                com.matrix.agent.data.conversation.ConversationMessageEntity.class,
+                com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class
         },
-        version = 6,
+        version = 7,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -74,6 +77,9 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract AuditEventDao auditEventDao();
     public abstract ModelDownloadDao modelDownloadDao();
     public abstract AgentTaskDao agentTaskDao();
+    public abstract com.matrix.agent.data.conversation.ConversationDao conversationDao();
+    public abstract com.matrix.agent.data.conversation.ConversationMessageDao conversationMessageDao();
+    public abstract com.matrix.agent.data.conversation.ConversationTaskLinkDao conversationTaskLinkDao();
 
     /**
      * schema v1 → v2 迁移——audit_event 加 userId 列 + idx_audit_user_zone 索引。
@@ -178,6 +184,69 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
+     * v6 → v7：对话域三表（设计文档 §5.2）。SQL 与 @Entity 注解逐列对齐——
+     * Room 校验以实体派生 schema 为准，列名/类型/NOT NULL/索引名任何偏差都会在
+     * 首次打开时抛 IllegalStateException（fail-closed，不静默重建）。
+     */
+    public static final Migration MIGRATION_6_7 = new Migration(6, 7) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation` ("
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`owner_user_id` TEXT NOT NULL, "
+                    + "`vehicle_zone` TEXT NOT NULL, "
+                    + "`title` TEXT, "
+                    + "`created_at_ms` INTEGER NOT NULL, "
+                    + "`updated_at_ms` INTEGER NOT NULL, "
+                    + "`archived_at_ms` INTEGER, "
+                    + "`schema_version` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`conversation_id`))");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_conversation_owner_zone` "
+                    + "ON `conversation` (`owner_user_id`, `vehicle_zone`)");
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_message` ("
+                    + "`message_id` TEXT NOT NULL, "
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`sequence_no` INTEGER NOT NULL, "
+                    + "`role` INTEGER NOT NULL, "
+                    + "`status` INTEGER NOT NULL, "
+                    + "`channel` INTEGER, "
+                    + "`text` TEXT NOT NULL, "
+                    + "`language_tag` TEXT, "
+                    + "`conversation_task_id` TEXT, "
+                    + "`reply_to_message_id` TEXT, "
+                    + "`failure_code` INTEGER NOT NULL, "
+                    + "`created_at_ms` INTEGER NOT NULL, "
+                    + "`updated_at_ms` INTEGER NOT NULL, "
+                    + "`idempotency_key` TEXT, "
+                    + "`schema_version` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`message_id`))");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_message_seq` "
+                    + "ON `conversation_message` (`conversation_id`, `sequence_no`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_conversation_message_task` "
+                    + "ON `conversation_message` (`conversation_task_id`)");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_message_idem` "
+                    + "ON `conversation_message` (`idempotency_key`)");
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_task_link` ("
+                    + "`conversation_task_id` TEXT NOT NULL, "
+                    + "`runtime_request_id` TEXT NOT NULL, "
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`user_message_id` TEXT NOT NULL, "
+                    + "`assistant_message_id` TEXT, "
+                    + "`read_only_hint` INTEGER NOT NULL, "
+                    + "`terminal_status` INTEGER, "
+                    + "`created_at_ms` INTEGER NOT NULL, "
+                    + "`started_at_ms` INTEGER, "
+                    + "`terminal_at_ms` INTEGER, "
+                    + "PRIMARY KEY(`conversation_task_id`))");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `uq_conversation_link_request` "
+                    + "ON `conversation_task_link` (`runtime_request_id`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_conversation_link_conversation` "
+                    + "ON `conversation_task_link` (`conversation_id`)");
+        }
+    };
+
+    /**
      * 加密数据库单例获取。
      *
      * <p>以下任一条件必须抛 IllegalStateException:
@@ -218,12 +287,12 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v2→v3 Migration(audit_event requestEpoch)。
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6);
+                    MIGRATION_5_6, MIGRATION_6_7);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=6 entities=8 journalMode=WAL");
+                    + " version=7 entities=11 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

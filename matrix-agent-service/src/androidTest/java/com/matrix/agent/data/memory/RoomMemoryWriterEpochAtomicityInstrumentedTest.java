@@ -22,9 +22,10 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
-import com.matrix.agent.task.identity.Actor;
-import com.matrix.agent.task.identity.AgentRequest;
-import com.matrix.agent.task.identity.VehicleZone;
+import com.matrix.agent.task.persistence.EpisodicMemorySink;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.db.MatrixDatabase;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
@@ -107,7 +108,7 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
         assertEquals("store epoch 已 bump", 1L, store.currentEpoch());
 
         // A 现在才尝试写——requestEpoch=0 已 stale,事务内必须 reject
-        writer.writeEpisodicOnTerminal(requestA, outcomeA, 0L);
+        new EpisodicMemorySink(writer).writeEpisodicOnTerminal(requestA, outcomeA, 0L);
 
         // 验证:Episodic 表无 A 的旧数据(写入被事务内 stale check 拒绝)
         List<SessionHistoryEntity> episodicRows = sessionDao.queryByUserZone(
@@ -125,7 +126,8 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
 
         // 验证:新 epoch 的写入仍成功(系统未死锁,clearUserData 不影响后续合法写入)
         AgentRequest requestB = makeRequest("记住公司在新地址", "session-B", 1L);
-        writer.writeEpisodicOnTerminal(requestB, makeSucceededOutcome(requestB), 1L);
+        new EpisodicMemorySink(writer).writeEpisodicOnTerminal(requestB,
+                makeSucceededOutcome(requestB), 1L);
         assertEquals("新 epoch 写入成功",
                 1, sessionDao.queryByUserZone("demo-driver", "DRIVER", 10).size());
 

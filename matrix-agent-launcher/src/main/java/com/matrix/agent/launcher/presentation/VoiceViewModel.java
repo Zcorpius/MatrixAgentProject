@@ -11,6 +11,8 @@ import com.matrix.agent.api.voice.VoiceOperationResult;
 import com.matrix.agent.api.voice.VoiceServiceStatus;
 import com.matrix.agent.api.voice.VoiceSessionHandle;
 import com.matrix.agent.api.voice.VoiceSessionRequest;
+import com.matrix.agent.api.voice.TencentTtsConfig;
+import com.matrix.agent.api.voice.TencentTtsProvisionInput;
 import com.matrix.agent.api.download.ModelDownloadInfo;
 import com.matrix.agent.launcher.data.VoiceRepository;
 
@@ -26,6 +28,13 @@ import java.util.concurrent.ScheduledFuture;
 public final class VoiceViewModel extends ViewModel {
     private final VoiceRepository repository;
     private final MutableLiveData<State> state = new MutableLiveData<>(State.initial());
+    private final MutableLiveData<String> asrEngine = new MutableLiveData<>();
+    /** 引擎切换结果码（SUCCESS 之外为失败；一次性事件，Fragment 消费后置回 SUCCESS）。 */
+    private final MutableLiveData<Integer> engineSwitchError = new MutableLiveData<>(
+            MatrixErrorCode.SUCCESS);
+    private final MutableLiveData<TencentTtsConfig> tencentTtsConfig = new MutableLiveData<>();
+    private final MutableLiveData<Integer> tencentTtsOperation = new MutableLiveData<>(
+            MatrixErrorCode.SUCCESS);
     private final OperationEpoch operations = new OperationEpoch();
     @Nullable private AutoCloseable statusSubscription;
     @Nullable private ScheduledFuture<?> modelPolling;
@@ -37,10 +46,85 @@ public final class VoiceViewModel extends ViewModel {
     public VoiceViewModel(VoiceRepository repository) { this.repository = repository; }
 
     public LiveData<State> state() { return state; }
+
+    /** 当前 ASR 引擎名（"VOSK" / "SHERPA"）；Host 未连接时为 null。 */
+    public LiveData<String> asrEngine() { return asrEngine; }
+
+    /** 引擎切换结果（一次性事件流，Fragment 消费后调 clearEngineSwitchError）。 */
+    public LiveData<Integer> engineSwitchError() { return engineSwitchError; }
+
+    public void clearEngineSwitchError() { engineSwitchError.setValue(MatrixErrorCode.SUCCESS); }
+    public LiveData<TencentTtsConfig> tencentTtsConfig() { return tencentTtsConfig; }
+    public LiveData<Integer> tencentTtsOperation() { return tencentTtsOperation; }
+    public void clearTencentTtsOperation() { tencentTtsOperation.setValue(MatrixErrorCode.SUCCESS); }
+
     public boolean isHostConnected() { return repository.isHostConnected(); }
+
+    /** 拉取当前引擎（连接建立/页面刷新时调用）。 */
+    public void refreshEngine() {
+        if (cleared) return;
+        repository.asrEngine(result -> {
+            if (cleared || !result.isSuccess()) return;
+            asrEngine.postValue(result.value);
+        });
+    }
+
+    public void refreshTencentTts() {
+        if (cleared) return;
+        repository.tencentTtsConfig(result -> {
+            if (!cleared && result.isSuccess() && result.value != null) {
+                tencentTtsConfig.postValue(result.value);
+            }
+        });
+    }
+
+    /** Secret arrays are cleared regardless of Binder acceptance; the SDK owns a copied pipe buffer. */
+    public void saveTencentTts(@NonNull char[] secretId, @NonNull char[] secretKey) {
+        TencentTtsProvisionInput input = new TencentTtsProvisionInput(TencentTtsConfig.DEFAULT_VOICE_TYPE,
+                TencentTtsConfig.DEFAULT_EMOTION, TencentTtsConfig.DEFAULT_EMOTION_INTENSITY);
+        repository.provisionTencentTts(input, secretId, secretKey, UUID.randomUUID().toString(),
+                (operation, code) -> {
+                    tencentTtsOperation.postValue(code);
+                    if (code == MatrixErrorCode.SUCCESS) refreshTencentTts();
+                }, accepted -> {
+                    java.util.Arrays.fill(secretId, '\0');
+                    java.util.Arrays.fill(secretKey, '\0');
+                    if (!accepted.isSuccess() || accepted.value == null
+                            || accepted.value.code != MatrixErrorCode.SUCCESS) {
+                        tencentTtsOperation.postValue(accepted.value == null
+                                ? MatrixErrorCode.SERVICE_NOT_READY : accepted.value.code);
+                    }
+                });
+    }
+
+    public void clearTencentTts() {
+        repository.clearTencentTts(UUID.randomUUID().toString(), result -> {
+            int code = !result.isSuccess() || result.value == null
+                    ? MatrixErrorCode.SERVICE_NOT_READY : result.value.code;
+            tencentTtsOperation.postValue(code);
+            if (code == MatrixErrorCode.SUCCESS) refreshTencentTts();
+        });
+    }
+
+    /** 切换 ASR 引擎（空闲期；成功后模型列表随引擎刷新）。 */
+    public void switchEngine(@NonNull String engine) {
+        repository.setAsrEngine(engine, UUID.randomUUID().toString(), result -> {
+            if (cleared) return;
+            VoiceOperationResult outcome = result.value;
+            int code = !result.isSuccess() || outcome == null
+                    ? MatrixErrorCode.SERVICE_NOT_READY : outcome.code;
+            engineSwitchError.postValue(code);
+            if (code == MatrixErrorCode.SUCCESS) {
+                refreshEngine();
+                refreshModels();
+            }
+        });
+    }
 
     /** Idempotently begins the service-status subscription for this activity-scoped ViewModel. */
     public void startObserving() {
+        refreshEngine();
+        refreshTencentTts();
         if (cleared || statusSubscription != null || statusSubscriptionPending) return;
         statusSubscriptionPending = true;
         repository.subscribeStatus(this::onServiceStatus, result -> {
@@ -61,6 +145,8 @@ public final class VoiceViewModel extends ViewModel {
     }
 
     public void refresh() {
+        refreshEngine();
+        refreshTencentTts();
         repository.status(result -> {
             if (!result.isSuccess() || result.value == null) {
                 if (current.sessionId == null) {
@@ -137,7 +223,7 @@ public final class VoiceViewModel extends ViewModel {
         if (sessionId == null) return;
         final long operation = operations.current();
         update(current.withPhase(Phase.FINISHING, 0));
-        repository.stop(sessionId, UUID.randomUUID().toString(), result -> {
+        repository.finish(sessionId, UUID.randomUUID().toString(), result -> {
             if (!operations.isCurrent(operation) || !sessionId.equals(current.sessionId)) return;
             VoiceOperationResult outcome = result.value;
             if (!result.isSuccess() || outcome == null || outcome.code != MatrixErrorCode.SUCCESS) {

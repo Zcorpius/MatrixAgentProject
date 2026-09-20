@@ -26,6 +26,13 @@ public final class AgentOutcome {
     private final Trajectory trajectory;
     private final List<ToolResult> internalResults;
     private final long durationMillis;
+    /**
+     * 模型最终回合的可信答复文本（可空）。仅在 AgentEngine 的可信上下文中捕获——
+     * StopReason.NO_TOOL_CALL 且 content 非空白时为该 content，其余终态为 null。
+     * 对话域据此构造 {@code AssistantReply(MODEL_FINAL)}；null 时投影器合成
+     * SYNTHESIZED_TERMINAL 说明。不得从 trajectory 反解析替代本字段。
+     */
+    private final String finalAssistantText;
 
     public AgentOutcome(String requestId, TaskState finalState, StopReason stopReason,
             Trajectory trajectory, long durationMillis) {
@@ -35,6 +42,12 @@ public final class AgentOutcome {
 
     public AgentOutcome(String requestId, TaskState finalState, StopReason stopReason,
             Trajectory trajectory, long durationMillis, List<ToolResult> internalResults) {
+        this(requestId, finalState, stopReason, trajectory, durationMillis, internalResults, null);
+    }
+
+    public AgentOutcome(String requestId, TaskState finalState, StopReason stopReason,
+            Trajectory trajectory, long durationMillis, List<ToolResult> internalResults,
+            String finalAssistantText) {
         if (requestId == null) throw new IllegalArgumentException("requestId 不能为空");
         if (finalState == null) throw new IllegalArgumentException("finalState 不能为空");
         if (stopReason == null) throw new IllegalArgumentException("stopReason 不能为空");
@@ -47,6 +60,7 @@ public final class AgentOutcome {
         this.internalResults = internalResults == null
                 ? Collections.emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(internalResults));
+        this.finalAssistantText = finalAssistantText;
     }
 
     public String getRequestId() { return requestId; }
@@ -54,6 +68,8 @@ public final class AgentOutcome {
     public StopReason getStopReason() { return stopReason; }
     public Trajectory getTrajectory() { return trajectory; }
     public long getDurationMillis() { return durationMillis; }
+    /** 模型最终回合的可信答复文本；非对话终态路径与无答复终态为 null。 */
+    public String getFinalAssistantText() { return finalAssistantText; }
 
     /**
      * Runtime 内部可信域——保留真实 ToolResult,不含 audit 脱敏占位符。

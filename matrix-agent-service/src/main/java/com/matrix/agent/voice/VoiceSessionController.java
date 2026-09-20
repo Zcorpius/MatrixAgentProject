@@ -48,6 +48,10 @@ public final class VoiceSessionController {
     private final VadPort vadPort;
     private final AudioFocusPort focusPort;
     private final AgentRunner runner;
+    /** 对话桥（阶段 B）：非 null 时 consumeFinal 走统一提交点而非直连 runner。 */
+    private volatile VoiceConversationBridge conversationBridge;
+    /** 绑定的 conversationId（PTT 绑定命中时非 null；唤醒路径为 null 由桥派生）。 */
+    private volatile String boundConversationId;
     private final ResponsePresenter presenter;
     private final VoicePolicyConfig policy;
     private final Executor stateExecutor;
@@ -82,6 +86,9 @@ public final class VoiceSessionController {
     private volatile ScheduledFuture<?> speechStartFuture;
     private volatile ScheduledFuture<?> maxSpeechFuture;
     private volatile ScheduledFuture<?> finalWaitFuture;
+    /** 异步 ConversationCoordinator 执行 watchdog；防订阅/回注丢失把 THINKING 永久悬挂。 */
+    private volatile ScheduledFuture<?> thinkingFuture;
+    private static final long THINKING_TIMEOUT_MS = 70_000L;
 
     private volatile boolean ttsReady;
     /** TTS 永久初始化失败(onInitError);后续 onTerminal 直接播报失败,不再排 ready 超时重复等。 */
@@ -152,6 +159,26 @@ public final class VoiceSessionController {
     }
 
     public void setUiListener(VoiceSessionListener listener) { this.uiListener = listener; }
+
+    /** 注入对话桥（阶段 B 装配）。null 保持旧 AgentRunner 直连路径。 */
+    public void setConversationBridge(VoiceConversationBridge bridge) {
+        this.conversationBridge = bridge;
+    }
+
+    /** 注入预滚缓冲（阶段 C 装配）。 */
+    public void setPrerollBuffer(AudioPrerollBuffer buffer) {
+        this.prerollBuffer = buffer;
+    }
+
+    /** 注入唤醒路由器（阶段 C 装配）。 */
+    public void setWakeRouter(WakeConversationRouter router) {
+        this.wakeRouter = router;
+    }
+
+    /** 设置 PTT 绑定的 conversationId（VoiceServiceStub 领取绑定后注入）。 */
+    public void setBoundConversationId(String conversationId) {
+        this.boundConversationId = conversationId;
+    }
     public VoiceSessionState.State currentState() { return state.current(); }
     public int repromptCount() { return repromptCount; }
 
@@ -332,12 +359,44 @@ public final class VoiceSessionController {
         if (v.accepted()) {
             VoiceSessionListener listener = uiListener;
             if (listener != null) listener.onFinal(transcript.text());
-            transit(VoiceEvent.accepted());
             currentLang = transcript.languageTag();
             CancellationToken token = new CancellationToken();
             currentToken = token;
             agentStartNanos = System.nanoTime();
-            final long gen = generation; // 提交时捕获,回调校验防跨会话污染
+            final long gen = generation;
+
+            VoiceConversationBridge bridge = conversationBridge;
+            if (bridge != null) {
+                // 统一提交点（§6.4）：token 生成 → SUBMITTING → 异步提交 → receipt 回投
+                if (transit(VoiceEvent.submissionStarted())
+                        != VoiceSessionState.State.SUBMITTING) {
+                    failAndCleanup("CONVERSATION_STATE");
+                    return;
+                }
+                VoiceConversationBridge.VoiceResponseToken vrToken =
+                        bridge.newToken(sessionId(), gen);
+                pendingVoiceToken = vrToken;
+                // 绑定 PTT 用 boundConversationId；唤醒路径由 router 派生（§6.3）
+                String resolvedConv = boundConversationId;
+                if (resolvedConv == null && wakeRouter != null) {
+                    resolvedConv = wakeRouter.resolve();
+                }
+                final String targetConv = resolvedConv;
+                try {
+                    agentExecutor.execute(() -> bridge.submit(
+                            new VoiceConversationBridge.SubmitRequest(
+                                    transcript.text(), transcript.languageTag(),
+                                    transcript.confidence(), transcript.confidenceAvailable(),
+                                    0, vrToken),
+                            targetConv));
+                } catch (RejectedExecutionException rejected) {
+                    onSubmissionFailed(vrToken, "CONVERSATION_EXECUTOR_REJECTED");
+                }
+                return;
+            }
+
+            // 旧路径（无桥时的向后兼容）
+            transit(VoiceEvent.accepted());
             VoiceAgentRequest vreq = new VoiceAgentRequest(transcript, token);
             try {
                 agentExecutor.execute(() -> runAgent(vreq, gen));
@@ -383,6 +442,8 @@ public final class VoiceSessionController {
                     + "(当前 " + generation + "),忽略迟到 outcome");
             return;
         }
+        cancelFuture(thinkingFuture);
+        thinkingFuture = null;
         metrics.onAgentLatency(System.nanoTime() - agentStartNanos);
         SpeakableResponse resp = presenter.present(outcome, currentLang);
         transit(VoiceEvent.terminal());
@@ -535,6 +596,69 @@ public final class VoiceSessionController {
         return utteranceId != null && utteranceId.equals(expectedUtteranceId);
     }
 
+    /**
+     * VoiceConversationBridge.ReceiptListener 实现——提交事务结果回投。
+     * SUBMITTING→THINKING / SUBMITTING→ERROR_ANNOUNCING（§6.4/§7.1）。
+     */
+    public void onSubmissionAccepted(VoiceConversationBridge.VoiceResponseToken token) {
+        runInState(() -> {
+            if (closed || token == null || !token.equals(pendingVoiceToken)) return;
+            VoiceSessionState.State s = transit(VoiceEvent.submissionAccepted());
+            if (s != VoiceSessionState.State.THINKING) {
+                Log.w(TAG, "[Voice] 提交成功但状态=" + s + ",忽略");
+                return;
+            }
+            Log.i(TAG, "[Voice] 提交成功→THINKING (token=" + token.requestNonce() + ")");
+            scheduleThinkingTimeout(token);
+        });
+    }
+
+    public void onSubmissionFailed(VoiceConversationBridge.VoiceResponseToken token,
+            String errorCode) {
+        runInState(() -> {
+            if (closed || token == null || !token.equals(pendingVoiceToken)) return;
+            Log.w(TAG, "[Voice] 提交失败 code=" + errorCode);
+            metrics.onError(errorCode, "CONVERSATION_SUBMIT");
+            failAndCleanup(errorCode);
+        });
+    }
+
+    /**
+     * VoiceConversationBridge.TerminalListener 实现——对话终态回注。
+     * 校验 token + THINKING 状态后复用既有 onTerminal 路径。
+     */
+    public void onConversationTerminal(VoiceConversationBridge.VoiceResponseToken token,
+            AgentOutcome outcome) {
+        runInState(() -> {
+            if (closed || token == null || !token.equals(pendingVoiceToken)) return;
+            if (state.current() != VoiceSessionState.State.THINKING) {
+                Log.w(TAG, "[Voice] 终态回注但状态=" + state.current() + ",丢弃");
+                return;
+            }
+            Log.i(TAG, "[Voice] 对话终态回注 token=" + token.requestNonce()
+                    + " outcome=" + outcome.getFinalState());
+            // 直接调用既有 onTerminal（token.generation 代替 gen 参数）
+            onTerminal(outcome, token.generation());
+        });
+    }
+
+    /** 当前语音会话 id（VoiceServiceStub 注入的 sessionId；测试可用固定值）。 */
+    private volatile String voiceSessionId = "voice-session";
+    /** 令牌匹配：SUBMITTING/THINKING 期间持有的唯一 token。 */
+    private volatile VoiceConversationBridge.VoiceResponseToken pendingVoiceToken;
+    /** 预滚缓冲（阶段 C-3）：KWS→ASR 交接时注入，修丢首字。 */
+    private volatile AudioPrerollBuffer prerollBuffer;
+    /** 唤醒路由器（阶段 C-2）：wake final 无绑定时决定投递到哪个 conversation。 */
+    private volatile WakeConversationRouter wakeRouter;
+
+    public void setVoiceSessionId(String id) {
+        this.voiceSessionId = id;
+    }
+
+    public String sessionId() {
+        return voiceSessionId;
+    }
+
     private void onFocusLoss() {
         if (state.current() != VoiceSessionState.State.SPEAKING) return;
         Log.i(TAG, "[Voice] 焦点丢失,停止播报回 IDLE,重新布防唤醒");
@@ -625,6 +749,7 @@ public final class VoiceSessionController {
         cancelFuture(wakeRetryFuture);
         wakeRetryFuture = null;
         pendingFinal = null;
+        pendingVoiceToken = null;
         clearPendingTts(); // 替换 pendingSpeak=null + 取消 ttsReadyFuture
         expectedUtteranceId = null;
         if (currentToken != null) currentToken.cancel();
@@ -707,6 +832,26 @@ public final class VoiceSessionController {
         speakTimeoutFuture = null;
         cancelFuture(ttsReadyFuture);
         ttsReadyFuture = null;
+        cancelFuture(thinkingFuture);
+        thinkingFuture = null;
+    }
+
+    private void scheduleThinkingTimeout(VoiceConversationBridge.VoiceResponseToken token) {
+        cancelFuture(thinkingFuture);
+        final long gen = generation;
+        try {
+            thinkingFuture = timeoutScheduler.schedule(() -> runInState(() -> {
+                if (closed || generation != gen || !token.equals(pendingVoiceToken)
+                        || state.current() != VoiceSessionState.State.THINKING) {
+                    return;
+                }
+                Log.w(TAG, "[Voice] 对话执行超时，结束本轮 token=" + token.requestNonce());
+                metrics.onTimeout("CONVERSATION_THINKING", "THINKING");
+                failAndCleanup("CONVERSATION_TIMEOUT");
+            }), THINKING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException rejected) {
+            if (!closed) Log.w(TAG, "[Voice] thinking scheduler 拒绝");
+        }
     }
 
     private void cancelSpeechStartAndMax() {
@@ -805,6 +950,25 @@ public final class VoiceSessionController {
             wakePort.stop();
         }
         failAndCleanup(code);
+    }
+
+    /**
+     * PTT flush（§6.2）：停止采音并强制产出 final。
+     * 走 LISTENING→ENDPOINTING→consumeFinal 状态机，不旁路（§6.2-2）。
+     */
+    public void flushFinal() {
+        runInState(() -> {
+            VoiceSessionState.State current = state.current();
+            if (current != VoiceSessionState.State.LISTENING) {
+                Log.w(TAG, "[Voice] flushFinal 非 LISTENING(state=" + current + "),忽略");
+                return;
+            }
+            cancelSpeechStartAndMax();
+            // 强制产出 final + 走 endpoint 路径
+            asrPort.finish();
+            onEndpoint(expectedAsrSid);
+            Log.i(TAG, "[Voice] flushFinal: LISTENING→ENDPOINTING→consumeFinal");
+        });
     }
 
     public void manualWake() {

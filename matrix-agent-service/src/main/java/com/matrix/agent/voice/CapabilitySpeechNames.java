@@ -26,13 +26,17 @@ public final class CapabilitySpeechNames {
 
     static {
         Map<String, String> m = new HashMap<>();
-        m.put("climate.set_temperature", "调整空调温度");
-        m.put("climate.set_fan_speed", "调整空调风量");
-        m.put("climate.toggle_ac", "切换空调");
+        m.put("vehicle.climate.set_temperature", "调整空调温度");
+        m.put("vehicle.climate.set_fan_speed", "调整空调风量");
+        m.put("vehicle.climate.toggle_ac", "切换空调");
+        m.put("vehicle.seat.set_heating_level", "调整座椅加热");
         m.put("navigation.start_route", "开启导航");
         m.put("navigation.cancel_route", "取消导航");
-        m.put("media.play", "播放音乐");
-        m.put("media.pause", "暂停音乐");
+        m.put("system.media.set_volume", "调整媒体音量");
+        m.put("system.display.set_brightness", "调整屏幕亮度");
+        m.put("knowledge.answer", "回答问题");
+        m.put("vehicle.info.get_battery", "查询电量");
+        m.put("vehicle.info.get_tire_pressure", "查询胎压");
         EXACT = Collections.unmodifiableMap(m);
     }
 

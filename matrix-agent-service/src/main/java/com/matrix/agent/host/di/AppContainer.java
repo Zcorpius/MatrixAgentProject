@@ -27,6 +27,10 @@ import com.matrix.agent.task.policy.PolicyEngine;
 import com.matrix.agent.session.SessionLockManager;
 import com.matrix.agent.session.SessionManager;
 import com.matrix.agent.demo.MockCapabilityProvider;
+import com.matrix.agent.conversation.ConversationHistoryAdapter;
+import com.matrix.agent.task.conversation.ConversationContextAssembler;
+import com.matrix.agent.task.conversation.ConversationHistorySource;
+import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.platform.control.AndroidSystemControlAdapter;
 import com.matrix.agent.platform.control.SystemControlCapabilityProvider;
 import com.matrix.agent.task.capability.RoutedCapabilityProvider;
@@ -70,6 +74,10 @@ public final class AppContainer implements DownloadRuntime {
      * 端侧 gateway lifecycle 持有——AppContainer.shutdown 统一关闭其 drain executor。
      */
     private final GatewayLifecycleManager gatewayLifecycleManager;
+    /** 对话域 task 端口（纯准备：分类快照 + 种子装配）；database=null 时为 null。 */
+    private final ConversationTaskSubmitter conversationTaskSubmitter;
+    /** clearUserData 覆盖对话表（§5.2）；database=null 时为 null。 */
+    private final Runnable conversationClearHook;
     private final com.matrix.agent.data.audit.AuditEventRecorder auditEventRecorderField;
     /** Application Context used by process-scoped service adapters and download storage. */
     private final Context appContext;
@@ -191,6 +199,26 @@ public final class AppContainer implements DownloadRuntime {
         agentRuntimeRepository = taskRuntimeGraph.repository();
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
 
+        // 对话域 task 端口装配：分类器/记忆意图与 TaskRequestFactory 同源实例，
+        // 历史=已完成 user/assistant 投影；SQLCipher 降级时端口不装配（域整体关闭）。
+        if (database == null) {
+            conversationTaskSubmitter = null;
+            conversationClearHook = null;
+        } else {
+            // 单一 Store 实例：历史投影与 clearUserData 钩子共用同一事务投影。
+            com.matrix.agent.conversation.persistence.RoomConversationStore conversationStore =
+                    new com.matrix.agent.conversation.persistence.RoomConversationStore(
+                            database, database::runInTransaction);
+            ConversationContextAssembler conversationAssembler =
+                    new ConversationContextAssembler(sharedBudget,
+                            new ConversationHistoryAdapter(conversationStore));
+            conversationTaskSubmitter = new ConversationTaskSubmitter(
+                    appClassifier, KeywordMemoryIntentDetector.INSTANCE, conversationAssembler);
+            conversationClearHook = () -> conversationStore.clearForUsers(
+                    java.util.List.of(ActorUsers.USER_DRIVER, ActorUsers.USER_PASSENGER));
+            agentRuntimeRepository.setConversationClearHook(conversationClearHook);
+        }
+
         modelGraph.applyInitialGateway(agentRuntimeRepository, executorRegistry.modelExecutor());
         Log.i(TAG, "[App] AppContainer init done capabilities=" + registry.toToolDefinitions().size()
                 + " durationMs=" + ((System.nanoTime() - started) / 1_000_000L));
@@ -231,6 +259,10 @@ public final class AppContainer implements DownloadRuntime {
      * 模拟器/集成测试/AAOS Service 重建场景下残留 worker。改为统一入口,由
      * {@link MatrixAgentApplication#onTerminate()} 调用,真机依赖进程级回收兜底。
      */
+    /** 对话域 task 端口；SQLCipher 降级时为 null（对话域不装配）。 */
+    public ConversationTaskSubmitter getConversationTaskSubmitter() {
+        return conversationTaskSubmitter;
+    }
     /** 全局线程预算登记处；download/voice 等域统一取池，不自建。 */
     public MatrixExecutorRegistry getExecutorRegistry() { return executorRegistry; }
     /** Process-owned network client family; only Host graphs may consume this dependency. */

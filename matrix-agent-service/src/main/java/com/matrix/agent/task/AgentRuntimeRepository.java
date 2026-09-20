@@ -214,6 +214,23 @@ public final class AgentRuntimeRepository {
     }
 
     /**
+     * 对话任务的执行入口（keyed lane 出队线程调用；阻塞至终态）。
+     *
+     * <p>与 {@link #execute(AgentInvocation)} 的差异：分类快照、稳定 requestId、
+     * agentSession/arbitrationKey 与对话种子全部来自 {@link PreparedTask}（提交期固化），
+     * 本方法只做 request 构造与既有调度派发——deadline 从此处构造 request 起算，
+     * 排队等待不消耗任务预算（设计文档 §4.3）。</p>
+     */
+    public AgentOutcome executePrepared(
+            com.matrix.agent.task.conversation.ConversationTaskSubmitter.PreparedTask task,
+            CancellationToken token) {
+        if (task == null) throw new IllegalArgumentException("task 不能为空");
+        if (token == null) throw new IllegalArgumentException("token 不能为空");
+        AgentRequest request = requestFactory.newPreparedRequestBuilder(task, token).build();
+        return dispatch(request, token);
+    }
+
+    /**
      * Executes a host-adapted invocation while task keeps ownership of all derived request state.
      * The caller may be voice, touch, or a future Binder adapter; this class never imports those
      * presentation/runtime packages.
@@ -386,6 +403,19 @@ public final class AgentRuntimeRepository {
      */
     public ClearUserDataOutcome clearUserDataDetailed() {
         return userDataResetCoordinator.clear();
+    }
+
+    /**
+     * 对话表清理钩子（clearUserData 覆盖范围，设计文档 §5.2）；AppContainer 装配期注入。
+     * null 时仅记 warn——与 steerMailbox 可选注入同一兼容契约。
+     */
+    public void setConversationClearHook(Runnable hook) {
+        userDataResetCoordinator.setConversationClearHook(hook);
+    }
+
+    /** 追加进程内对话附属状态的清理（如一次性语音绑定），不覆盖持久化正文清理。 */
+    public void addConversationClearHook(Runnable hook) {
+        userDataResetCoordinator.addConversationClearHook(hook);
     }
 
     /** Host 进程结束时的 scheduler shutdown 钩子。 */

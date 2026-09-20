@@ -35,6 +35,8 @@ public final class MatrixExecutorRegistry {
     private final ExecutorService modelExecutor;
     private final ExecutorService dbExecutor;
     private final ExecutorService hostDispatcherExecutor;
+    /** 对话域共享 lane：KeyedSerialDispatcher 在其上按 conversation 串行派发（阶段 A 起）。 */
+    private final ExecutorService conversationExecutor;
     private final ScheduledExecutorService timerScheduler;
     private final ScheduledExecutorService modelRetirementScheduler;
 
@@ -54,6 +56,9 @@ public final class MatrixExecutorRegistry {
         dbExecutor = newBoundedPool("matrix-db", 1, 32);
         // Host work waits for TaskScheduler futures, so it must never share the scheduler pool.
         hostDispatcherExecutor = newBoundedPool("matrix-host-dispatch", 2, 16);
+        // 对话 lane 与 host-dispatch 同容量：每个正在排水的 conversation 占一个 worker，
+        // worker 阻塞等待 TaskScheduler future（与 host-dispatch 同一等待形态，不与其共池）。
+        conversationExecutor = newBoundedPool("matrix-conversation", 2, 16);
         timerScheduler = newBoundedScheduler("matrix-timer", 32);
         // Native release retry must not be starved by catalog/audit retry storms.
         modelRetirementScheduler = newBoundedScheduler("matrix-model-retire", 8);
@@ -62,6 +67,7 @@ public final class MatrixExecutorRegistry {
         allExecutors.add(modelExecutor);
         allExecutors.add(dbExecutor);
         allExecutors.add(hostDispatcherExecutor);
+        allExecutors.add(conversationExecutor);
         allSchedulers.add(timerScheduler);
         allSchedulers.add(modelRetirementScheduler);
 
@@ -101,6 +107,11 @@ public final class MatrixExecutorRegistry {
     }
 
     /** Host dispatches durable requests here; it may wait on taskExecutor but never shares it. */
+    /** 对话域唯一执行 lane；Coordinator 的阻塞 runtime 调用与 keyed 排水都在此运行。 */
+    public ExecutorService conversationExecutor() {
+        return conversationExecutor;
+    }
+
     public ExecutorService hostDispatcherExecutor() {
         return hostDispatcherExecutor;
     }

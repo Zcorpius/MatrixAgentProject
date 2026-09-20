@@ -11,6 +11,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.text.InputType;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,6 +25,7 @@ import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.download.ModelDownloadInfo;
+import com.matrix.agent.api.voice.TencentTtsConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,8 +37,11 @@ public final class VoiceFragment extends Fragment {
     private static final String MODEL_DOWNLOAD_EXPLAINED = "model_download_explained";
     private VoiceViewModel viewModel;
     private TextView status, guidance, finalTranscript, partialTranscript;
+    private TextView engineTitle, engineSummary;
     private LinearLayout transfers, installedModels;
     private TextView modelNotice;
+    private TextView tencentTtsSummary;
+    private Button tencentTtsConfigure, tencentTtsClear;
     private Button start, finish, interrupt, refresh;
     @Nullable private VoiceViewModel.State rendered;
     private boolean connected;
@@ -98,12 +104,43 @@ public final class VoiceFragment extends Fragment {
         transcriptCard.addView(partialTranscript, top(12));
         root.addView(transcriptCard, top(8));
 
+        root.addView(eyebrow("云端播报"), top(25));
+        LinearLayout tencentCard = card();
+        TextView tencentTitle = new TextView(requireContext());
+        tencentTitle.setText("腾讯云 TTS");
+        tencentTitle.setTextColor(color(R.color.matrix_text));
+        tencentTitle.setTextSize(17);
+        tencentTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        tencentCard.addView(tencentTitle);
+        tencentTtsSummary = copy("正在读取安全配置…");
+        tencentCard.addView(tencentTtsSummary, top(4));
+        tencentTtsConfigure = button(R.string.voice_tencent_tts_configure, true,
+                ignored -> showTencentTtsDialog());
+        tencentCard.addView(tencentTtsConfigure, top(12));
+        tencentTtsClear = button(R.string.voice_tencent_tts_clear, false,
+                ignored -> confirmClearTencentTts());
+        tencentCard.addView(tencentTtsClear, top(8));
+        root.addView(tencentCard, top(8));
+
         root.addView(eyebrow(getString(R.string.voice_models_title)), top(25));
         root.addView(copy(getString(R.string.voice_models_intro)), top(6));
         modelNotice = copy("");
         modelNotice.setTextColor(color(R.color.matrix_primary_dark));
         modelNotice.setVisibility(View.GONE);
         root.addView(modelNotice, top(9));
+
+        LinearLayout engineCard = card();
+        engineTitle = new TextView(requireContext());
+        engineTitle.setTextColor(color(R.color.matrix_text));
+        engineTitle.setTextSize(17);
+        engineTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        engineCard.addView(engineTitle);
+        engineSummary = copy("");
+        engineCard.addView(engineSummary, top(4));
+        Button switchEngine = button(R.string.voice_engine_switch, false,
+                ignored -> showEngineDialog());
+        engineCard.addView(switchEngine, top(12));
+        root.addView(engineCard, top(9));
 
         TextView transfersTitle = sectionLabel(R.string.voice_models_transfers);
         root.addView(transfersTitle, top(14));
@@ -118,6 +155,21 @@ public final class VoiceFragment extends Fragment {
         root.addView(installedModels, top(7));
 
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
+        viewModel.asrEngine().observe(getViewLifecycleOwner(), this::renderEngine);
+        viewModel.engineSwitchError().observe(getViewLifecycleOwner(), code -> {
+            if (code == MatrixErrorCode.SUCCESS) return;
+            viewModel.clearEngineSwitchError();
+            modelNotice.setText(getString(R.string.voice_engine_switch_failed, code));
+            modelNotice.setVisibility(View.VISIBLE);
+        });
+        viewModel.tencentTtsConfig().observe(getViewLifecycleOwner(), this::renderTencentTts);
+        viewModel.tencentTtsOperation().observe(getViewLifecycleOwner(), code -> {
+            if (code == MatrixErrorCode.SUCCESS) return;
+            viewModel.clearTencentTtsOperation();
+            new AlertDialog.Builder(requireContext()).setTitle("腾讯云 TTS")
+                    .setMessage("配置未保存，错误码：" + code + "。请核对 SecretId、SecretKey 与子账号权限。")
+                    .setPositiveButton("知道了", null).show();
+        });
         new ViewModelProvider(requireActivity(), activity().viewModelFactory())
                 .get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), value -> {
                     connected = viewModel.isHostConnected();
@@ -140,6 +192,97 @@ public final class VoiceFragment extends Fragment {
         partialTranscript.setVisibility(value.partialText.isEmpty() ? View.GONE : View.VISIBLE);
         renderModels(value);
         renderControls();
+    }
+
+    /** 引擎卡片投影（引擎名 + 引擎化模型说明）。 */
+    private void renderEngine(@Nullable String engine) {
+        boolean sherpa = "SHERPA".equals(engine);
+        String name = engine == null ? "—"
+                : sherpa ? getString(R.string.voice_engine_sherpa_short)
+                        : getString(R.string.voice_engine_vosk_short);
+        engineTitle.setText(getString(R.string.voice_engine_current, name));
+        engineSummary.setText(sherpa
+                ? getString(R.string.voice_engine_sherpa_summary)
+                : getString(R.string.voice_engine_vosk_summary));
+    }
+
+    /** 引擎切换对话框：单选 + 切换语义说明（模型列表随引擎刷新，缺装时模型区自动引导下载）。 */
+    private void showEngineDialog() {
+        String current = viewModel.asrEngine().getValue();
+        int checked = "SHERPA".equals(current) ? 1 : 0;
+        String[] options = {getString(R.string.voice_engine_vosk_option),
+                getString(R.string.voice_engine_sherpa_option)};
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.voice_engine_dialog_title)
+                .setSingleChoiceItems(options, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    String selected = which == 1 ? "SHERPA" : "VOSK";
+                    if (selected.equals(current)) return;
+                    modelNotice.setText(getString(R.string.voice_engine_switching));
+                    modelNotice.setVisibility(View.VISIBLE);
+                    viewModel.switchEngine(selected);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void renderTencentTts(@Nullable TencentTtsConfig config) {
+        boolean ready = config != null && config.configured;
+        if (ready) {
+            tencentTtsSummary.setText("已安全配置 · 标准音色 " + config.voiceType
+                    + " · 云端失败时自动回退本地 Piper 或系统播报");
+            tencentTtsConfigure.setText(R.string.voice_tencent_tts_update);
+        } else {
+            tencentTtsSummary.setText("未配置 · 凭证仅在本机 Keystore 中加密保存，不会回显或写入日志。");
+            tencentTtsConfigure.setText(R.string.voice_tencent_tts_configure);
+        }
+        tencentTtsClear.setVisibility(ready ? View.VISIBLE : View.GONE);
+        tencentTtsClear.setEnabled(connected && ready);
+        tencentTtsConfigure.setEnabled(connected);
+    }
+
+    private void showTencentTtsDialog() {
+        LinearLayout form = new LinearLayout(requireContext());
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(24), dp(4), dp(24), 0);
+        TextView help = copy("请输入 CAM 子账号的 SecretId 与 SecretKey。密钥提交后不会再显示；请勿使用主账号密钥。");
+        form.addView(help);
+        EditText id = new EditText(requireContext());
+        id.setHint("SecretId");
+        id.setSingleLine(true);
+        id.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        form.addView(id, top(12));
+        EditText key = new EditText(requireContext());
+        key.setHint("SecretKey");
+        key.setSingleLine(true);
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        form.addView(key, top(8));
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setTitle("腾讯云 TTS 安全配置")
+                .setView(form).setNegativeButton(R.string.cancel, null)
+                .setPositiveButton("安全保存", null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(button -> {
+                    char[] idChars = id.getText().toString().trim().toCharArray();
+                    char[] keyChars = key.getText().toString().trim().toCharArray();
+                    id.setText("");
+                    key.setText("");
+                    if (idChars.length == 0 || keyChars.length == 0) {
+                        java.util.Arrays.fill(idChars, '\0');
+                        java.util.Arrays.fill(keyChars, '\0');
+                        help.setText("SecretId 和 SecretKey 都不能为空。");
+                        return;
+                    }
+                    viewModel.saveTencentTts(idChars, keyChars);
+                    dialog.dismiss();
+                }));
+        dialog.show();
+    }
+
+    private void confirmClearTencentTts() {
+        new AlertDialog.Builder(requireContext()).setTitle("删除腾讯云 TTS 凭证")
+                .setMessage("将删除本机加密保存的腾讯云凭证。播报会继续使用 Piper 或系统 TTS。")
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton("删除", (dialog, which) -> viewModel.clearTencentTts()).show();
     }
 
     /** Ask before the first potentially metered, one-time offline-model download. */
@@ -325,11 +468,21 @@ public final class VoiceFragment extends Fragment {
     private String modelName(@Nullable String id) {
         if ("vosk-en".equals(id)) return getString(R.string.voice_model_english);
         if ("vosk-cn".equals(id)) return getString(R.string.voice_model_chinese);
+        if ("sherpa-asr-zh-en".equals(id)) return getString(R.string.voice_model_sherpa_asr);
+        if ("sherpa-vad-silero".equals(id)) return getString(R.string.voice_model_sherpa_vad);
+        if ("sherpa-kws-zh-en".equals(id)) return getString(R.string.voice_model_sherpa_kws);
+        if ("sherpa-tts-zh-xiaoya".equals(id)) return getString(R.string.voice_model_sherpa_tts);
         return id == null ? getString(R.string.voice_model_unknown) : id;
     }
 
     private String modelVersion(@Nullable String id) {
-        return "vosk-en".equals(id) ? "0.15" : "vosk-cn".equals(id) ? "0.22" : "—";
+        if ("vosk-en".equals(id)) return "0.15";
+        if ("vosk-cn".equals(id)) return "0.22";
+        if ("sherpa-asr-zh-en".equals(id)) return "2023-02-20";
+        if ("sherpa-vad-silero".equals(id)) return "v5";
+        if ("sherpa-kws-zh-en".equals(id)) return "2025-12-20";
+        if ("sherpa-tts-zh-xiaoya".equals(id)) return "2026.09";
+        return "—";
     }
 
     private String formatBytes(long bytes) {

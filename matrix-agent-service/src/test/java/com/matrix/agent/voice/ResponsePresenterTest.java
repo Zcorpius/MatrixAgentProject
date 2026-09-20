@@ -71,7 +71,7 @@ public final class ResponsePresenterTest {
 
     @Test
     public void succeeded_singleCapability_usesFriendlyName() {
-        AgentOutcome o = outcome(TaskState.SUCCEEDED, StopReason.DONE, successObs("climate.set_temperature"));
+        AgentOutcome o = outcome(TaskState.SUCCEEDED, StopReason.DONE, successObs("vehicle.climate.set_temperature"));
         assertEquals("已调整空调温度。", presenter.present(o, "zh-CN").getText());
     }
 
@@ -85,7 +85,7 @@ public final class ResponsePresenterTest {
     @Test
     public void partiallySucceeded_countsFromTrajectory() {
         AgentOutcome o = outcome(TaskState.PARTIALLY_SUCCEEDED, StopReason.DONE,
-                successObs("climate.set_temperature"), failedObs("navigation.start_route"));
+                successObs("vehicle.climate.set_temperature"), failedObs("navigation.start_route"));
         assertEquals("已完成 1 项,其余 1 项未能完成。", presenter.present(o, "zh-CN").getText());
     }
 
@@ -128,14 +128,14 @@ public final class ResponsePresenterTest {
 
     @Test
     public void privacy_messageNotLeaked() {
-        AgentOutcome o = outcome(TaskState.SUCCEEDED, StopReason.DONE, successObs("climate.set_temperature"));
+        AgentOutcome o = outcome(TaskState.SUCCEEDED, StopReason.DONE, successObs("vehicle.climate.set_temperature"));
         String text = presenter.present(o, "zh-CN").getText();
         assertFalse("ToolResult.message 不能进 TTS: " + text, text.contains("PII-SECRET"));
     }
 
     @Test
     public void privacy_internalResultsNotRead() {
-        ToolResult secret = new ToolResult(ToolResult.Status.SUCCESS, "climate.set_temperature",
+        ToolResult secret = new ToolResult(ToolResult.Status.SUCCESS, "vehicle.climate.set_temperature",
                 "PII-SECRET-internal", Collections.singletonMap("k", "PII-SECRET-v"), true, 0L);
         AgentOutcome o = new AgentOutcome("req", TaskState.SUCCEEDED, StopReason.DONE,
                 new Trajectory(), 0L, Collections.singletonList(secret));
@@ -146,7 +146,7 @@ public final class ResponsePresenterTest {
     @Test
     public void privacy_failedMessageNotLeaked() {
         AgentOutcome o = outcome(TaskState.PARTIALLY_SUCCEEDED, StopReason.DONE,
-                successObs("climate.set_temperature"), failedObs("navigation.start_route"));
+                successObs("vehicle.climate.set_temperature"), failedObs("navigation.start_route"));
         String text = presenter.present(o, "zh-CN").getText();
         assertFalse("失败 ToolResult.message 不能进 TTS: " + text, text.contains("PII-SECRET"));
     }

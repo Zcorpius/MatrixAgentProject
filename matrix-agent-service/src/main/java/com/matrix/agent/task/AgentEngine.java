@@ -260,6 +260,7 @@ public final class AgentEngine {
         // maxMessageChars 限制单条消息长度——system/user 输入过长会撑爆总字符预算,
         // 也可能直接被模型 API 拒绝。所有进入 conversation 的消息统一过 enforceMessageBudget。
         conversation.add(enforceMessageBudget(AgentMessage.system(systemPrompt)));
+        appendConversationSeed(conversation, request);
         conversation.add(enforceMessageBudget(AgentMessage.user(request.getText())));
         Log.d(TAG, "[Engine] tools=" + tools.size() + " systemPromptChars=" + systemPrompt.length()
                 + " convChars=" + estimateConversationChars(conversation)
@@ -267,6 +268,7 @@ public final class AgentEngine {
 
         Set<String> blockedCapabilities = new HashSet<>();
         int totalToolCalls = 0;
+        String finalAssistantText = null;
         StopReason stopReason = StopReason.MAX_ITERATIONS;
         String stopMessage = "达到最大迭代数";
         List<ToolResult> internalResults = new ArrayList<>();
@@ -389,6 +391,10 @@ public final class AgentEngine {
             if (!turn.hasToolCalls()) {
                 stopReason = StopReason.NO_TOOL_CALL;
                 stopMessage = "模型选择直接答复用户";
+                // 可信终答捕获：仅 NO_TOOL_CALL + 非空白 content 视为完整答复。
+                // LENGTH/NONE/异常终止不捕获——截断或协议错误的文本不可冒充完整回复。
+                String content = turn.getAssistantMessage().getContent();
+                finalAssistantText = (content == null || content.isBlank()) ? null : content;
                 Log.i(TAG, "[Engine] iter " + iteration + " no tool_call -> STOP(模型直接答复)"
                         + " contentChars=" + safeLength(turn.getAssistantMessage().getContent()));
                 trajectory.addIteration(new AgentIteration(iteration,
@@ -611,7 +617,7 @@ public final class AgentEngine {
                 + " | RESULT: " + finalState + " | STOP: " + stopReason
                 + " | " + stopMessage);
         AgentOutcome mainOutcome = new AgentOutcome(request.getRequestId(), finalState, stopReason,
-                trajectory, elapsedMillis(started), internalResults);
+                trajectory, elapsedMillis(started), internalResults, finalAssistantText);
         // 出口点 4——主路径终态(SUCCEEDED/FAILED/PARTIALLY/CANCELLED/TIMED_OUT 等)
         auditSink.persist(mainOutcome, request);
         // Episodic 自动写入——任务终态后写 session_history 表,
@@ -732,6 +738,35 @@ public final class AgentEngine {
 
     private String buildSystemPrompt(AgentRequest request) {
         return promptContextAssembler.build(request);
+    }
+
+    /**
+     * 种子注入：装配器已保证内容安全与预算；此处仅做防御性兜底——
+     * 逐条过单条上限，且一旦“种子 + 预估 user 文本”将触及总量预算即停止追加，
+     * 保证当轮用户指令的优先级（设计文档 §5.4-5）。
+     */
+    private void appendConversationSeed(List<AgentMessage> conversation,
+            com.matrix.agent.identity.AgentRequest request) {
+        com.matrix.agent.contract.ConversationSeedContext seed = request.getConversationSeed();
+        if (seed == null || seed.isEmpty()) {
+            return;
+        }
+        int userEstimate = request.getText() == null ? 0 : request.getText().length();
+        int appended = 0;
+        for (com.matrix.agent.contract.AgentMessage message : seed.messages()) {
+            AgentMessage bounded = enforceMessageBudget(message);
+            if (estimateConversationChars(conversation) + bounded.estimateChars() + userEstimate
+                    > budget.getTotalInputChars()) {
+                Log.w(TAG, "[Engine] 种子预算兜底触发：跳过剩余 " + (seed.messages().size() - appended)
+                        + " 条种子消息（当前指令优先）");
+                break;
+            }
+            conversation.add(bounded);
+            appended++;
+        }
+        if (appended > 0) {
+            Log.d(TAG, "[Engine] 注入对话种子 messages=" + appended + "/" + seed.messages().size());
+        }
     }
 
     private static int estimateConversationChars(List<AgentMessage> conversation) {

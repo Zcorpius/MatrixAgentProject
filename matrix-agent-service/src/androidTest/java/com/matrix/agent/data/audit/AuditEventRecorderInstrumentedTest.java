@@ -21,7 +21,7 @@ import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.matrix.agent.task.AuditEventTypes;
+import com.matrix.agent.data.audit.AuditEventTypes;
 import com.matrix.agent.data.db.AuditEventDao;
 import com.matrix.agent.data.db.AuditEventEntity;
 import com.matrix.agent.data.db.MatrixDatabase;

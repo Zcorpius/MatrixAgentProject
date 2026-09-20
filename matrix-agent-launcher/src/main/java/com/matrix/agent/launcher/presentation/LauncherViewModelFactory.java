@@ -9,6 +9,7 @@ import com.matrix.agent.launcher.data.AgentTaskRepository;
 import com.matrix.agent.launcher.data.ModelRepository;
 import com.matrix.agent.launcher.data.DownloadRepository;
 import com.matrix.agent.launcher.data.VoiceRepository;
+import com.matrix.agent.launcher.data.ConversationRepository;
 
 /** Explicit dependency injection for Launcher ViewModels; no ViewModel reaches into an Activity. */
 public final class LauncherViewModelFactory implements ViewModelProvider.Factory {
@@ -22,6 +23,9 @@ public final class LauncherViewModelFactory implements ViewModelProvider.Factory
         if (type == ModelViewModel.class) return (T) new ModelViewModel(new ModelRepository(gateway));
         if (type == DownloadViewModel.class) return (T) new DownloadViewModel(new DownloadRepository(gateway));
         if (type == VoiceViewModel.class) return (T) new VoiceViewModel(new VoiceRepository(gateway));
+        if (type == ConversationViewModel.class) {
+            return (T) new ConversationViewModel(new ConversationRepository(gateway));
+        }
         throw new IllegalArgumentException("Unsupported Launcher ViewModel: " + type.getName());
     }
 }

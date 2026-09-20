@@ -1,5 +1,6 @@
 package com.matrix.agent.identity;
 
+import com.matrix.agent.contract.ConversationSeedContext;
 import com.matrix.agent.vehicle.VehicleState;
 import java.util.Locale;
 import java.util.UUID;
@@ -63,6 +64,13 @@ public final class AgentRequest {
      * 289 现有测试默认 false 不破坏。
      */
     private final boolean memorySaveAllowed;
+    /**
+     * 跨任务对话历史种子（可空）。由 task 域装配器在调度出队时注入；Engine 在当前
+     * user 消息前写入模型 conversation。见 contract.ConversationSeedContext 内容契约。
+     */
+    private final ConversationSeedContext conversationSeed;
+    /** 预生成 requestId 覆盖（可空）：对话域把提交期持久化的稳定 UUID 复用为执行期 id。 */
+    private final String requestIdOverride;
 
     public AgentRequest(String text, Actor actor) {
         this(builder(text, actor)
@@ -72,7 +80,12 @@ public final class AgentRequest {
     }
 
     private AgentRequest(Builder builder) {
-        requestId = UUID.randomUUID().toString();
+        // 对话域注入的稳定 id（提交期已持久化到 conversation_task_link.runtime_request_id）
+        // 必须最先赋值：sessionId 的空回退以它兜底（与旧版“先 requestId 后 sessionId”次序一致）。
+        requestIdOverride = builder.requestIdOverride == null
+                ? null : requireValidRequestId(builder.requestIdOverride);
+        this.requestId = requestIdOverride != null
+                ? requestIdOverride : UUID.randomUUID().toString();
         text = builder.text == null ? "" : builder.text.trim();
         actor = builder.actor;
         sessionId = builder.sessionId == null || builder.sessionId.trim().isEmpty()
@@ -97,6 +110,20 @@ public final class AgentRequest {
                 ? VehicleState.satisfyAllPredicates() : builder.currentVehicleState;
         epoch = builder.epoch;
         memorySaveAllowed = builder.memorySaveAllowed;
+        conversationSeed = builder.conversationSeed;
+    }
+
+    private static String requireValidRequestId(String value) {
+        // 与 host 侧 AgentRequestValidator.isLowerUuid 同语义，但 identity 叶子不得依赖 host，
+        // 故在此内联等价校验：UUID 规范形且小写。
+        try {
+            if (!java.util.UUID.fromString(value).toString().equals(value)) {
+                throw new IllegalArgumentException("requestIdOverride 必须是小写 UUID");
+            }
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("requestIdOverride 必须是小写 UUID");
+        }
+        return value;
     }
 
     public String getRequestId() { return requestId; }
@@ -141,6 +168,8 @@ public final class AgentRequest {
      * memory.semantic.save handler 在 false 时直接 POLICY_REJECTED。
      */
     public boolean isMemorySaveAllowed() { return memorySaveAllowed; }
+    /** 跨任务对话历史种子；null 表示普通（非对话）任务。 */
+    public ConversationSeedContext getConversationSeed() { return conversationSeed; }
 
     public static Builder builder(String text, Actor actor) {
         return new Builder(text, actor);
@@ -165,6 +194,8 @@ public final class AgentRequest {
         private VehicleState currentVehicleState;
         private long epoch = 0L;
         private boolean memorySaveAllowed = false;
+        private ConversationSeedContext conversationSeed;
+        private String requestIdOverride;
 
         private Builder(String text, Actor actor) {
             if (actor == null) throw new IllegalArgumentException("actor 不能为空");
@@ -203,6 +234,10 @@ public final class AgentRequest {
          * 在 false 时直接 POLICY_REJECTED。默认 false(保守)。
          */
         public Builder memorySaveAllowed(boolean value) { memorySaveAllowed = value; return this; }
+        /** 注入跨任务对话历史种子（task 装配器专用；普通任务不设）。 */
+        public Builder conversationSeed(ConversationSeedContext value) { conversationSeed = value; return this; }
+        /** 注入提交期已持久化的稳定 requestId（对话域专用；小写 UUID，构造时校验）。 */
+        public Builder requestId(String value) { requestIdOverride = value; return this; }
         public AgentRequest build() {
             if (occupantZone == null) throw new IllegalArgumentException("occupantZone 不能为空");
             if (inputSource == null) throw new IllegalArgumentException("inputSource 不能为空");
