@@ -41,6 +41,12 @@ public interface ConversationTaskLinkDao {
     void writeTerminal(String conversationTaskId, int terminalStatus,
             String assistantMessageId, long terminalAtMs);
 
+    /** 轨迹投影写入（终态同事务调用；幂等——重复写同值无害）。 */
+    @Query("UPDATE conversation_task_link SET execution_trace_json = :traceJson,"
+            + " trace_projection_version = :version WHERE conversation_task_id"
+            + " = :conversationTaskId")
+    void updateTrace(String conversationTaskId, String traceJson, int version);
+
     @Query("DELETE FROM conversation_task_link WHERE conversation_id IN"
             + " (SELECT conversation_id FROM conversation WHERE owner_user_id IN (:userIds))")
     int deleteByOwnerUsers(List<String> userIds);

@@ -13,10 +13,13 @@ public final class ParcelSchema {
      * lastInputChannel) and window flags to ConversationPage (hasBefore/hasAfter/
      * anchorExists).
      * v4 appends quotedMessageId to SendTextRequest (quote-reply, evaluation §4.4).
+     * v5 appends to ConversationMessage: inputKind / steerHostUserMessageId /
+     * steerDeliveryState (steer auxiliary-input note) and executionTraces
+     * (capability execution fact projection, user-message-carried).
      * Readers must branch on schemaVersion before consuming appended fields;
      * writers remain append-only.
      */
-    public static final int CURRENT = 4;
+    public static final int CURRENT = 5;
 
     private ParcelSchema() {
     }

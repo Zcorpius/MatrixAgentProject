@@ -128,6 +128,19 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
+    public ConversationOperationResult speakAssistantMessage(String conversationId,
+            String assistantMessageId, String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return unavailableOperation(clientOperationId, conversationId);
+        try {
+            return s.speakAssistantMessage(conversationId, assistantMessageId,
+                    clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e,
+                    unavailableOperation(clientOperationId, conversationId));
+        }
+    }
+
     public ConversationPage getMessages(String conversationId, long beforeSequenceExclusive,
             int limit) {
         IConversationService s = service;

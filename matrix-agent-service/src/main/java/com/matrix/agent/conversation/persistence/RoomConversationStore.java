@@ -6,6 +6,7 @@ import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.conversation.ConversationDomain.PersistedMessageStatus;
 import com.matrix.agent.conversation.ConversationIds;
+import com.matrix.agent.conversation.CapabilityTraceCodec;
 import com.matrix.agent.conversation.ConversationStore;
 import com.matrix.agent.data.conversation.ConversationDao;
 import com.matrix.agent.data.conversation.ConversationEntity;
@@ -349,6 +350,11 @@ public final class RoomConversationStore implements ConversationStore {
                     command.failureCode(), now);
             links.writeTerminal(command.conversationTaskId(), command.userStatusWire(),
                     assistantMessageId, now);
+            // 轨迹投影（评估 v1.0 §4.3）：与终态同事务落列——写时净化、终态后不可改写
+            if (command.traceJson() != null) {
+                links.updateTrace(command.conversationTaskId(), command.traceJson(),
+                        CapabilityTraceCodec.VERSION);
+            }
             conversations.touchUpdated(link.conversationId, now);
             written[0] = true;
         });
@@ -418,6 +424,17 @@ public final class RoomConversationStore implements ConversationStore {
             messages.convergeSteersByHost(link.userMessageId, userStatusWire, failureCode, now);
             links.writeTerminal(conversationTaskId, userStatusWire, null, now);
         });
+    }
+
+    @Override
+    public void touchActivity(String conversationId) {
+        conversations.touchUpdated(conversationId, System.currentTimeMillis());
+    }
+
+    @Override
+    public String findTraceJson(String conversationTaskId) {
+        ConversationTaskLinkEntity link = links.getById(conversationTaskId);
+        return link == null ? null : link.executionTraceJson;
     }
 
     @Override

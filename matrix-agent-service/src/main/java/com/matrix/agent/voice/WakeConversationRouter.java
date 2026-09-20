@@ -48,6 +48,9 @@ public final class WakeConversationRouter {
             }
             Log.i(TAG, "[WakeRouter] 续接最近线程 conv=" + row.conversationId()
                     + " ageMs=" + (now - row.updatedAtMs()));
+            // 续接即活动（评估 v1.0 §4.1）：touch updated_at_ms 让"最近使用"排序
+            // 如实反映语音交互；lastInputChannel 在 final 提交落库时盖章。
+            coordinator.touchConversationActivity(row.conversationId());
             return row.conversationId();
         }
         // 新建

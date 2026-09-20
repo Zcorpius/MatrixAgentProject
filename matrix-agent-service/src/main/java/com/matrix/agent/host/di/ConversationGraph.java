@@ -8,6 +8,8 @@ import com.matrix.agent.conversation.ConversationIds;
 import com.matrix.agent.conversation.ConversationRecoveryCoordinator;
 import com.matrix.agent.conversation.ConversationServiceGate;
 import com.matrix.agent.conversation.ConversationExporter;
+import com.matrix.agent.conversation.ConversationReadbackService;
+import com.matrix.agent.conversation.ConversationSummaryMarker;
 import com.matrix.agent.conversation.ConversationTitleService;
 import com.matrix.agent.contract.LlmClient;
 import com.matrix.agent.contract.ModelConfig;
@@ -52,6 +54,10 @@ final class ConversationGraph {
     private final ConversationCoordinator.TerminalRoundSink recoveryTitleSink;
     /** 会话只读导出（评估 v1.0 §4.9；降级装配为 null）。 */
     private final ConversationExporter exporter;
+    /** 助手回复朗读（评估 v1.0 §4.8；降级装配为 null）。 */
+    private final ConversationReadbackService readback;
+    /** 摘要续聊标记（评估 v1.0 §4.6；降级装配为 null）。 */
+    private final ConversationSummaryMarker summaryMarker;
     private final ConversationVoiceBindingStore bindingStore;
     private final VoiceConversationBridge voiceBridge;
     private final ConversationServiceStub service;
@@ -62,6 +68,7 @@ final class ConversationGraph {
             @Nullable MatrixDatabase database,
             AgentRuntimeRepository runtime,
             ConversationTaskSubmitter submitter,
+            com.matrix.agent.task.AgentBudget sharedBudget,
             ExecutorService conversationLane,
             ExecutorService databaseExecutor,
             PersistenceGate persistence,
@@ -76,6 +83,8 @@ final class ConversationGraph {
             this.voiceBridge = null;
             this.recoveryTitleSink = null;
             this.exporter = null;
+            this.readback = null;
+            this.summaryMarker = null;
             this.gate = new ConversationServiceGate();
             return;
         }
@@ -97,8 +106,22 @@ final class ConversationGraph {
         this.exporter = new ConversationExporter(store, databaseExecutor);
         this.bindingStore = new ConversationVoiceBindingStore();
         runtime.addConversationClearHook(bindingStore::clearAll);
+        this.readback = new ConversationReadbackService(store,
+                new com.matrix.agent.voice.platform.AndroidTtsAdapter(
+                        (android.app.Application) appContext.getApplicationContext()),
+                new com.matrix.agent.voice.platform.AndroidAudioFocusAdapter(
+                        appContext.getApplicationContext()),
+                () -> {
+                    com.matrix.agent.voice.VoiceRuntime voice =
+                            com.matrix.agent.voice.VoiceRuntimeHolder.get();
+                    return voice != null && voice.isSessionActive();
+                });
+        // 摘要标记（评估 v1.0 §4.6）：与压缩器同源 80% 判定，读时重算不落库
+        this.summaryMarker = new ConversationSummaryMarker(
+                new com.matrix.agent.conversation.ConversationHistoryAdapter(store),
+                sharedBudget);
         this.service = new ConversationServiceStub(coordinator, gate, persistence, callers,
-                bindingStore, exporter, appContext);
+                bindingStore, exporter, readback, summaryMarker, appContext);
         // 阶段 C：创建对话桥；配置器由 MatrixServiceGraph 注册到 VoiceRuntime，保证当前
         // 与未来（引擎切换后重建）的 Controller 都会接到同一套治理。
         this.voiceBridge = createVoiceBridge();

@@ -32,6 +32,7 @@ public final class FakeConversationStore implements ConversationStore {
         public final boolean readOnlyHint;
         public Integer terminalStatus;
         public Long startedAtMs;
+        public String traceJson;
 
         LinkRow(String conversationTaskId, String runtimeRequestId, String conversationId,
                 String userMessageId, boolean readOnlyHint) {
@@ -275,8 +276,28 @@ public final class FakeConversationStore implements ConversationStore {
                     command.failureCode(), now, now,
                     MessageRow.INPUT_PRIMARY_WIRE, null, MessageRow.STEER_DELIVERY_NONE_WIRE));
         }
+        if (command.traceJson() != null) {
+            links.get(command.conversationTaskId()).traceJson = command.traceJson();
+        }
         link.terminalStatus = command.userStatusWire();
         return true;
+    }
+
+    @Override
+    public void touchActivity(String conversationId) {
+        ConversationRow row = conversations.get(conversationId);
+        if (row != null) {
+            conversations.put(conversationId, new ConversationRow(row.conversationId(),
+                    row.ownerUserId(), row.vehicleZone(), row.title(), row.archived(),
+                    row.createdAtMs(), System.currentTimeMillis(),
+                    row.titleOrigin(), row.pinned(), row.lastInputChannel()));
+        }
+    }
+
+    /** 任务链接的轨迹投影读取（协调器/DTO 投影用）。 */
+    public String findTraceJson(String conversationTaskId) {
+        LinkRow link = links.get(conversationTaskId);
+        return link == null ? null : link.traceJson;
     }
 
     @Override

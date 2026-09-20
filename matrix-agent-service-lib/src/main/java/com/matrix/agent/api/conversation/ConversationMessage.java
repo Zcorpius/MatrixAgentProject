@@ -63,17 +63,36 @@ public final class ConversationMessage implements Parcelable {
     public final int failureCode;
     public final long createdAtMs;
     public final long updatedAtMs;
+    /** v5 追加：INPUT_PRIMARY / INPUT_STEER（附属输入注记用）。 */
+    public final int inputKind;
+    /** 可空（v5）：steer 宿主的主用户消息 id。 */
+    public final String steerHostUserMessageId;
+    /** STEER_DELIVERY_*（v5）；非 steer 行为 PENDING 值无意义。 */
+    public final int steerDeliveryState;
+    /** v5 追加：宿主任务的能力事实轨迹（仅用户消息携带；旧 schema 空数组）。 */
+    public final java.util.List<CapabilityTraceEntry> executionTraces;
 
     public ConversationMessage(String conversationId, String messageId, long sequenceNo,
             int role, int status, int channel, String text, String languageTag,
             String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs) {
         this(ParcelSchema.CURRENT, conversationId, messageId, sequenceNo, role, status, channel,
-                text, languageTag, conversationTaskId, failureCode, createdAtMs, updatedAtMs);
+                text, languageTag, conversationTaskId, failureCode, createdAtMs, updatedAtMs,
+                INPUT_PRIMARY, null, STEER_DELIVERY_PENDING, null);
     }
 
     public ConversationMessage(int schemaVersion, String conversationId, String messageId,
             long sequenceNo, int role, int status, int channel, String text, String languageTag,
             String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs) {
+        this(schemaVersion, conversationId, messageId, sequenceNo, role, status, channel,
+                text, languageTag, conversationTaskId, failureCode, createdAtMs, updatedAtMs,
+                INPUT_PRIMARY, null, STEER_DELIVERY_PENDING, null);
+    }
+
+    public ConversationMessage(int schemaVersion, String conversationId, String messageId,
+            long sequenceNo, int role, int status, int channel, String text, String languageTag,
+            String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs,
+            int inputKind, String steerHostUserMessageId, int steerDeliveryState,
+            java.util.List<CapabilityTraceEntry> executionTraces) {
         this.schemaVersion = schemaVersion;
         this.conversationId = conversationId;
         this.messageId = messageId;
@@ -87,6 +106,13 @@ public final class ConversationMessage implements Parcelable {
         this.failureCode = failureCode;
         this.createdAtMs = createdAtMs;
         this.updatedAtMs = updatedAtMs;
+        this.inputKind = inputKind;
+        this.steerHostUserMessageId = steerHostUserMessageId;
+        this.steerDeliveryState = steerDeliveryState;
+        this.executionTraces = executionTraces == null
+                ? java.util.Collections.emptyList()
+                : java.util.Collections.unmodifiableList(
+                        new java.util.ArrayList<>(executionTraces));
     }
 
     private ConversationMessage(Parcel in) {
@@ -103,6 +129,20 @@ public final class ConversationMessage implements Parcelable {
         failureCode = in.readInt();
         createdAtMs = in.readLong();
         updatedAtMs = in.readLong();
+        if (schemaVersion >= 5) {
+            inputKind = in.readInt();
+            steerHostUserMessageId = in.readString();
+            steerDeliveryState = in.readInt();
+            java.util.ArrayList<CapabilityTraceEntry> traces =
+                    new java.util.ArrayList<>();
+            in.readTypedList(traces, CapabilityTraceEntry.CREATOR);
+            executionTraces = java.util.Collections.unmodifiableList(traces);
+        } else {
+            inputKind = INPUT_PRIMARY;
+            steerHostUserMessageId = null;
+            steerDeliveryState = STEER_DELIVERY_PENDING;
+            executionTraces = java.util.Collections.emptyList();
+        }
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -119,6 +159,10 @@ public final class ConversationMessage implements Parcelable {
         dest.writeInt(failureCode);
         dest.writeLong(createdAtMs);
         dest.writeLong(updatedAtMs);
+        dest.writeInt(inputKind);
+        dest.writeString(steerHostUserMessageId);
+        dest.writeInt(steerDeliveryState);
+        dest.writeTypedList(executionTraces);
     }
 
     @Override public int describeContents() { return 0; }

@@ -126,7 +126,15 @@ public interface ConversationStore {
     boolean writeTerminal(TerminalWrite command);
 
     record TerminalWrite(String conversationTaskId, int userStatusWire, int failureCode,
-            String assistantMessageId, String assistantText) { }
+            String assistantMessageId, String assistantText, String traceJson) {
+
+        /** 源码兼容：无轨迹的终态（异常兜底/无工具调用）。 */
+        public TerminalWrite(String conversationTaskId, int userStatusWire, int failureCode,
+                String assistantMessageId, String assistantText) {
+            this(conversationTaskId, userStatusWire, failureCode, assistantMessageId,
+                    assistantText, null);
+        }
+    }
 
     /** 恢复对账：写入一条 sequence 有序的 SYSTEM 说明行；返回其 sequence。 */
     long appendSystemNote(String conversationId, String text);
@@ -182,6 +190,12 @@ public interface ConversationStore {
 
     /** 对账终态：用户消息终态 + link 终态；readOnly=false 侧由调用方传 EXECUTION_UNKNOWN。 */
     void writeRecoveryOutcome(String conversationTaskId, int userStatusWire, int failureCode);
+
+    /** 会话活动 touch（最近使用排序；不写消息）。 */
+    void touchActivity(String conversationId);
+
+    /** 可空：任务链接的轨迹投影 JSON（无任务/未投影）。 */
+    String findTraceJson(String conversationTaskId);
 
     /** 可空：无运行中任务。 */
     String findRunningTaskId(String conversationId);

@@ -411,6 +411,17 @@ public final class ConversationCoordinator {
         return childId;
     }
 
+    /** 会话活动 touch（唤醒续接等无消息写入的交互；评估 v1.0 §4.1）。 */
+    public void touchConversationActivity(String conversationId) {
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        store.touchActivity(conversationId);
+    }
+
+    /** 轨迹投影直读（DTO 附加用）；无任务/未投影返回 null。 */
+    public String traceJsonOf(String conversationTaskId) {
+        return store.findTraceJson(conversationTaskId);
+    }
+
     /** 分支谱系直读（来源说明投影用）；非分支会话返回 null。 */
     public ConversationStore.LineageRow lineageOf(String childConversationId) {
         ConversationIds.requireLowerUuid(childConversationId, "childConversationId");
@@ -507,8 +518,13 @@ public final class ConversationCoordinator {
             }
             AssistantReply reply = ConversationAssistantProjector.project(outcome,
                     ConversationAssistantProjector.MAX_REPLY_CHARS);
+            // 轨迹投影（评估 v1.0 §4.3）：结构化执行事实经白名单净化后随终态落列。
+            // 异常兜底路径（convergeTerminal 的其它调用点）无 outcome——traceJson 保持
+            // null（空轨迹），绝不编造事实。
+            String traceJson = CapabilityTraceCodec.encode(
+                    CapabilityTraceProjector.project(outcome));
             convergeTerminal(conversationId, userMessageId, conversationTaskId,
-                    toPersistedStatus(outcome), failureCodeOf(outcome), reply);
+                    toPersistedStatus(outcome), failureCodeOf(outcome), reply, traceJson);
             notifyTerminal(conversationTaskId, outcome);
         } finally {
             activeTokens.remove(conversationTaskId);
@@ -519,9 +535,16 @@ public final class ConversationCoordinator {
     private void convergeTerminal(String conversationId, String userMessageId,
             String conversationTaskId, PersistedMessageStatus status, int failureCode,
             AssistantReply reply) {
+        convergeTerminal(conversationId, userMessageId, conversationTaskId, status,
+                failureCode, reply, null);
+    }
+
+    private void convergeTerminal(String conversationId, String userMessageId,
+            String conversationTaskId, PersistedMessageStatus status, int failureCode,
+            AssistantReply reply, String traceJson) {
         String assistantMessageId = ConversationIds.newMessageId();
         if (!store.writeTerminal(new TerminalWrite(conversationTaskId, status.wire(),
-                failureCode, assistantMessageId, reply.text()))) {
+                failureCode, assistantMessageId, reply.text(), traceJson))) {
             Log.w(TAG, "[Conversation] 终态丢弃（conversation 已清除）task="
                     + conversationTaskId);
             return;
@@ -529,6 +552,12 @@ public final class ConversationCoordinator {
         MessageRow assistant = store.findMessage(assistantMessageId);
         if (assistant != null) {
             notifyUpsert(assistant);
+        }
+        // 终态后补发用户行 upsert：订阅方拿到携带终态（与轨迹投影通道）的完整行，
+        // 而不必整页重读（评估 v1.0 §4.3 状态卡的推送路径）。
+        MessageRow finalUserRow = store.findMessage(userMessageId);
+        if (finalUserRow != null) {
+            notifyUpsert(finalUserRow);
         }
         notifyStatus(conversationId, userMessageId, status.wire(), failureCode);
         // 自动标题触发点（评估 v1.0 §4.1）：第一条到达终态的用户轮次；sink 自行异步

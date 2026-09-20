@@ -32,6 +32,7 @@ public final class MatrixServiceGraph {
                 container.getMatrixDatabase(),
                 container.getAgentRuntimeRepository(),
                 container.getConversationTaskSubmitter(),
+                container.getSharedBudget(),
                 container.getExecutorRegistry().conversationExecutor(),
                 container.getExecutorRegistry().dbExecutor(), persistence, callers,
                 container.getTitleModelClient(), container.getTitleConfigSupplier());

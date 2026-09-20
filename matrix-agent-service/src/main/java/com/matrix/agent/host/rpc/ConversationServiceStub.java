@@ -4,6 +4,7 @@ import android.os.RemoteException;
 
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.common.ParcelSchema;
+import com.matrix.agent.api.conversation.CapabilityTraceEntry;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationListQuery;
 import com.matrix.agent.api.conversation.ConversationMessage;
@@ -14,8 +15,10 @@ import com.matrix.agent.api.conversation.CreateConversationRequest;
 import com.matrix.agent.api.conversation.IConversationCallback;
 import com.matrix.agent.api.conversation.IConversationService;
 import com.matrix.agent.api.conversation.SendTextRequest;
+import com.matrix.agent.conversation.CapabilityTraceCodec;
 import com.matrix.agent.conversation.ConversationCoordinator;
 import com.matrix.agent.conversation.ConversationExporter;
+import com.matrix.agent.conversation.ConversationReadbackService;
 import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.conversation.ConversationIds;
 import com.matrix.agent.conversation.ConversationServiceGate;
@@ -58,6 +61,8 @@ public final class ConversationServiceStub extends IConversationService.Stub
     private final Object subscribeLock = new Object();
 
     private final ConversationExporter exporter;
+    private final ConversationReadbackService readback;
+    private final com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker;
     private final android.content.Context appContext;
 
     public ConversationServiceStub(ConversationCoordinator coordinator,
@@ -65,13 +70,15 @@ public final class ConversationServiceStub extends IConversationService.Stub
             ModelServiceStub.CallerResolver callerResolver,
             ConversationVoiceBindingStore bindingStore) {
         this(coordinator, recoveryGate, persistenceGate, callerResolver, bindingStore,
-                null, null);
+                null, null, null, null);
     }
 
     public ConversationServiceStub(ConversationCoordinator coordinator,
             ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
             ModelServiceStub.CallerResolver callerResolver,
             ConversationVoiceBindingStore bindingStore, ConversationExporter exporter,
+            ConversationReadbackService readback,
+            com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker,
             android.content.Context appContext) {
         this.coordinator = coordinator;
         this.recoveryGate = recoveryGate;
@@ -79,6 +86,8 @@ public final class ConversationServiceStub extends IConversationService.Stub
         this.callerResolver = callerResolver;
         this.bindingStore = bindingStore;
         this.exporter = exporter;
+        this.readback = readback;
+        this.summaryMarker = summaryMarker;
         this.appContext = appContext;
         coordinator.setListener(this);
     }
@@ -399,6 +408,59 @@ public final class ConversationServiceStub extends IConversationService.Stub
     }
 
     @Override
+    public ConversationOperationResult speakAssistantMessage(String conversationId,
+            String assistantMessageId, String clientOperationId) {
+        callerResolver.caller();
+        String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return new ConversationOperationResult(availabilityError(), safeOperation,
+                    conversationId, null);
+        }
+        requireOwnedConversation(conversationId);
+        if (readback == null) {
+            return new ConversationOperationResult(
+                    MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE, safeOperation,
+                    conversationId, null);
+        }
+        com.matrix.agent.voice.VoiceRuntime runtime =
+                com.matrix.agent.voice.VoiceRuntimeHolder.get();
+        if (runtime != null && runtime.isSessionActive()) {
+            return new ConversationOperationResult(MatrixErrorCode.INVALID_STATE,
+                    safeOperation, conversationId, null);
+        }
+        String error = readback.speak(conversationId, assistantMessageId,
+                ActorUsers.USER_DRIVER);
+        if (error == null) {
+            return new ConversationOperationResult(MatrixErrorCode.SUCCESS, safeOperation,
+                    conversationId, null);
+        }
+        switch (error) {
+            case ConversationReadbackService.ERR_VOICE_ACTIVE:
+                return new ConversationOperationResult(MatrixErrorCode.INVALID_STATE,
+                        safeOperation, conversationId, null);
+            case ConversationReadbackService.ERR_NOT_READABLE:
+                return new ConversationOperationResult(MatrixErrorCode.INVALID_ARGUMENT,
+                        safeOperation, conversationId, null);
+            default:
+                return new ConversationOperationResult(MatrixErrorCode.NOT_FOUND,
+                        safeOperation, conversationId, null);
+        }
+    }
+
+    @Override
+    public boolean wouldSummarizeOnNextRound(String conversationId) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return false;
+        }
+        requireOwnedConversation(conversationId);
+        return summaryMarker != null
+                && summaryMarker.wouldSummarizeOnNextRound(conversationId);
+    }
+
+    @Override
     public void subscribeConversation(String conversationId,
             IConversationCallback callback) throws RemoteException {
         callerResolver.caller();
@@ -488,7 +550,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
         }
     }
 
-    private static ConversationPage toWindowDto(ConversationStore.MessageWindow window) {
+    private ConversationPage toWindowDto(ConversationStore.MessageWindow window) {
         List<ConversationMessage> messages =
                 new ArrayList<>(window.messagesAscending().size());
         for (ConversationStore.MessageRow row : window.messagesAscending()) {
@@ -505,10 +567,33 @@ public final class ConversationServiceStub extends IConversationService.Stub
                 row.updatedAtMs(), row.titleOrigin(), row.pinned(), row.lastInputChannel());
     }
 
-    private static ConversationMessage toDto(ConversationStore.MessageRow row) {
-        return new ConversationMessage(row.conversationId(), row.messageId(),
-                row.sequenceNo(), row.roleWire(), row.statusWire(), row.channelWire(),
-                row.text(), row.languageTag(), row.conversationTaskId(), row.failureCode(),
-                row.createdAtMs(), row.updatedAtMs());
+    private ConversationMessage toDto(ConversationStore.MessageRow row) {
+        // 轨迹只挂用户消息（经 TaskLink.user_message_id 关联，评估 v1.0 §4.3）；
+        // 解码失败 fail-closed 为空列表——展示层绝不因投影损坏而炸
+        java.util.List<CapabilityTraceEntry> traces = java.util.Collections.emptyList();
+        if (row.conversationTaskId() != null
+                && row.roleWire() == ConversationMessage.ROLE_USER) {
+            String traceJson = coordinator.traceJsonOf(row.conversationTaskId());
+            if (traceJson != null) {
+                try {
+                    traces = CapabilityTraceCodec.decode(traceJson).stream()
+                            .map(trace -> new CapabilityTraceEntry(trace.capabilityId,
+                                    trace.friendlyName, trace.outcome,
+                                    trace.requestedDisplay, trace.verifiedDisplay,
+                                    trace.verificationState))
+                            .collect(java.util.stream.Collectors.toList());
+                } catch (IllegalArgumentException malformed) {
+                    android.util.Log.w("MatrixAgent",
+                            "[Conversation] 轨迹投影畸形，降级为空 task="
+                                    + row.conversationTaskId());
+                }
+            }
+        }
+        return new ConversationMessage(ParcelSchema.CURRENT, row.conversationId(),
+                row.messageId(), row.sequenceNo(), row.roleWire(), row.statusWire(),
+                row.channelWire(), row.text(), row.languageTag(), row.conversationTaskId(),
+                row.failureCode(), row.createdAtMs(), row.updatedAtMs(),
+                row.inputKindWire(), row.steerHostUserMessageId(), row.steerDeliveryWire(),
+                traces);
     }
 }

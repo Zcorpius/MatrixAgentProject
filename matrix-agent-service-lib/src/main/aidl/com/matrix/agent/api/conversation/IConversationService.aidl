@@ -72,6 +72,14 @@ interface IConversationService {
     /** 只读导出为 Markdown：返回受授予 content URI（FileProvider）；失败/降级返回 null。 */
     String exportConversation(String conversationId, String clientOperationId);
 
+    /** 朗读一条助手最终回复（评估 v1.0 §4.8）：Host 重读投影文本经既有 TTS/焦点治理播报；
+     *  活跃语音会话返回 INVALID_STATE。 */
+    ConversationOperationResult speakAssistantMessage(String conversationId,
+            String assistantMessageId, String clientOperationId);
+
+    /** 摘要续聊标记（评估 v1.0 §4.6）：读时重算下一次续聊是否会使用摘要（不落库/不调 LLM）。 */
+    boolean wouldSummarizeOnNextRound(String conversationId);
+
     void subscribeConversation(String conversationId, in IConversationCallback callback);
 
     void unsubscribeConversation(in IConversationCallback callback);

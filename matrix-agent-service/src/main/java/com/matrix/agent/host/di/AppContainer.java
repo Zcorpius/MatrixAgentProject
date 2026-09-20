@@ -159,7 +159,7 @@ public final class AppContainer implements DownloadRuntime {
         // 同一个 AgentBudget 同时驱动 AgentEngine(字符/迭代/Tool 上限)
         // 和 AgentRequest.timeoutMillis(总 deadline)。Repository 不再硬编码 60_000L。
         // 注入 SteerMailbox,启用运行时追加指令(REPROMPT/FORCE_TOOL/DEFER)。
-        AgentBudget sharedBudget = new AgentBudget();
+        sharedBudget = new AgentBudget();
         // 主驾优先调度器正式接入 APK runtime。parallelism=2
         // 让主驾抢占 + 副驾排队可并行,SessionLockManager 仍保证同 session 串行。
         TaskScheduler scheduler = new TaskScheduler(2, sessionLockManager,
@@ -263,6 +263,7 @@ public final class AppContainer implements DownloadRuntime {
      * {@link MatrixAgentApplication#onTerminate()} 调用,真机依赖进程级回收兜底。
      */
     /** 对话域 task 端口；SQLCipher 降级时为 null（对话域不装配）。 */
+    private com.matrix.agent.task.AgentBudget sharedBudget;
     private com.matrix.agent.contract.LlmClient titleModelClient;
     private java.util.function.Supplier<com.matrix.agent.contract.ModelConfig>
             titleConfigSupplier;
@@ -270,6 +271,11 @@ public final class AppContainer implements DownloadRuntime {
     public ConversationTaskSubmitter getConversationTaskSubmitter() {
         return conversationTaskSubmitter;
     }
+    /** 对话域与任务域共用的预算（压缩器/摘要标记同源口径）。 */
+    public com.matrix.agent.task.AgentBudget getSharedBudget() {
+        return sharedBudget;
+    }
+
     /** 自动标题的功能型轻量调用端口（与 LlmSummaryProvider 同源 client/config）。 */
     public com.matrix.agent.contract.LlmClient getTitleModelClient() {
         return titleModelClient;
