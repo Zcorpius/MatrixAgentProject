@@ -28,6 +28,30 @@ public interface ConversationMessageDao {
             + " ORDER BY sequence_no DESC LIMIT :limit")
     List<ConversationMessageEntity> latestDescending(String conversationId, int limit);
 
+    /** 向后翻页：sequence 严格大于 afterSequenceExclusive，升序取 limit+1 条以判定 hasAfter。 */
+    @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
+            + " AND sequence_no > :afterSequenceExclusive"
+            + " ORDER BY sequence_no ASC LIMIT :limit")
+    List<ConversationMessageEntity> pageAfterAscending(String conversationId,
+            long afterSequenceExclusive, int limit);
+
+    /** 窗口首行之前是否还有更早消息（hasBefore 判定）。 */
+    @Query("SELECT COUNT(*) FROM conversation_message WHERE conversation_id = :conversationId"
+            + " AND sequence_no < :beforeSequenceExclusive")
+    int countBefore(String conversationId, long beforeSequenceExclusive);
+
+    /** 锚点存在性（越权/被清理/不存在统一为 false，不泄漏存在性）。 */
+    @Query("SELECT COUNT(*) FROM conversation_message WHERE conversation_id = :conversationId"
+            + " AND sequence_no = :anchorSequence")
+    int countBySequence(String conversationId, long anchorSequence);
+
+    /** 锚点窗口：sequence 升序取 anchor 前 beforeCount 条 + 后 afterCount 条由仓库层拼装。 */
+    @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
+            + " AND sequence_no >= :anchorSequence"
+            + " ORDER BY sequence_no ASC LIMIT :afterCount")
+    List<ConversationMessageEntity> windowFromAnchorAscending(String conversationId,
+            long anchorSequence, int afterCount);
+
     /** 向前翻页：sequence 严格小于 beforeSequenceExclusive，降序取 limit+1 条以判定 hasMore。 */
     @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
             + " AND sequence_no < :beforeSequenceExclusive"

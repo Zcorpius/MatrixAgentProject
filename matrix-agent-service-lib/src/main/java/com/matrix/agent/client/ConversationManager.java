@@ -57,6 +57,39 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
+    public ConversationPage getMessagesAfter(String conversationId,
+            long afterSequenceExclusive, int limit) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.getMessagesAfter(conversationId, afterSequenceExclusive, limit);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, null);
+        }
+    }
+
+    public ConversationPage getMessagesAround(String conversationId, long anchorSequence,
+            int limit) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.getMessagesAround(conversationId, anchorSequence, limit);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, null);
+        }
+    }
+
+    public ConversationOperationResult renameConversation(String conversationId, String title,
+            String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return unavailableOperation(clientOperationId, conversationId);
+        try {
+            return s.renameConversation(conversationId, title, clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailableOperation(clientOperationId, conversationId));
+        }
+    }
+
     public ConversationPage getMessages(String conversationId, long beforeSequenceExclusive,
             int limit) {
         IConversationService s = service;

@@ -27,6 +27,18 @@ interface IConversationService {
      *  返回页内按 sequence 升序排列。 */
     ConversationPage getMessages(String conversationId, long beforeSequenceExclusive, int limit);
 
+    /** 向后翻页：sequence 严格大于 afterSequenceExclusive，升序取 limit 条。 */
+    ConversationPage getMessagesAfter(String conversationId, long afterSequenceExclusive,
+            int limit);
+
+    /** 锚点定位窗口：围绕 anchorSequence 取 limit 条；
+     *  锚点被清理/越权/不存在时统一返回空页且 anchorExists=false，不泄漏存在性。 */
+    ConversationPage getMessagesAround(String conversationId, long anchorSequence, int limit);
+
+    /** 用户重命名：titleOrigin 置 USER，此后自动标题永不覆盖。 */
+    ConversationOperationResult renameConversation(String conversationId, String title,
+            String clientOperationId);
+
     /** 提交一条文字消息并调度对应 Agent 任务；返回被持久化的用户消息投影。
      *  相同 clientOperationId（同 conversation）重放返回既有消息，不二次执行。 */
     ConversationSubmission sendText(in SendTextRequest request, String clientOperationId);

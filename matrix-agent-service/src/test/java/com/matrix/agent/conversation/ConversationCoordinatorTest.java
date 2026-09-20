@@ -579,6 +579,79 @@ public final class ConversationCoordinatorTest {
         assertTrue("终态后 steer 作为定稿用户输入参与后续装配", visibleAfterTerminal);
     }
 
+    // ---------------- 阶段 1 契约：窗口分页 / 重命名（评估 v1.0 §4.1-4.2） ----------------
+
+    /** 锚点存在→窗口返回升序内容与双侧标志；锚点不存在→空页 + anchorExists=false。 */
+    @Test public void windowAroundReturnsAscendingWindowOrAnchorMissing() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        RefExecutor runtime = new RefExecutor();
+        runtime.behavior.set((task, token) -> success("完成"));
+        ConversationCoordinator coordinator = buildHarness(store, runtime);
+        for (int i = 1; i <= 5; i++) {
+            coordinator.submitText(command("指令" + i, UUID.randomUUID().toString()));
+        }
+        // Fake 里 assistant 行也占 sequence；以真实行集校验窗口语义
+        java.util.List<Long> sequences = new java.util.ArrayList<>();
+        for (MessageRow row : store.latestMessages(CONV, 100)) {
+            sequences.add(row.sequenceNo());
+        }
+        java.util.Collections.sort(sequences);
+        long anchor = sequences.get(sequences.size() / 2);
+
+        ConversationStore.MessageWindow window =
+                coordinator.windowAround(CONV, anchor, 4);
+        assertTrue(window.anchorExists());
+        assertTrue("窗口按 sequence 升序",
+                java.util.Objects.equals(window.messagesAscending().stream()
+                        .map(MessageRow::sequenceNo).toList(),
+                        window.messagesAscending().stream()
+                                .map(MessageRow::sequenceNo).sorted().toList()));
+        assertTrue("锚点前后都有消息时双侧标志为真", window.hasBefore() && window.hasAfter());
+
+        ConversationStore.MessageWindow missing =
+                coordinator.windowAround(CONV, anchor + 10_000, 4);
+        assertFalse("不可定位统一空页", missing.anchorExists());
+        assertTrue(missing.messagesAscending().isEmpty());
+    }
+
+    /** windowAfter：严格大于 afterSequenceExclusive 的升序窗口；不存在会话统一空窗。 */
+    @Test public void windowAfterReturnsAscendingTailOrEmptyForMissingConversation() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        RefExecutor runtime = new RefExecutor();
+        runtime.behavior.set((task, token) -> success("完成"));
+        ConversationCoordinator coordinator = buildHarness(store, runtime);
+        coordinator.submitText(command("第一条", UUID.randomUUID().toString()));
+        coordinator.submitText(command("第二条", UUID.randomUUID().toString()));
+
+        long firstSeq = store.latestMessages(CONV, 100).stream()
+                .mapToLong(MessageRow::sequenceNo).min().orElseThrow();
+        ConversationStore.MessageWindow tail = coordinator.windowAfter(CONV, firstSeq, 50);
+        assertTrue(tail.anchorExists());
+        assertTrue("尾部窗口至少含后续行", tail.messagesAscending().size() >= 1);
+        assertTrue("尾部之后无更新消息", !tail.hasAfter());
+
+        ConversationStore.MessageWindow missing =
+                coordinator.windowAfter(UUID.randomUUID().toString(), 0, 50);
+        assertFalse("不存在的会话统一 anchorMissing", missing.anchorExists());
+    }
+
+    /** 重命名：origin 置 USER；不存在会话返回 false。 */
+    @Test public void renameSetsUserOriginAndRejectsMissingConversation() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        ConversationCoordinator coordinator = buildHarness(store, new RefExecutor());
+        assertTrue(coordinator.renameConversation(CONV, "我的空调对话"));
+        ConversationStore.ConversationRow renamed = store.findConversation(CONV);
+        assertEquals(com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_USER,
+                renamed.titleOrigin());
+        assertEquals("我的空调对话", renamed.title());
+        assertFalse(coordinator.renameConversation(UUID.randomUUID().toString(), "不存在"));
+        org.junit.Assert.assertThrows("空标题拒绝", IllegalArgumentException.class,
+                () -> coordinator.renameConversation(CONV, "   "));
+    }
+
     @Test public void validationRejectsBlankAndOverlongText() {
         FakeConversationStore store = new FakeConversationStore();
         store.seedConversation(CONV, OWNER);

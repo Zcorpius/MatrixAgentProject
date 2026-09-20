@@ -143,6 +143,62 @@ public final class ConversationServiceStub extends IConversationService.Stub
     }
 
     @Override
+    public ConversationPage getMessagesAfter(String conversationId, long afterSequenceExclusive,
+            int limit) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return new ConversationPage(ParcelSchema.CURRENT, Collections.emptyList(), false, false,
+                    false, false);
+        }
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        ConversationStore.MessageWindow window = coordinator.windowAfter(conversationId,
+                afterSequenceExclusive, boundedLimit);
+        return toWindowDto(window);
+    }
+
+    @Override
+    public ConversationPage getMessagesAround(String conversationId, long anchorSequence,
+            int limit) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return new ConversationPage(ParcelSchema.CURRENT, Collections.emptyList(), false, false,
+                    false, false);
+        }
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        // 不可定位（越权/被清理/不存在）统一空页 + anchorExists=false，不泄漏存在性
+        ConversationStore.MessageWindow window = coordinator.windowAround(conversationId,
+                anchorSequence, boundedLimit);
+        return toWindowDto(window);
+    }
+
+    @Override
+    public ConversationOperationResult renameConversation(String conversationId, String title,
+            String clientOperationId) {
+        callerResolver.caller();
+        String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        String safeTitle = HostInputValidator.boundUtf8(title, 120);
+        int availability = availabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return new ConversationOperationResult(availability, safeOperation, conversationId,
+                    null);
+        }
+        requireOwnedConversation(conversationId);
+        boolean renamed;
+        try {
+            renamed = coordinator.renameConversation(conversationId, safeTitle);
+        } catch (IllegalArgumentException invalid) {
+            return new ConversationOperationResult(MatrixErrorCode.INVALID_ARGUMENT,
+                    safeOperation, conversationId, null);
+        }
+        return new ConversationOperationResult(
+                renamed ? MatrixErrorCode.SUCCESS : MatrixErrorCode.NOT_FOUND,
+                safeOperation, conversationId, null);
+    }
+
+    @Override
     public ConversationSubmission sendText(SendTextRequest request, String clientOperationId) {
         callerResolver.caller();
         String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
@@ -323,9 +379,21 @@ public final class ConversationServiceStub extends IConversationService.Stub
         }
     }
 
+    private static ConversationPage toWindowDto(ConversationStore.MessageWindow window) {
+        List<ConversationMessage> messages =
+                new ArrayList<>(window.messagesAscending().size());
+        for (ConversationStore.MessageRow row : window.messagesAscending()) {
+            messages.add(toDto(row));
+        }
+        return new ConversationPage(ParcelSchema.CURRENT, messages,
+                window.hasBefore(), window.hasBefore(), window.hasAfter(),
+                window.anchorExists());
+    }
+
     private static ConversationInfo toInfoDto(ConversationStore.ConversationRow row) {
-        return new ConversationInfo(row.conversationId(), row.title(), row.ownerUserId(),
-                row.vehicleZone(), row.archived(), row.createdAtMs(), row.updatedAtMs());
+        return new ConversationInfo(ParcelSchema.CURRENT, row.conversationId(), row.title(),
+                row.ownerUserId(), row.vehicleZone(), row.archived(), row.createdAtMs(),
+                row.updatedAtMs(), row.titleOrigin(), row.pinned(), row.lastInputChannel());
     }
 
     private static ConversationMessage toDto(ConversationStore.MessageRow row) {

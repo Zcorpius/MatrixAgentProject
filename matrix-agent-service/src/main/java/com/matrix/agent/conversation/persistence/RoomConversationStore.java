@@ -200,6 +200,8 @@ public final class RoomConversationStore implements ConversationStore {
             link.terminalAtMs = null;
             links.upsert(link);
 
+            conversations.touchLastInputChannel(command.conversationId(),
+                    command.channelWire());
             conversations.touchUpdated(command.conversationId(), now);
             result[0] = new SubmittedUserMessage(sequence, false);
         });
@@ -254,6 +256,8 @@ public final class RoomConversationStore implements ConversationStore {
             steer.steerDeliveryState = STEER_DELIVERY_PENDING_TEXT;
             steer.schemaVersion = WIRE_SCHEMA_VERSION;
             messages.upsert(steer);
+            conversations.touchLastInputChannel(command.conversationId(),
+                    command.channelWire());
             conversations.touchUpdated(command.conversationId(), now);
             result[0] = new SubmittedSteerMessage(sequence, false);
         });
@@ -428,6 +432,62 @@ public final class RoomConversationStore implements ConversationStore {
         return running == null ? null : running.userMessageId;
     }
 
+    // ---- 定向窗口 / 重命名 ----
+
+    @Override
+    public MessageWindow windowAfter(String conversationId, long afterSequenceExclusive,
+            int limit) {
+        // limit+1 判定 hasAfter；hasBefore = 起点前是否还有更早消息
+        List<ConversationMessageEntity> ascending = messages.pageAfterAscending(
+                conversationId, afterSequenceExclusive, limit + 1);
+        boolean hasAfter = ascending.size() > limit;
+        List<ConversationMessageEntity> page =
+                hasAfter ? ascending.subList(0, limit) : ascending;
+        boolean hasBefore = !page.isEmpty()
+                && messages.countBefore(conversationId, page.get(0).sequenceNo) > 0;
+        return new MessageWindow(ascendingRows(page), hasBefore, hasAfter, true);
+    }
+
+    @Override
+    public MessageWindow windowAround(String conversationId, long anchorSequence, int limit) {
+        if (messages.countBySequence(conversationId, anchorSequence) == 0) {
+            return MessageWindow.anchorMissing();
+        }
+        int beforeCount = limit / 2;
+        int afterCount = limit - beforeCount;
+        // 前半窗复用向前翻页（降序多取一条判定 hasBefore），后半窗从锚点（含）向后取
+        List<ConversationMessageEntity> olderDescending = messages.pageBeforeDescending(
+                conversationId, anchorSequence, beforeCount + 1);
+        boolean hasBefore = olderDescending.size() > beforeCount;
+        List<ConversationMessageEntity> older = hasBefore
+                ? olderDescending.subList(0, beforeCount) : olderDescending;
+        List<ConversationMessageEntity> newer = messages.windowFromAnchorAscending(
+                conversationId, anchorSequence, afterCount + 1);
+        boolean hasAfter = newer.size() > afterCount;
+        List<ConversationMessageEntity> tail =
+                hasAfter ? newer.subList(0, afterCount) : newer;
+        List<ConversationMessageEntity> window = new ArrayList<>(older.size() + tail.size());
+        for (int i = older.size() - 1; i >= 0; i--) {
+            window.add(older.get(i));
+        }
+        window.addAll(tail);
+        return new MessageWindow(ascendingRows(window), hasBefore, hasAfter, true);
+    }
+
+    @Override
+    public boolean renameConversation(String conversationId, String title) {
+        final boolean[] renamed = {false};
+        long now = System.currentTimeMillis();
+        transaction.runInTransaction(() -> {
+            if (conversations.getById(conversationId) == null) {
+                return;
+            }
+            conversations.rename(conversationId, title, now);
+            renamed[0] = true;
+        });
+        return renamed[0];
+    }
+
     @Override
     public int clearForUsers(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
@@ -449,7 +509,8 @@ public final class RoomConversationStore implements ConversationStore {
     private static ConversationRow toRow(ConversationEntity entity) {
         return new ConversationRow(entity.conversationId, entity.ownerUserId,
                 entity.vehicleZone, entity.title, entity.archivedAtMs != null,
-                entity.createdAtMs, entity.updatedAtMs);
+                entity.createdAtMs, entity.updatedAtMs, entity.titleOrigin, entity.pinned,
+                entity.lastInputChannel);
     }
 
     private static MessageRow toRow(ConversationMessageEntity entity) {
@@ -460,6 +521,14 @@ public final class RoomConversationStore implements ConversationStore {
                 entity.failureCode, entity.createdAtMs, entity.updatedAtMs,
                 entity.inputKind, entity.steerHostUserMessageId,
                 deliveryToWire(entity.steerDeliveryState));
+    }
+
+    private static List<MessageRow> ascendingRows(List<ConversationMessageEntity> ascending) {
+        List<MessageRow> rows = new ArrayList<>(ascending.size());
+        for (ConversationMessageEntity entity : ascending) {
+            rows.add(toRow(entity));
+        }
+        return Collections.unmodifiableList(rows);
     }
 
     private static int deliveryToWire(String state) {

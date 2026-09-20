@@ -48,6 +48,9 @@ public final class ConversationCoordinator {
     public static final int TEXT_MAX_CHARS = 4096;
     /** REPROMPT 追加文本沿用既有 Steer 上限语义。 */
     public static final int APPEND_MAX_CHARS = 512;
+
+    /** 标题上限（评估 v1.0 §4.1；与 Operit 40 字符 sanitize 对齐的车机展示预算）。 */
+    public static final int TITLE_MAX_CHARS = 40;
     private static final int WIRE_SCHEMA_VERSION = 2;
 
     /** 订阅事件端口；host/rpc 桥接 Binder callback，域内默认 no-op。 */
@@ -309,6 +312,40 @@ public final class ConversationCoordinator {
 
     /** 附属输入受理结果；replay=true 表示幂等命中既有行。 */
     public record SteerAccepted(String steerMessageId, long sequenceNo, boolean replay) { }
+
+    // ---------------------------------------------------------------- 列表 / 窗口 / 重命名（评估 v1.0 §4.1-4.2）
+
+    /** 向后翻页（升序窗口）；会话不存在/被清理统一为空窗（anchorExists=false）。 */
+    public ConversationStore.MessageWindow windowAfter(String conversationId,
+            long afterSequenceExclusive, int limit) {
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (store.findConversation(conversationId) == null) {
+            return ConversationStore.MessageWindow.anchorMissing();
+        }
+        return store.windowAfter(conversationId, afterSequenceExclusive, limit);
+    }
+
+    /** 锚点定位窗口；不可定位统一 anchorMissing（不泄漏存在性）。 */
+    public ConversationStore.MessageWindow windowAround(String conversationId,
+            long anchorSequence, int limit) {
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (store.findConversation(conversationId) == null) {
+            return ConversationStore.MessageWindow.anchorMissing();
+        }
+        return store.windowAround(conversationId, anchorSequence, limit);
+    }
+
+    /** 用户重命名：titleOrigin 置 USER（AUTO 永不覆盖）；不存在返回 false。 */
+    public boolean renameConversation(String conversationId, String title) {
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        String safeTitle = normalizeText(title, TITLE_MAX_CHARS);
+        if (safeTitle.isBlank()) {
+            throw new IllegalArgumentException("title 不能为空");
+        }
+        return store.renameConversation(conversationId, safeTitle);
+    }
+
+
 
     /** cancelMessage：对已提交未终态任务触发协作取消；终态由执行路径如实收敛。 */
     public boolean cancelByUserMessage(String conversationId, String userMessageId) {

@@ -42,6 +42,29 @@ public interface ConversationStore {
 
     record MessagePage(List<MessageRow> messagesAscending, boolean hasMore) { }
 
+    /**
+     * 定向窗口（评估 v1.0 §4.2）：messagesAscending 为窗口内容；
+     * hasBefore/hasAfter 表示窗口外两侧是否还有更早/更新消息；
+     * anchorExists=false 时 messages 恒空（越权/被清理/不存在统一不可定位，不泄漏存在性）。
+     */
+    MessageWindow windowAfter(String conversationId, long afterSequenceExclusive, int limit);
+
+    MessageWindow windowAround(String conversationId, long anchorSequence, int limit);
+
+    record MessageWindow(List<MessageRow> messagesAscending, boolean hasBefore,
+            boolean hasAfter, boolean anchorExists) {
+
+        public static MessageWindow anchorMissing() {
+            return new MessageWindow(List.of(), false, false, false);
+        }
+    }
+
+    /**
+     * 用户重命名（评估 v1.0 §4.1）：无条件把 titleOrigin 置 USER——此后 AUTO 永不覆盖。
+     * 会话不存在返回 false。
+     */
+    boolean renameConversation(String conversationId, String title);
+
     // ---- 提交（原子事务：幂等检查 + sequence 分配 + 消息 + task link） ----
 
     /**
@@ -125,7 +148,8 @@ public interface ConversationStore {
     // ---- 行投影 ----
 
     record ConversationRow(String conversationId, String ownerUserId, String vehicleZone,
-            String title, boolean archived, long createdAtMs, long updatedAtMs) { }
+            String title, boolean archived, long createdAtMs, long updatedAtMs,
+            int titleOrigin, boolean pinned, int lastInputChannel) { }
 
     record MessageRow(String messageId, String conversationId, long sequenceNo, int roleWire,
             int statusWire, int channelWire, String text, String languageTag,

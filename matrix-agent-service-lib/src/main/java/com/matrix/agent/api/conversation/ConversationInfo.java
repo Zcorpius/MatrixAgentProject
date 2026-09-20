@@ -25,16 +25,31 @@ public final class ConversationInfo implements Parcelable {
     public final boolean archived;
     public final long createdAtMs;
     public final long updatedAtMs;
+    /** TITLE_ORIGIN_*（v3 追加）：AUTO 只在仍为 DEFAULT 时落，USER 之后永不覆盖。 */
+    public final int titleOrigin;
+    /** 展示元数据（置顶排序），不进模型上下文。 */
+    public final boolean pinned;
+    /** ConversationMessage.CHANNEL_*（v3 追加）：最近一次用户输入通道。 */
+    public final int lastInputChannel;
 
     public ConversationInfo(String conversationId, String title, String ownerUserId,
             String vehicleZone, boolean archived, long createdAtMs, long updatedAtMs) {
         this(ParcelSchema.CURRENT, conversationId, title, ownerUserId, vehicleZone, archived,
-                createdAtMs, updatedAtMs);
+                createdAtMs, updatedAtMs, TITLE_ORIGIN_DEFAULT, false,
+                ConversationMessage.CHANNEL_NONE);
     }
 
     public ConversationInfo(int schemaVersion, String conversationId, String title,
             String ownerUserId, String vehicleZone, boolean archived, long createdAtMs,
             long updatedAtMs) {
+        this(schemaVersion, conversationId, title, ownerUserId, vehicleZone, archived,
+                createdAtMs, updatedAtMs, TITLE_ORIGIN_DEFAULT, false,
+                ConversationMessage.CHANNEL_NONE);
+    }
+
+    public ConversationInfo(int schemaVersion, String conversationId, String title,
+            String ownerUserId, String vehicleZone, boolean archived, long createdAtMs,
+            long updatedAtMs, int titleOrigin, boolean pinned, int lastInputChannel) {
         this.schemaVersion = schemaVersion;
         this.conversationId = conversationId;
         this.title = title;
@@ -43,6 +58,9 @@ public final class ConversationInfo implements Parcelable {
         this.archived = archived;
         this.createdAtMs = createdAtMs;
         this.updatedAtMs = updatedAtMs;
+        this.titleOrigin = titleOrigin;
+        this.pinned = pinned;
+        this.lastInputChannel = lastInputChannel;
     }
 
     private ConversationInfo(Parcel in) {
@@ -54,6 +72,16 @@ public final class ConversationInfo implements Parcelable {
         archived = in.readByte() != 0;
         createdAtMs = in.readLong();
         updatedAtMs = in.readLong();
+        // v3 追加字段容错：旧端写入的 parcel 无尾字段，按版本取默认值
+        if (schemaVersion >= 3) {
+            titleOrigin = in.readInt();
+            pinned = in.readByte() != 0;
+            lastInputChannel = in.readInt();
+        } else {
+            titleOrigin = TITLE_ORIGIN_DEFAULT;
+            pinned = false;
+            lastInputChannel = ConversationMessage.CHANNEL_NONE;
+        }
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -65,6 +93,9 @@ public final class ConversationInfo implements Parcelable {
         dest.writeByte((byte) (archived ? 1 : 0));
         dest.writeLong(createdAtMs);
         dest.writeLong(updatedAtMs);
+        dest.writeInt(titleOrigin);
+        dest.writeByte((byte) (pinned ? 1 : 0));
+        dest.writeInt(lastInputChannel);
     }
 
     @Override public int describeContents() { return 0; }

@@ -8,10 +8,13 @@ public final class ParcelSchema {
 
     /** 当前契约版本（contractMinor 每次 DTO 追加字段时递增）。 */
     /**
-     * v2 appends the stable acceptance/rejection code to AgentTaskHandle.  Readers must
-     * branch on schemaVersion before consuming appended fields; writers remain append-only.
+     * v2 appends the stable acceptance/rejection code to AgentTaskHandle.
+     * v3 appends presentation fields to ConversationInfo (titleOrigin/pinned/
+     * lastInputChannel) and window flags to ConversationPage (hasBefore/hasAfter/
+     * anchorExists). Readers must branch on schemaVersion before consuming appended
+     * fields; writers remain append-only.
      */
-    public static final int CURRENT = 2;
+    public static final int CURRENT = 3;
 
     private ParcelSchema() {
     }

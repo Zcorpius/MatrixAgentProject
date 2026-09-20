@@ -16,10 +16,21 @@ public interface ConversationDao {
     @Query("SELECT * FROM conversation WHERE conversation_id = :conversationId")
     ConversationEntity getById(String conversationId);
 
+    /** 置顶优先（展示元数据），其后按最近活动降序（评估 v1.0 §4.1）。 */
     @Query("SELECT * FROM conversation WHERE owner_user_id = :ownerUserId"
             + " AND (:includeArchived = 1 OR archived_at_ms IS NULL)"
-            + " ORDER BY updated_at_ms DESC LIMIT :limit")
+            + " ORDER BY pinned DESC, updated_at_ms DESC LIMIT :limit")
     List<ConversationEntity> listByOwner(String ownerUserId, boolean includeArchived, int limit);
+
+    /** 用户重命名：title_origin 直接置 USER(2)——此后 AUTO 标题永不覆盖。 */
+    @Query("UPDATE conversation SET title = :title, title_origin = 2,"
+            + " updated_at_ms = :updatedAtMs WHERE conversation_id = :conversationId")
+    int rename(String conversationId, String title, long updatedAtMs);
+
+    /** 最近一次用户输入通道（复用冻结 CHANNEL_* 值）。 */
+    @Query("UPDATE conversation SET last_input_channel = :channel WHERE conversation_id"
+            + " = :conversationId")
+    void touchLastInputChannel(String conversationId, int channel);
 
     @Query("UPDATE conversation SET updated_at_ms = :updatedAtMs"
             + " WHERE conversation_id = :conversationId")

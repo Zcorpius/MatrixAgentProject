@@ -45,7 +45,7 @@ public final class FakeConversationStore implements ConversationStore {
 
     public ConversationRow seedConversation(String conversationId, String ownerUserId) {
         ConversationRow row = new ConversationRow(conversationId, ownerUserId, "DRIVER",
-                null, false, 1L, 1L);
+                null, false, 1L, 1L, 0, false, 0);
         conversations.put(conversationId, row);
         return row;
     }
@@ -54,7 +54,9 @@ public final class FakeConversationStore implements ConversationStore {
     public ConversationRow createConversation(NewConversation command) {
         ConversationRow row = new ConversationRow(command.conversationId(),
                 command.ownerUserId(), command.vehicleZone(), command.title(), false,
-                System.currentTimeMillis(), System.currentTimeMillis());
+                System.currentTimeMillis(), System.currentTimeMillis(),
+                com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_DEFAULT,
+                false, com.matrix.agent.api.conversation.ConversationMessage.CHANNEL_NONE);
         conversations.put(row.conversationId(), row);
         return row;
     }
@@ -328,6 +330,58 @@ public final class FakeConversationStore implements ConversationStore {
             }
         }
         return null;
+    }
+
+    @Override
+    public boolean renameConversation(String conversationId, String title) {
+        ConversationRow row = conversations.get(conversationId);
+        if (row == null) {
+            return false;
+        }
+        conversations.put(conversationId, new ConversationRow(row.conversationId(),
+                row.ownerUserId(), row.vehicleZone(), title, row.archived(),
+                row.createdAtMs(), System.currentTimeMillis(),
+                com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_USER,
+                row.pinned(), row.lastInputChannel()));
+        return true;
+    }
+
+    @Override
+    public MessageWindow windowAfter(String conversationId, long afterSequenceExclusive,
+            int limit) {
+        List<MessageRow> ascending = conversationRowsAscending(conversationId);
+        List<MessageRow> result = new ArrayList<>();
+        for (MessageRow row : ascending) {
+            if (row.sequenceNo() > afterSequenceExclusive) {
+                result.add(row);
+            }
+        }
+        boolean hasAfter = result.size() > limit;
+        List<MessageRow> page = hasAfter ? new ArrayList<>(result.subList(0, limit)) : result;
+        boolean hasBefore = !ascending.isEmpty()
+                && ascending.get(0).sequenceNo() < page.get(0).sequenceNo();
+        return new MessageWindow(page, hasBefore, hasAfter, true);
+    }
+
+    @Override
+    public MessageWindow windowAround(String conversationId, long anchorSequence, int limit) {
+        for (MessageRow row : conversationRowsAscending(conversationId)) {
+            if (row.sequenceNo() == anchorSequence) {
+                return windowAfter(conversationId, anchorSequence - limit - 1, limit);
+            }
+        }
+        return MessageWindow.anchorMissing();
+    }
+
+    private List<MessageRow> conversationRowsAscending(String conversationId) {
+        List<MessageRow> rows = new ArrayList<>();
+        for (MessageRow row : messages.values()) {
+            if (row.conversationId().equals(conversationId)) {
+                rows.add(row);
+            }
+        }
+        rows.sort(Comparator.comparingLong(MessageRow::sequenceNo));
+        return rows;
     }
 
     @Override
