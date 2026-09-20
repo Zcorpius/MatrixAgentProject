@@ -90,6 +90,44 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
+    public ConversationOperationResult annotateMessage(String conversationId,
+            String messageId, boolean favorite, String userNote, String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return unavailableOperation(clientOperationId, conversationId);
+        try {
+            return s.annotateMessage(conversationId, messageId, favorite, userNote,
+                    clientOperationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e,
+                    unavailableOperation(clientOperationId, conversationId));
+        }
+    }
+
+    /** 快照式安全分支：返回子会话 id；切点无效/不可用返回 null。 */
+    public String forkConversation(String parentConversationId, long atSequenceNo,
+            String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.forkConversation(parentConversationId, atSequenceNo, clientOperationId);
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return null;
+        }
+    }
+
+    /** 来源说明（可空）；sendText 的 quotedMessageId 重载也在本批暴露。 */
+    public String getLineageSummary(String childConversationId) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.getLineageSummary(childConversationId);
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return null;
+        }
+    }
+
     public ConversationPage getMessages(String conversationId, long beforeSequenceExclusive,
             int limit) {
         IConversationService s = service;

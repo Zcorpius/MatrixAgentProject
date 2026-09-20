@@ -61,9 +61,12 @@ import java.util.Arrays;
                 AgentTaskOperationEntity.class,
                 com.matrix.agent.data.conversation.ConversationEntity.class,
                 com.matrix.agent.data.conversation.ConversationMessageEntity.class,
-                com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class
+                com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class,
+                com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity.class,
+                com.matrix.agent.data.conversation.ConversationQuoteEntity.class,
+                com.matrix.agent.data.conversation.ConversationLineageEntity.class
         },
-        version = 8,
+        version = 9,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -80,6 +83,9 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract com.matrix.agent.data.conversation.ConversationDao conversationDao();
     public abstract com.matrix.agent.data.conversation.ConversationMessageDao conversationMessageDao();
     public abstract com.matrix.agent.data.conversation.ConversationTaskLinkDao conversationTaskLinkDao();
+    public abstract com.matrix.agent.data.conversation.ConversationMessageAnnotationDao conversationMessageAnnotationDao();
+    public abstract com.matrix.agent.data.conversation.ConversationQuoteDao conversationQuoteDao();
+    public abstract com.matrix.agent.data.conversation.ConversationLineageDao conversationLineageDao();
 
     /**
      * schema v1 → v2 迁移——audit_event 加 userId 列 + idx_audit_user_zone 索引。
@@ -285,6 +291,52 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
+     * v8 → v9（评估 v1.0 阶段 3）：用户组织三表——附属标记（收藏/备注）、引用回复、
+     * 安全分支谱系。级联纪律：annotation/quote 随 message CASCADE；lineage 随子会话
+     * CASCADE、父删除 SET NULL（种子快照自洽，来源说明回退父标题快照）。
+     */
+    public static final Migration MIGRATION_8_9 = new Migration(8, 9) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_message_annotation` ("
+                    + "`message_id` TEXT NOT NULL, `owner_user_id` TEXT NOT NULL, "
+                    + "`favorite` INTEGER NOT NULL, `user_note` TEXT, "
+                    + "`created_at_ms` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`message_id`, `owner_user_id`), "
+                    + "FOREIGN KEY(`message_id`) REFERENCES `conversation_message`(`message_id`)"
+                    + " ON UPDATE NO ACTION ON DELETE CASCADE )");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_annotation_owner` "
+                    + "ON `conversation_message_annotation` (`owner_user_id`)");
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_quote` ("
+                    + "`message_id` TEXT NOT NULL, `quoted_message_id` TEXT NOT NULL, "
+                    + "`quote_snapshot` TEXT NOT NULL, `created_at_ms` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`message_id`), "
+                    + "FOREIGN KEY(`message_id`) REFERENCES `conversation_message`(`message_id`)"
+                    + " ON UPDATE NO ACTION ON DELETE CASCADE , "
+                    + "FOREIGN KEY(`quoted_message_id`)"
+                    + " REFERENCES `conversation_message`(`message_id`)"
+                    + " ON UPDATE NO ACTION ON DELETE CASCADE )");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_quote_quoted` "
+                    + "ON `conversation_quote` (`quoted_message_id`)");
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_lineage` ("
+                    + "`child_conversation_id` TEXT NOT NULL, `parent_conversation_id` TEXT, "
+                    + "`fork_sequence_no` INTEGER NOT NULL, `parent_title_at_fork` TEXT, "
+                    + "`seed_snapshot` TEXT NOT NULL, `seed_version` INTEGER NOT NULL, "
+                    + "`created_by_user` TEXT NOT NULL, `created_at_ms` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`child_conversation_id`), "
+                    + "FOREIGN KEY(`child_conversation_id`)"
+                    + " REFERENCES `conversation`(`conversation_id`)"
+                    + " ON UPDATE NO ACTION ON DELETE CASCADE , "
+                    + "FOREIGN KEY(`parent_conversation_id`)"
+                    + " REFERENCES `conversation`(`conversation_id`)"
+                    + " ON UPDATE NO ACTION ON DELETE SET NULL )");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_lineage_parent` "
+                    + "ON `conversation_lineage` (`parent_conversation_id`)");
+        }
+    };
+
+    /**
      * 加密数据库单例获取。
      *
      * <p>以下任一条件必须抛 IllegalStateException:
@@ -325,12 +377,12 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v2→v3 Migration(audit_event requestEpoch)。
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8);
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=8 entities=11 journalMode=WAL");
+                    + " version=9 entities=14 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

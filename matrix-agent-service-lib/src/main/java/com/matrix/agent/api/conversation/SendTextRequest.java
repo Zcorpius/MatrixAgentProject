@@ -16,17 +16,30 @@ public final class SendTextRequest implements Parcelable {
     public final String text;
     /** 可空：跟随系统。 */
     public final String languageTag;
+    /** 可空（v4 追加）：引用回复的目标消息；Host 校验同会话后落引用快照。 */
+    public final String quotedMessageId;
 
     public SendTextRequest(String conversationId, String text, String languageTag) {
-        this(ParcelSchema.CURRENT, conversationId, text, languageTag);
+        this(ParcelSchema.CURRENT, conversationId, text, languageTag, null);
+    }
+
+    public SendTextRequest(String conversationId, String text, String languageTag,
+            String quotedMessageId) {
+        this(ParcelSchema.CURRENT, conversationId, text, languageTag, quotedMessageId);
     }
 
     public SendTextRequest(int schemaVersion, String conversationId, String text,
             String languageTag) {
+        this(schemaVersion, conversationId, text, languageTag, null);
+    }
+
+    public SendTextRequest(int schemaVersion, String conversationId, String text,
+            String languageTag, String quotedMessageId) {
         this.schemaVersion = schemaVersion;
         this.conversationId = conversationId;
         this.text = text;
         this.languageTag = languageTag;
+        this.quotedMessageId = quotedMessageId;
     }
 
     private SendTextRequest(Parcel in) {
@@ -34,6 +47,8 @@ public final class SendTextRequest implements Parcelable {
         conversationId = in.readString();
         text = in.readString();
         languageTag = in.readString();
+        // v4 追加字段容错：旧端 parcel 无尾字段取 null
+        quotedMessageId = schemaVersion >= 4 ? in.readString() : null;
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -41,6 +56,7 @@ public final class SendTextRequest implements Parcelable {
         dest.writeString(conversationId);
         dest.writeString(text);
         dest.writeString(languageTag);
+        dest.writeString(quotedMessageId);
     }
 
     @Override public int describeContents() { return 0; }

@@ -58,6 +58,17 @@ interface IConversationService {
      */
     String createVoiceBinding(String conversationId, String clientOperationId);
 
+    /** 收藏/个人备注合并 upsert（评估 v1.0 §4.4）：不改消息本体、不入模型上下文。 */
+    ConversationOperationResult annotateMessage(String conversationId, String messageId,
+            boolean favorite, String userNote, String clientOperationId);
+
+    /** 快照式安全分支（评估 v1.0 §4.5）：在已完成消息处切出子会话；返回子会话 id。 */
+    String forkConversation(String parentConversationId, long atSequenceNo,
+            String clientOperationId);
+
+    /** 子会话的来源说明（可空：非分支会话或父已清除）。 */
+    String getLineageSummary(String childConversationId);
+
     void subscribeConversation(String conversationId, in IConversationCallback callback);
 
     void unsubscribeConversation(in IConversationCallback callback);

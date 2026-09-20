@@ -131,6 +131,47 @@ public interface ConversationStore {
     /** 恢复对账：写入一条 sequence 有序的 SYSTEM 说明行；返回其 sequence。 */
     long appendSystemNote(String conversationId, String text);
 
+    // ---- 用户组织（评估 v1.0 阶段 3：标注 / 引用 / 分支谱系） ----
+
+    /** 标注 upsert（收藏/备注合并写）；消息不存在抛 IllegalArgumentException。 */
+    void upsertAnnotation(AnnotationUpsert command);
+
+    record AnnotationUpsert(String messageId, String ownerUserId, boolean favorite,
+            String userNote) { }
+
+    /** 可空。 */
+    AnnotationRow findAnnotation(String messageId, String ownerUserId);
+
+    record AnnotationRow(String messageId, String ownerUserId, boolean favorite,
+            String userNote, long updatedAtMs) { }
+
+    /** 引用落库（1:1 于发起消息）；被引消息不存在/跨会话抛 IllegalArgumentException。 */
+    void recordQuote(QuoteRecord command);
+
+    record QuoteRecord(String messageId, String quotedMessageId, String snapshot) { }
+
+    /** 可空。 */
+    QuoteRow findQuoteByQuotingMessage(String messageId);
+
+    record QuoteRow(String messageId, String quotedMessageId, String snapshot) { }
+
+    /**
+     * 分支谱系落库：同事务创建子会话行 + lineage（快照由调用方经同一装配器输入形态
+     * 生成）。父会话不存在抛 IllegalArgumentException。
+     */
+    void recordLineage(LineageRecord command);
+
+    record LineageRecord(String childConversationId, String parentConversationId,
+            long forkSequenceNo, String parentTitleAtFork, String seedSnapshotJson,
+            String createdByUser) { }
+
+    /** 可空：无谱系（非分支会话）。父删除后 parentConversationId 为 null。 */
+    LineageRow findLineage(String childConversationId);
+
+    record LineageRow(String childConversationId, String parentConversationId,
+            long forkSequenceNo, String parentTitleAtFork, String seedSnapshotJson,
+            int seedVersion) { }
+
     // ---- 恢复 / 清理 ----
 
     /** 恢复对账的扫描集：一切未终态 link（terminal_status IS NULL）。 */

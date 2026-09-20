@@ -219,7 +219,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
                             safeOperation, Actor.DRIVER,
                             ConversationIds.agentSessionId(request.conversationId,
                                     Actor.DRIVER.name(), CALLER_ZONE),
-                            ARBITRATION_KEY));
+                            ARBITRATION_KEY, null, null, request.quotedMessageId));
             return new ConversationSubmission(MatrixErrorCode.SUCCESS, request.conversationId,
                     accepted.userMessageId(), accepted.conversationTaskId(),
                     accepted.sequenceNo(), accepted.replay());
@@ -287,6 +287,68 @@ public final class ConversationServiceStub extends IConversationService.Stub
         requireAvailableForMutation();
         requireOwnedConversation(conversationId);
         return bindingStore.create(conversationId, ActorUsers.USER_DRIVER);
+    }
+
+    @Override
+    public ConversationOperationResult annotateMessage(String conversationId, String messageId,
+            boolean favorite, String userNote, String clientOperationId) {
+        callerResolver.caller();
+        String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        String safeNote = HostInputValidator.boundUtf8(userNote,
+                2 * ConversationCoordinator.NOTE_MAX_CHARS);
+        int availability = availabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return new ConversationOperationResult(availability, safeOperation, conversationId,
+                    null);
+        }
+        requireOwnedConversation(conversationId);
+        try {
+            coordinator.annotateMessage(conversationId, messageId,
+                    ActorUsers.USER_DRIVER, favorite, safeNote);
+        } catch (IllegalArgumentException invalid) {
+            return new ConversationOperationResult(MatrixErrorCode.INVALID_ARGUMENT,
+                    safeOperation, conversationId, null);
+        }
+        return new ConversationOperationResult(MatrixErrorCode.SUCCESS, safeOperation,
+                conversationId, null);
+    }
+
+    @Override
+    public String forkConversation(String parentConversationId, long atSequenceNo,
+            String clientOperationId) {
+        callerResolver.caller();
+        HostInputValidator.requireOperationId(clientOperationId);
+        ConversationIds.requireLowerUuid(parentConversationId, "parentConversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return null;
+        }
+        requireOwnedConversation(parentConversationId);
+        try {
+            return coordinator.forkFrom(parentConversationId, atSequenceNo,
+                    ActorUsers.USER_DRIVER);
+        } catch (IllegalArgumentException invalid) {
+            return null; // 切点非完成消息/会话不存在：统一 null，不泄漏存在性
+        }
+    }
+
+    @Override
+    public String getLineageSummary(String childConversationId) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(childConversationId, "childConversationId");
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return null;
+        }
+        requireOwnedConversation(childConversationId);
+        ConversationStore.LineageRow lineage = coordinator.lineageOf(childConversationId);
+        if (lineage == null) {
+            return null;
+        }
+        if (lineage.parentConversationId() == null) {
+            return "来源已清除";
+        }
+        return lineage.parentTitleAtFork() == null || lineage.parentTitleAtFork().isBlank()
+                ? "来自另一段对话" : "来自“" + lineage.parentTitleAtFork() + "”";
     }
 
     @Override

@@ -19,7 +19,10 @@ import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
 import com.matrix.agent.task.conversation.ConversationContextAssembler;
+import com.matrix.agent.conversation.BranchSeedCodec;
+import com.matrix.agent.conversation.ConversationHistoryAdapter;
 import com.matrix.agent.task.conversation.ConversationHistorySource;
+import com.matrix.agent.task.conversation.ConversationHistorySource.HistoryEntry;
 import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.intent.KeywordIntentClassifier;
 import com.matrix.agent.intent.MemoryIntentDetector;
@@ -650,6 +653,120 @@ public final class ConversationCoordinatorTest {
         assertFalse(coordinator.renameConversation(UUID.randomUUID().toString(), "不存在"));
         org.junit.Assert.assertThrows("空标题拒绝", IllegalArgumentException.class,
                 () -> coordinator.renameConversation(CONV, "   "));
+    }
+
+    // ---------------- 阶段 3 合约（评估 v1.0 §4.4-4.5 / 阶段 3 验收） ----------------
+
+    /** 引用回复：同会话校验 + 快照落库；跨会话引用拒绝。 */
+    @Test public void quoteReplyRecordsSnapshotAndRejectsCrossConversation() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        RefExecutor runtime = new RefExecutor();
+        runtime.behavior.set((task, token) -> success("已处理。"));
+        ConversationCoordinator coordinator = buildHarness(store, runtime);
+        ConversationCoordinator.TextAccepted first = coordinator.submitText(
+                command("帮我把空调调到二十四度", UUID.randomUUID().toString()));
+        String quotedId = first.userMessageId();
+
+        // 正常引用
+        ConversationCoordinator.TextAccepted quoting = coordinator.submitText(
+                new ConversationCoordinator.TextCommand(CONV, "再来一次", "zh-CN",
+                        UUID.randomUUID().toString(), Actor.DRIVER,
+                        ConversationIds.agentSessionId(CONV, "DRIVER", "DRIVER"),
+                        "demo-vehicle", null, null, quotedId));
+        ConversationStore.QuoteRow quote = store.findQuoteByQuotingMessage(
+                quoting.userMessageId());
+        org.junit.Assert.assertNotNull("引用快照已落库", quote);
+        assertEquals(quotedId, quote.quotedMessageId());
+        assertEquals("快照为被引消息文本", "帮我把空调调到二十四度", quote.snapshot());
+
+        // 跨会话引用拒绝
+        String otherConv = UUID.randomUUID().toString();
+        store.seedConversation(otherConv, OWNER);
+        org.junit.Assert.assertThrows("跨会话引用必须拒绝", IllegalArgumentException.class,
+                () -> coordinator.submitText(new ConversationCoordinator.TextCommand(
+                        otherConv, "引用别会话", "zh-CN", UUID.randomUUID().toString(),
+                        Actor.DRIVER, ConversationIds.agentSessionId(otherConv,
+                                "DRIVER", "DRIVER"), "demo-vehicle", null, null, quotedId)));
+    }
+
+    /** 分支：切点必须是已完成消息；子会话历史 = 冻结快照 + 子自身回合。 */
+    @Test public void forkFreezesSnapshotAndSeedMergesWithChildRounds() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        RefExecutor runtime = new RefExecutor();
+        runtime.behavior.set((task, token) -> success("完成。"));
+        ConversationCoordinator coordinator = buildHarness(store, runtime);
+        coordinator.submitText(command("第一轮指令", UUID.randomUUID().toString()));
+        coordinator.submitText(command("第二轮指令", UUID.randomUUID().toString()));
+        store.renameConversation(CONV, "父对话");
+        long lastSeq = store.latestMessages(CONV, 1).get(0).sequenceNo();
+
+        String childId = coordinator.forkFrom(CONV, lastSeq, OWNER);
+        org.junit.Assert.assertNotNull(childId);
+        ConversationStore.LineageRow lineage = store.findLineage(childId);
+        assertEquals(CONV, lineage.parentConversationId());
+        assertEquals("父标题快照", "父对话", lineage.parentTitleAtFork());
+        java.util.List<HistoryEntry> snapshot =
+                BranchSeedCodec.decode(lineage.seedSnapshotJson());
+        assertFalse("快照非空", snapshot.isEmpty());
+
+        // 父后续新增不影响分支（快照冻结）：再跑一轮父会话
+        coordinator.submitText(command("父会话第三轮", UUID.randomUUID().toString()));
+        ConversationStore.LineageRow reloaded = store.findLineage(childId);
+        assertEquals("快照条数不变", snapshot.size(),
+                BranchSeedCodec.decode(reloaded.seedSnapshotJson()).size());
+
+        // 子会话历史合并：adapter 级验证（快照 + 子自身）
+        ConversationHistoryAdapter adapter =
+                new ConversationHistoryAdapter(store);
+        java.util.List<HistoryEntry> beforeChildRound = adapter.latestCompleted(childId, 50);
+        assertEquals(snapshot, beforeChildRound);
+        // 子会话跑一轮后合并
+        coordinator.submitText(new ConversationCoordinator.TextCommand(childId, "分支追问",
+                "zh-CN", UUID.randomUUID().toString(), Actor.DRIVER,
+                ConversationIds.agentSessionId(childId, "DRIVER", "DRIVER"),
+                "demo-vehicle", null, null, null));
+        java.util.List<HistoryEntry> afterChildRound = adapter.latestCompleted(childId, 50);
+        assertEquals("合并 = 快照 + 子自身回合", snapshot.size() + 2, afterChildRound.size());
+    }
+
+    /** 分支切点校验：非完成消息（如 RUNNING/不存在）拒绝。 */
+    @Test public void forkRejectsNonCompletedAnchor() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        ConversationCoordinator coordinator = buildHarness(store, new RefExecutor());
+        org.junit.Assert.assertThrows("不存在的切点拒绝", IllegalArgumentException.class,
+                () -> coordinator.forkFrom(CONV, 999L, OWNER));
+    }
+
+    /** 标注：收藏/备注合并 upsert 幂等；消息不存在拒绝；不触碰消息本体。 */
+    @Test public void annotateUpsertsWithoutTouchingMessageRow() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, OWNER);
+        RefExecutor runtime = new RefExecutor();
+        runtime.behavior.set((task, token) -> success("完成。"));
+        ConversationCoordinator coordinator = buildHarness(store, runtime);
+        ConversationCoordinator.TextAccepted round = coordinator.submitText(
+                command("被标注的消息", UUID.randomUUID().toString()));
+        String before = store.findMessage(round.userMessageId()).text();
+
+        coordinator.annotateMessage(CONV, round.userMessageId(), OWNER, true, "重要");
+        ConversationStore.AnnotationRow row =
+                store.findAnnotation(round.userMessageId(), OWNER);
+        assertTrue(row.favorite());
+        assertEquals("重要", row.userNote());
+
+        coordinator.annotateMessage(CONV, round.userMessageId(), OWNER, true, null);
+        assertTrue("合并 upsert 保留收藏",
+                store.findAnnotation(round.userMessageId(), OWNER).favorite());
+        org.junit.Assert.assertNull("备注清除",
+                store.findAnnotation(round.userMessageId(), OWNER).userNote());
+        assertEquals("消息本体不被触碰", before,
+                store.findMessage(round.userMessageId()).text());
+
+        org.junit.Assert.assertThrows("消息不存在拒绝", IllegalArgumentException.class,
+                () -> coordinator.annotateMessage(CONV, "no-such-message", OWNER, true, null));
     }
 
     @Test public void validationRejectsBlankAndOverlongText() {

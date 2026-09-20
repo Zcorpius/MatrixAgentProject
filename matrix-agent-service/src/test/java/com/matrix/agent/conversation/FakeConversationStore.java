@@ -381,12 +381,26 @@ public final class FakeConversationStore implements ConversationStore {
 
     @Override
     public MessageWindow windowAround(String conversationId, long anchorSequence, int limit) {
-        for (MessageRow row : conversationRowsAscending(conversationId)) {
-            if (row.sequenceNo() == anchorSequence) {
-                return windowAfter(conversationId, anchorSequence - limit - 1, limit);
+        List<MessageRow> ascending = conversationRowsAscending(conversationId);
+        int anchorIndex = -1;
+        for (int i = 0; i < ascending.size(); i++) {
+            if (ascending.get(i).sequenceNo() == anchorSequence) {
+                anchorIndex = i;
+                break;
             }
         }
-        return MessageWindow.anchorMissing();
+        if (anchorIndex < 0) {
+            return MessageWindow.anchorMissing();
+        }
+        // 显式双侧窗口：锚点前 beforeCount 条 + 锚点（含）起 afterCount 条
+        int beforeCount = limit / 2;
+        int afterCount = limit - beforeCount;
+        int from = Math.max(0, anchorIndex - beforeCount);
+        int to = Math.min(ascending.size(), anchorIndex + 1 + afterCount);
+        List<MessageRow> window = new ArrayList<>(ascending.subList(from, to));
+        boolean hasBefore = from > 0;
+        boolean hasAfter = to < ascending.size();
+        return new MessageWindow(window, hasBefore, hasAfter, true);
     }
 
     private List<MessageRow> conversationRowsAscending(String conversationId) {
@@ -398,6 +412,63 @@ public final class FakeConversationStore implements ConversationStore {
         }
         rows.sort(Comparator.comparingLong(MessageRow::sequenceNo));
         return rows;
+    }
+
+    private final java.util.Map<String, AnnotationRow> annotations = new java.util.HashMap<>();
+    private final java.util.Map<String, QuoteRow> quotes = new java.util.HashMap<>();
+    private final java.util.Map<String, LineageRow> lineages = new java.util.HashMap<>();
+
+    @Override
+    public void upsertAnnotation(AnnotationUpsert command) {
+        if (!messages.containsKey(command.messageId())) {
+            throw new IllegalArgumentException("message 不存在: " + command.messageId());
+        }
+        annotations.put(command.messageId() + ":" + command.ownerUserId(),
+                new AnnotationRow(command.messageId(), command.ownerUserId(),
+                        command.favorite(), command.userNote(),
+                        System.currentTimeMillis()));
+    }
+
+    @Override
+    public AnnotationRow findAnnotation(String messageId, String ownerUserId) {
+        return annotations.get(messageId + ":" + ownerUserId);
+    }
+
+    @Override
+    public void recordQuote(QuoteRecord command) {
+        if (!messages.containsKey(command.quotedMessageId())) {
+            throw new IllegalArgumentException("被引消息不存在: " + command.quotedMessageId());
+        }
+        quotes.put(command.messageId(),
+                new QuoteRow(command.messageId(), command.quotedMessageId(),
+                        command.snapshot()));
+    }
+
+    @Override
+    public QuoteRow findQuoteByQuotingMessage(String messageId) {
+        return quotes.get(messageId);
+    }
+
+    @Override
+    public void recordLineage(LineageRecord command) {
+        if (!conversations.containsKey(command.parentConversationId())) {
+            throw new IllegalArgumentException(
+                    "父会话不存在: " + command.parentConversationId());
+        }
+        conversations.put(command.childConversationId(), new ConversationRow(
+                command.childConversationId(), command.createdByUser(), "DRIVER", null,
+                false, System.currentTimeMillis(), System.currentTimeMillis(),
+                com.matrix.agent.api.conversation.ConversationInfo.TITLE_ORIGIN_DEFAULT,
+                false, com.matrix.agent.api.conversation.ConversationMessage.CHANNEL_NONE));
+        lineages.put(command.childConversationId(),
+                new LineageRow(command.childConversationId(), command.parentConversationId(),
+                        command.forkSequenceNo(), command.parentTitleAtFork(),
+                        command.seedSnapshotJson(), 1));
+    }
+
+    @Override
+    public LineageRow findLineage(String childConversationId) {
+        return lineages.get(childConversationId);
     }
 
     @Override

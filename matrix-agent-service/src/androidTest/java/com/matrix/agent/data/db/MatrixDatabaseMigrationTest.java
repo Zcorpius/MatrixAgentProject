@@ -238,4 +238,86 @@ public final class MatrixDatabaseMigrationTest {
 
         db.close();
     }
+
+    /**
+     * v8 → v9（阶段 3 用户组织）：三表落成 + 外键级联语义在设备上真实触发验证。
+     */
+    @Test
+    public void migrate8To9CreatesOrganizationTablesWithCascades() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 8);
+        // 8.json 建表无 DEFAULT 子句（DEFAULT 只存在于迁移 ALTER 里）——显式带 v8 列
+        db.execSQL("INSERT INTO conversation (conversation_id, owner_user_id, vehicle_zone, "
+                + "title, created_at_ms, updated_at_ms, title_origin, pinned, "
+                + "last_input_channel, schema_version) VALUES "
+                + "('conv-1', 'driver-1', 'DRIVER', '父对话', 1000, 1000, 0, 0, 0, 1)");
+        db.execSQL("INSERT INTO conversation (conversation_id, owner_user_id, vehicle_zone, "
+                + "title, created_at_ms, updated_at_ms, title_origin, pinned, "
+                + "last_input_channel, schema_version) VALUES "
+                + "('conv-child', 'driver-1', 'DRIVER', NULL, 1000, 1000, 0, 0, 0, 1)");
+        db.execSQL("INSERT INTO conversation_message (message_id, conversation_id, sequence_no, "
+                + "role, status, channel, text, language_tag, conversation_task_id, "
+                + "reply_to_message_id, failure_code, created_at_ms, updated_at_ms, "
+                + "idempotency_key, input_kind, schema_version) VALUES "
+                + "('msg-1', 'conv-1', 1, 0, 2, 1, '被引用的文本', 'zh-CN', NULL, NULL, "
+                + "0, 1000, 1000, 'idem-1', 0, 1)");
+        db.execSQL("INSERT INTO conversation_message (message_id, conversation_id, sequence_no, "
+                + "role, status, channel, text, language_tag, conversation_task_id, "
+                + "reply_to_message_id, failure_code, created_at_ms, updated_at_ms, "
+                + "idempotency_key, input_kind, schema_version) VALUES "
+                + "('msg-quote', 'conv-1', 2, 0, 2, 1, '引用它的回复', 'zh-CN', NULL, NULL, "
+                + "0, 1000, 1000, 'idem-2', 0, 1)");
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 9, true,
+                MatrixDatabase.MIGRATION_8_9);
+        // 测试连接默认不开 FK 约束（生产由 Room onOpen 打开）——显式开启以验证
+        // 迁移 SQL 声明的 CASCADE/SET NULL 行为本身
+        db.execSQL("PRAGMA foreign_keys = ON");
+
+        // 附属标记：复合主键 upsert 幂等
+        db.execSQL("INSERT INTO conversation_message_annotation (message_id, owner_user_id, "
+                + "favorite, user_note, created_at_ms, updated_at_ms) VALUES "
+                + "('msg-1', 'driver-1', 1, '重要', 1000, 1000)");
+        // 引用快照
+        db.execSQL("INSERT INTO conversation_quote (message_id, quoted_message_id, "
+                + "quote_snapshot, created_at_ms) VALUES "
+                + "('msg-quote', 'msg-1', '被引用的文本', 1000)");
+        // 分支谱系：子指向父
+        db.execSQL("INSERT INTO conversation_lineage (child_conversation_id, "
+                + "parent_conversation_id, fork_sequence_no, parent_title_at_fork, "
+                + "seed_snapshot, seed_version, created_by_user, created_at_ms) VALUES "
+                + "('conv-child', 'conv-1', 1, '父对话', '[]', 1, 'driver-1', 1000)");
+
+        // 级联 1：删父会话 → lineage.parent 置 NULL（子自洽），父标题快照保留
+        db.execSQL("DELETE FROM conversation WHERE conversation_id = 'conv-1'");
+        Cursor lineage = db.query("SELECT parent_conversation_id, parent_title_at_fork, "
+                + "seed_snapshot FROM conversation_lineage "
+                + "WHERE child_conversation_id = 'conv-child'");
+        assertTrue("父删除后子谱系仍自洽存在", lineage.moveToFirst());
+        assertTrue("父引用 SET NULL", lineage.isNull(0));
+        assertEquals("来源说明回退父标题快照", "父对话", lineage.getString(1));
+        assertEquals("[]", lineage.getString(2));
+        lineage.close();
+
+        // 级联 2：消息行删除（生产经 clearForUsers 显式删消息）→ annotation 与 quote
+        // 双侧 CASCADE（conv→message 无 DB 级联是既有设计：生产路径显式三表删除）
+        db.execSQL("DELETE FROM conversation_message WHERE message_id = 'msg-1'");
+        Cursor annotation = db.query("SELECT COUNT(*) FROM conversation_message_annotation");
+        annotation.moveToFirst();
+        assertEquals("消息删除后标记级联消失", 0, annotation.getInt(0));
+        annotation.close();
+        Cursor quote = db.query("SELECT COUNT(*) FROM conversation_quote");
+        quote.moveToFirst();
+        assertEquals("消息删除后引用级联消失（quoted 侧 CASCADE）", 0, quote.getInt(0));
+        quote.close();
+
+        // 级联 3：删子会话 → lineage CASCADE
+        db.execSQL("DELETE FROM conversation WHERE conversation_id = 'conv-child'");
+        Cursor child = db.query("SELECT COUNT(*) FROM conversation_lineage");
+        child.moveToFirst();
+        assertEquals(0, child.getInt(0));
+        child.close();
+
+        db.close();
+    }
 }

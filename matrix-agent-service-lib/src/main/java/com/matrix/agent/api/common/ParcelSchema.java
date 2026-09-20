@@ -11,10 +11,12 @@ public final class ParcelSchema {
      * v2 appends the stable acceptance/rejection code to AgentTaskHandle.
      * v3 appends presentation fields to ConversationInfo (titleOrigin/pinned/
      * lastInputChannel) and window flags to ConversationPage (hasBefore/hasAfter/
-     * anchorExists). Readers must branch on schemaVersion before consuming appended
-     * fields; writers remain append-only.
+     * anchorExists).
+     * v4 appends quotedMessageId to SendTextRequest (quote-reply, evaluation §4.4).
+     * Readers must branch on schemaVersion before consuming appended fields;
+     * writers remain append-only.
      */
-    public static final int CURRENT = 3;
+    public static final int CURRENT = 4;
 
     private ParcelSchema() {
     }

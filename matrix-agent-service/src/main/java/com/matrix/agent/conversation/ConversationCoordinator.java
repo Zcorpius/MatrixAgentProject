@@ -15,6 +15,7 @@ import com.matrix.agent.conversation.ConversationStore.SubmittedUserMessage;
 import com.matrix.agent.conversation.ConversationStore.TerminalWrite;
 import com.matrix.agent.conversation.ConversationStore.UserSubmission;
 import com.matrix.agent.identity.Actor;
+import com.matrix.agent.task.conversation.ConversationHistorySource.HistoryEntry;
 import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.identity.InputSource;
 import com.matrix.agent.platform.KeyedSerialDispatcher;
@@ -24,6 +25,8 @@ import com.matrix.agent.task.conversation.AssistantReply;
 import com.matrix.agent.task.conversation.ConversationAssistantProjector;
 import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.task.steer.Steer;
+
+import java.util.ArrayList;
 
 import java.util.List;
 import java.util.Objects;
@@ -51,6 +54,9 @@ public final class ConversationCoordinator {
 
     /** 标题上限（评估 v1.0 §4.1；与 Operit 40 字符 sanitize 对齐的车机展示预算）。 */
     public static final int TITLE_MAX_CHARS = 40;
+
+    /** 个人备注上限（评估 v1.0 §4.4 收藏 P1；展示元数据，不入上下文）。 */
+    public static final int NOTE_MAX_CHARS = 200;
     private static final int WIRE_SCHEMA_VERSION = 2;
 
     /** 订阅事件端口；host/rpc 桥接 Binder callback，域内默认 no-op。 */
@@ -203,6 +209,18 @@ public final class ConversationCoordinator {
                     existing == null ? conversationTaskId : existing.conversationTaskId(),
                     submitted.sequenceNo(), true);
         }
+        // 引用回复（评估 v1.0 §4.4）：同会话校验 + 可见快照落库；引用不是拼 prompt——
+        if (command.quotedMessageId() != null) {
+            ConversationStore.MessageRow quoted =
+                    store.findMessage(command.quotedMessageId());
+            if (quoted == null
+                    || !quoted.conversationId().equals(command.conversationId())) {
+                throw new IllegalArgumentException(
+                        "被引消息不存在或不属于该会话: " + command.quotedMessageId());
+            }
+            store.recordQuote(new ConversationStore.QuoteRecord(
+                    userMessageId, command.quotedMessageId(), quoted.text()));
+        }
         // 用户消息先 upsert（客户端首次看到该行），再发状态事件
         ConversationStore.MessageRow persistedUserRow = store.findMessage(userMessageId);
         if (persistedUserRow != null) {
@@ -257,13 +275,21 @@ public final class ConversationCoordinator {
 
     public record TextCommand(String conversationId, String text, String languageTag,
             String clientOperationId, Actor actor, String agentSessionId,
-            String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener) {
+            String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener,
+            String quotedMessageId) {
         /** 保持现有 Binder/测试调用的源码兼容。 */
         public TextCommand(String conversationId, String text, String languageTag,
                 String clientOperationId, Actor actor, String agentSessionId,
                 String arbitrationKey) {
             this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
-                    arbitrationKey, null, null);
+                    arbitrationKey, null, null, null);
+        }
+
+        public TextCommand(String conversationId, String text, String languageTag,
+                String clientOperationId, Actor actor, String agentSessionId,
+                String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener) {
+            this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
+                    arbitrationKey, metadata, acceptedListener, null);
         }
     }
 
@@ -326,6 +352,78 @@ public final class ConversationCoordinator {
 
     /** 附属输入受理结果；replay=true 表示幂等命中既有行。 */
     public record SteerAccepted(String steerMessageId, long sequenceNo, boolean replay) { }
+
+    // ---------------------------------------------------------------- 用户组织（评估 v1.0 阶段 3）
+
+    /** 收藏/备注合并 upsert（幂等）；消息不存在拒绝。 */
+    public void annotateMessage(String conversationId, String messageId, String ownerUserId,
+            boolean favorite, String userNote) {
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        requireMessageInConversation(conversationId, messageId);
+        String safeNote = userNote == null ? null : normalizeText(userNote, NOTE_MAX_CHARS);
+        if (safeNote != null && safeNote.isBlank()) {
+            safeNote = null; // 全空白等价清除备注
+        }
+        store.upsertAnnotation(new ConversationStore.AnnotationUpsert(
+                messageId, ownerUserId, favorite, safeNote));
+    }
+
+    /** 分支：在父会话某已完成消息处切出子会话；快照经同一装配器输入形态物化。 */
+    public String forkFrom(String parentConversationId, long atSequenceNo, String ownerUserId) {
+        ConversationIds.requireLowerUuid(parentConversationId, "parentConversationId");
+        ConversationStore.ConversationRow parent =
+                store.findConversation(parentConversationId);
+        if (parent == null || parent.archived()) {
+            throw new IllegalArgumentException(
+                    "父会话不存在或已归档: " + parentConversationId);
+        }
+        // 切点校验：必须是本会话一条已完成消息（仅从已完成建分支）
+        ConversationStore.MessageWindow window =
+                store.windowAround(parentConversationId, atSequenceNo, 1);
+        ConversationStore.MessageRow anchor = window.anchorExists()
+                && !window.messagesAscending().isEmpty()
+                && window.messagesAscending().get(0).sequenceNo() == atSequenceNo
+                        ? window.messagesAscending().get(0) : null;
+        if (anchor == null
+                || anchor.statusWire() != ConversationDomain.PersistedMessageStatus
+                        .COMPLETED.wire()) {
+            throw new IllegalArgumentException(
+                    "切点必须是本会话已完成消息: seq=" + atSequenceNo);
+        }
+        // 快照 = 切点前（含）的全部已完成回合——与 history 源同形态同过滤
+        List<ConversationStore.MessageRow> completed =
+                store.latestCompletedForSeed(parentConversationId, Integer.MAX_VALUE);
+        List<HistoryEntry> snapshot = new ArrayList<>();
+        for (ConversationStore.MessageRow row : completed) {
+            if (row.sequenceNo() > atSequenceNo) {
+                break;
+            }
+            snapshot.add(new HistoryEntry(
+                    row.roleWire() == ConversationMessage.ROLE_USER, row.text()));
+        }
+        String childId = ConversationIds.newConversationId();
+        store.recordLineage(new ConversationStore.LineageRecord(
+                childId, parentConversationId, atSequenceNo, parent.title(),
+                BranchSeedCodec.encode(snapshot), ownerUserId));
+        Log.i(TAG, "[Conversation] 分支创建 parent=" + parentConversationId
+                + " at=" + atSequenceNo + " child=" + childId
+                + " snapshotEntries=" + snapshot.size());
+        return childId;
+    }
+
+    /** 分支谱系直读（来源说明投影用）；非分支会话返回 null。 */
+    public ConversationStore.LineageRow lineageOf(String childConversationId) {
+        ConversationIds.requireLowerUuid(childConversationId, "childConversationId");
+        return store.findLineage(childConversationId);
+    }
+
+    private void requireMessageInConversation(String conversationId, String messageId) {
+        ConversationStore.MessageRow row = store.findMessage(messageId);
+        if (row == null || !row.conversationId().equals(conversationId)) {
+            throw new IllegalArgumentException(
+                    "消息不存在或不属于该会话: " + messageId);
+        }
+    }
 
     // ---------------------------------------------------------------- 列表 / 窗口 / 重命名（评估 v1.0 §4.1-4.2）
 

@@ -432,6 +432,109 @@ public final class RoomConversationStore implements ConversationStore {
         return running == null ? null : running.userMessageId;
     }
 
+    // ---- 用户组织（阶段 3） ----
+
+    @Override
+    public void upsertAnnotation(AnnotationUpsert command) {
+        long now = System.currentTimeMillis();
+        transaction.runInTransaction(() -> {
+            if (messages.getById(command.messageId()) == null) {
+                throw new IllegalArgumentException(
+                        "message 不存在: " + command.messageId());
+            }
+            com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity entity =
+                    new com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity();
+            entity.messageId = command.messageId();
+            entity.ownerUserId = command.ownerUserId();
+            entity.favorite = command.favorite();
+            entity.userNote = command.userNote();
+            entity.createdAtMs = now;
+            entity.updatedAtMs = now;
+            database.conversationMessageAnnotationDao().upsert(entity);
+        });
+    }
+
+    @Override
+    public AnnotationRow findAnnotation(String messageId, String ownerUserId) {
+        com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity entity =
+                database.conversationMessageAnnotationDao().get(messageId, ownerUserId);
+        return entity == null ? null : new AnnotationRow(entity.messageId,
+                entity.ownerUserId, entity.favorite, entity.userNote, entity.updatedAtMs);
+    }
+
+    @Override
+    public void recordQuote(QuoteRecord command) {
+        long now = System.currentTimeMillis();
+        transaction.runInTransaction(() -> {
+            if (messages.getById(command.quotedMessageId()) == null) {
+                throw new IllegalArgumentException(
+                        "被引消息不存在: " + command.quotedMessageId());
+            }
+            com.matrix.agent.data.conversation.ConversationQuoteEntity entity =
+                    new com.matrix.agent.data.conversation.ConversationQuoteEntity();
+            entity.messageId = command.messageId();
+            entity.quotedMessageId = command.quotedMessageId();
+            entity.quoteSnapshot = command.snapshot();
+            entity.createdAtMs = now;
+            database.conversationQuoteDao().upsert(entity);
+        });
+    }
+
+    @Override
+    public QuoteRow findQuoteByQuotingMessage(String messageId) {
+        com.matrix.agent.data.conversation.ConversationQuoteEntity entity =
+                database.conversationQuoteDao().getByQuotingMessage(messageId);
+        return entity == null ? null
+                : new QuoteRow(entity.messageId, entity.quotedMessageId,
+                        entity.quoteSnapshot);
+    }
+
+    @Override
+    public void recordLineage(LineageRecord command) {
+        long now = System.currentTimeMillis();
+        transaction.runInTransaction(() -> {
+            if (conversations.getById(command.parentConversationId()) == null) {
+                throw new IllegalArgumentException(
+                        "父会话不存在: " + command.parentConversationId());
+            }
+            ConversationEntity child = new ConversationEntity();
+            child.conversationId = command.childConversationId();
+            child.ownerUserId = command.createdByUser();
+            child.vehicleZone = "DRIVER";
+            child.title = null;
+            child.createdAtMs = now;
+            child.updatedAtMs = now;
+            child.archivedAtMs = null;
+            child.titleOrigin = ConversationInfo.TITLE_ORIGIN_DEFAULT;
+            child.pinned = false;
+            child.lastInputChannel = ConversationMessage.CHANNEL_NONE;
+            child.schemaVersion = WIRE_SCHEMA_VERSION;
+            conversations.upsert(child);
+
+            com.matrix.agent.data.conversation.ConversationLineageEntity lineage =
+                    new com.matrix.agent.data.conversation.ConversationLineageEntity();
+            lineage.childConversationId = command.childConversationId();
+            lineage.parentConversationId = command.parentConversationId();
+            lineage.forkSequenceNo = command.forkSequenceNo();
+            lineage.parentTitleAtFork = command.parentTitleAtFork();
+            lineage.seedSnapshot = command.seedSnapshotJson();
+            lineage.seedVersion = 1;
+            lineage.createdByUser = command.createdByUser();
+            lineage.createdAtMs = now;
+            database.conversationLineageDao().upsert(lineage);
+        });
+    }
+
+    @Override
+    public LineageRow findLineage(String childConversationId) {
+        com.matrix.agent.data.conversation.ConversationLineageEntity entity =
+                database.conversationLineageDao().getByChild(childConversationId);
+        return entity == null ? null
+                : new LineageRow(entity.childConversationId, entity.parentConversationId,
+                        entity.forkSequenceNo, entity.parentTitleAtFork,
+                        entity.seedSnapshot, entity.seedVersion);
+    }
+
     // ---- 定向窗口 / 重命名 ----
 
     @Override
