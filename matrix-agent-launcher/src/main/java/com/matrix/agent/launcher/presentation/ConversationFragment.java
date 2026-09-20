@@ -288,15 +288,6 @@ public final class ConversationFragment extends Fragment {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
-        // 能力事实轨迹（评估 v1.0 §4.3）：两段式“请求 X → 核验为 Y”，不一致以 Y 为准
-        if (isUser && message.executionTraces() != null
-                && !message.executionTraces().isEmpty()) {
-            for (com.matrix.agent.api.conversation.CapabilityTraceEntry trace
-                    : message.executionTraces()) {
-                row.addView(buildTraceRow(trace, maxBubbleWidth, density));
-            }
-        }
-
         // 长按菜单（阶段 3/4 入口）：收藏 / 引用回复 / 分支 / 朗读 / 复制
         row.setOnLongClickListener(view -> {
             showActions(message);
@@ -306,46 +297,7 @@ public final class ConversationFragment extends Fragment {
         return row;
     }
 
-    private View buildTraceRow(com.matrix.agent.api.conversation.CapabilityTraceEntry trace,
-            int maxBubbleWidth, float density) {
-        LinearLayout line = new LinearLayout(requireContext());
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        TextView text = new TextView(requireContext());
-        text.setTextSize(10);
-        text.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
-        StringBuilder sb = new StringBuilder("· ");
-        sb.append(trace.friendlyName == null ? trace.capabilityId : trace.friendlyName);
-        if (trace.requestedDisplay != null) {
-            sb.append("：请求 ").append(trace.requestedDisplay);
-        }
-        if (trace.verifiedDisplay != null) {
-            sb.append(" → 核验为 ").append(trace.verifiedDisplay);
-        }
-        sb.append("（").append(verifyText(trace.verificationState)).append("）");
-        text.setText(sb.toString());
-        text.setMaxWidth(maxBubbleWidth);
-        line.addView(text, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        return line;
-    }
 
-    private String verifyText(String verificationState) {
-        String state = verificationState == null ? "" : verificationState;
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_MISMATCH
-                .equals(state)) {
-            return getString(R.string.conversation_trace_mismatch);
-        }
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNKNOWN
-                .equals(state)) {
-            return getString(R.string.conversation_trace_unknown);
-        }
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNAVAILABLE
-                .equals(state)) {
-            return getString(R.string.conversation_trace_unavailable);
-        }
-        return getString(R.string.conversation_trace_verified);
-    }
 
     private String steerNoteText(int steerDeliveryState, int status) {
         if (status == ConversationMessage.STATUS_FAILED) {
