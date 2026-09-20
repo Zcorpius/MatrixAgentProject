@@ -39,6 +39,22 @@ public interface ConversationMessageDao {
             + " updated_at_ms = :updatedAtMs WHERE message_id = :messageId")
     int updateStatus(String messageId, int status, int failureCode, long updatedAtMs);
 
+    /** steer 投递态推进；仅 PENDING 行生效（迟到回执不得覆盖已收敛事实）。 */
+    @Query("UPDATE conversation_message SET steer_delivery_state = :deliveryState,"
+            + " updated_at_ms = :updatedAtMs WHERE message_id = :messageId"
+            + " AND input_kind = 1 AND steer_delivery_state = 'PENDING'")
+    int updateSteerDelivery(String messageId, String deliveryState, long updatedAtMs);
+
+    /**
+     * 宿主终态镜像收敛：仍为 RUNNING 的附属 steer 行置为宿主终态。
+     * 投递态 FAILED 的 steer 已自收敛为 FAILED（WHERE status = RUNNING 排除之）；
+     * 投递态保留原值——“已并入”只由 OFFERED 声称，PENDING 恢复后显示“未确认并入”。
+     */
+    @Query("UPDATE conversation_message SET status = :status, failure_code = :failureCode,"
+            + " updated_at_ms = :updatedAtMs WHERE steer_host_user_message_id = :hostMessageId"
+            + " AND input_kind = 1 AND status = 1")
+    int convergeSteersByHost(String hostMessageId, int status, int failureCode, long updatedAtMs);
+
     /** COMPLETED 的 user/assistant 文本（种子装配输入）；升序返回。 */
     @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
             + " AND status = :completedStatus AND role IN (:userRole, :assistantRole)"

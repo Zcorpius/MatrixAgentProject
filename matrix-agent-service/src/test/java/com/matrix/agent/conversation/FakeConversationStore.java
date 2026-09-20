@@ -148,7 +148,8 @@ public final class FakeConversationStore implements ConversationStore {
         messages.put(command.messageId(), new MessageRow(command.messageId(),
                 command.conversationId(), sequence, ROLE_USER,
                 PersistedMessageStatus.ACCEPTED.wire(), command.channelWire(), command.text(),
-                command.languageTag(), command.conversationTaskId(), 0, now, now));
+                command.languageTag(), command.conversationTaskId(), 0, now, now,
+                MessageRow.INPUT_PRIMARY_WIRE, null, MessageRow.STEER_DELIVERY_NONE_WIRE));
         if (command.idempotencyKey() != null) {
             idempotencyIndex.put(command.idempotencyKey(), command.messageId());
         }
@@ -172,6 +173,69 @@ public final class FakeConversationStore implements ConversationStore {
     }
 
     @Override
+    public SubmittedSteerMessage appendSteerMessage(SteerSubmission command) {
+        if (command.idempotencyKey() != null
+                && idempotencyIndex.containsKey(command.idempotencyKey())) {
+            return new SubmittedSteerMessage(
+                    messages.get(idempotencyIndex.get(command.idempotencyKey())).sequenceNo(),
+                    true);
+        }
+        ConversationRow conversation = conversations.get(command.conversationId());
+        if (conversation == null || conversation.archived()) {
+            throw new IllegalArgumentException(
+                    "conversation 不存在或已归档: " + command.conversationId());
+        }
+        LinkRow running = null;
+        for (LinkRow link : links.values()) {
+            if (link.conversationId.equals(command.conversationId())
+                    && link.terminalStatus == null) {
+                running = link;
+                break;
+            }
+        }
+        if (running == null || !running.userMessageId.equals(command.hostUserMessageId())) {
+            throw new IllegalStateException("宿主任务不在运行中: " + command.conversationId());
+        }
+        long sequence = 1;
+        for (MessageRow row : messages.values()) {
+            if (row.conversationId().equals(command.conversationId())
+                    && row.sequenceNo() >= sequence) {
+                sequence = row.sequenceNo() + 1;
+            }
+        }
+        long now = System.currentTimeMillis();
+        messages.put(command.messageId(), new MessageRow(command.messageId(),
+                command.conversationId(), sequence, ROLE_USER,
+                PersistedMessageStatus.RUNNING.wire(), command.channelWire(), command.text(),
+                command.languageTag(), null, 0, now, now,
+                MessageRow.INPUT_STEER_WIRE, command.hostUserMessageId(),
+                com.matrix.agent.api.conversation.ConversationMessage.STEER_DELIVERY_PENDING));
+        if (command.idempotencyKey() != null) {
+            idempotencyIndex.put(command.idempotencyKey(), command.messageId());
+        }
+        return new SubmittedSteerMessage(sequence, false);
+    }
+
+    @Override
+    public void updateSteerDelivery(String messageId, boolean offered) {
+        MessageRow row = messages.get(messageId);
+        if (row == null || row.inputKindWire() != MessageRow.INPUT_STEER_WIRE
+                || row.steerDeliveryWire()
+                        != com.matrix.agent.api.conversation.ConversationMessage.STEER_DELIVERY_PENDING) {
+            return; // 非 PENDING 行 no-op（迟到回执不覆盖已收敛事实）
+        }
+        int delivery = offered
+                ? com.matrix.agent.api.conversation.ConversationMessage.STEER_DELIVERY_OFFERED
+                : com.matrix.agent.api.conversation.ConversationMessage.STEER_DELIVERY_FAILED;
+        int status = offered ? row.statusWire() : PersistedMessageStatus.FAILED.wire();
+        messages.put(messageId, new MessageRow(row.messageId(), row.conversationId(),
+                row.sequenceNo(), row.roleWire(), status, row.channelWire(), row.text(),
+                row.languageTag(), row.conversationTaskId(), row.failureCode(),
+                row.createdAtMs(), System.currentTimeMillis(), row.inputKindWire(),
+                row.steerHostUserMessageId(), delivery));
+    }
+
+    @Override
     public boolean writeTerminal(TerminalWrite command) {
         LinkRow link = links.get(command.conversationTaskId());
         if (link == null) {
@@ -184,6 +248,16 @@ public final class FakeConversationStore implements ConversationStore {
         MessageRow user = messages.get(link.userMessageId);
         messages.put(link.userMessageId,
                 withStatus(user, command.userStatusWire(), command.failureCode()));
+        // 附属 steer 镜像收敛（与 Room 实现同契约）：仅 RUNNING 行，投递态保留
+        for (java.util.Map.Entry<String, MessageRow> entry : messages.entrySet()) {
+            MessageRow row = entry.getValue();
+            if (row.inputKindWire() == MessageRow.INPUT_STEER_WIRE
+                    && link.userMessageId.equals(row.steerHostUserMessageId())
+                    && row.statusWire() == PersistedMessageStatus.RUNNING.wire()) {
+                entry.setValue(withStatus(row, command.userStatusWire(),
+                        command.failureCode()));
+            }
+        }
         if (command.assistantText() != null && !command.assistantText().isBlank()) {
             long sequence = 1;
             for (MessageRow row : messages.values()) {
@@ -196,7 +270,8 @@ public final class FakeConversationStore implements ConversationStore {
                     command.assistantMessageId(), link.conversationId, sequence, ROLE_ASSISTANT,
                     command.userStatusWire(), MessageRow.CHANNEL_NONE_WIRE,
                     command.assistantText(), null, command.conversationTaskId(),
-                    command.failureCode(), now, now));
+                    command.failureCode(), now, now,
+                    MessageRow.INPUT_PRIMARY_WIRE, null, MessageRow.STEER_DELIVERY_NONE_WIRE));
         }
         link.terminalStatus = command.userStatusWire();
         return true;
@@ -213,7 +288,8 @@ public final class FakeConversationStore implements ConversationStore {
         messages.put(java.util.UUID.randomUUID().toString(), new MessageRow(
                 java.util.UUID.randomUUID().toString(), conversationId, sequence, ROLE_SYSTEM,
                 PersistedMessageStatus.COMPLETED.wire(), MessageRow.CHANNEL_NONE_WIRE, text,
-                null, null, 0, System.currentTimeMillis(), System.currentTimeMillis()));
+                null, null, 0, System.currentTimeMillis(), System.currentTimeMillis(),
+                MessageRow.INPUT_PRIMARY_WIRE, null, MessageRow.STEER_DELIVERY_NONE_WIRE));
         systemNotes.add(text);
         return sequence;
     }
@@ -279,7 +355,8 @@ public final class FakeConversationStore implements ConversationStore {
         return new MessageRow(row.messageId(), row.conversationId(), row.sequenceNo(),
                 row.roleWire(), status, row.channelWire(), row.text(), row.languageTag(),
                 row.conversationTaskId(), failureCode, row.createdAtMs(),
-                System.currentTimeMillis());
+                System.currentTimeMillis(), row.inputKindWire(), row.steerHostUserMessageId(),
+                row.steerDeliveryWire());
     }
 
     private List<MessageRow> ascending(String conversationId, int limit) {

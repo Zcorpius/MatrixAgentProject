@@ -32,10 +32,21 @@ public final class Steer {
     private final String payload;
     private final Map<String, Object> arguments;
     private final long createdAtMillis;
+    /**
+     * 持久化 steer 的 messageId（评估 v1.0 §4.3）：运行时按 (宿主任务, steerId) 去重，
+     * 保证引擎最多消费一次。空串 = 未关联持久化行（旧路径/测试），不参与去重。
+     */
+    private final String steerId;
 
     private Steer(Type type, String payload, Map<String, Object> arguments, long createdAtMillis) {
+        this(type, payload, arguments, createdAtMillis, "");
+    }
+
+    private Steer(Type type, String payload, Map<String, Object> arguments, long createdAtMillis,
+            String steerId) {
         if (type == null) throw new IllegalArgumentException("type 不能为空");
         this.type = type;
+        this.steerId = steerId == null ? "" : steerId;
         this.payload = payload == null ? "" : payload;
         this.arguments = arguments == null
                 ? Collections.<String, Object>emptyMap()
@@ -44,11 +55,16 @@ public final class Steer {
     }
 
     public static Steer reprompt(String userText) {
+        return reprompt(userText, "");
+    }
+
+    /** 带持久化 steerId 的重载（对话附属输入路径）。 */
+    public static Steer reprompt(String userText, String steerId) {
         if (userText == null || userText.trim().isEmpty()) {
             throw new IllegalArgumentException("REPROMPT payload 不能为空");
         }
         return new Steer(Type.REPROMPT, userText, Collections.<String, Object>emptyMap(),
-                System.currentTimeMillis());
+                System.currentTimeMillis(), steerId);
     }
 
     public static Steer forceTool(String capabilityName, Map<String, Object> arguments) {
@@ -64,6 +80,7 @@ public final class Steer {
     }
 
     public Type getType() { return type; }
+    public String getSteerId() { return steerId; }
     public String getPayload() { return payload; }
     public Map<String, Object> getArguments() { return arguments; }
     public long getCreatedAtMillis() { return createdAtMillis; }

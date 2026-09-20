@@ -71,6 +71,17 @@ public final class ConversationIds {
 
     /** WAKE = wakeEventId + finalOrdinal。 */
     public static String wakeIdempotencyKey(String wakeEventId, int finalOrdinal) {
-        return "wake:" + wakeEventId + ":" + finalOrdinal;
+        return "wake:" + requireLowerUuid(wakeEventId, "wakeEventId") + ":" + finalOrdinal;
+    }
+
+    /**
+     * STEER 附属输入幂等键（评估 v1.0 §4.3）。独立前缀让全局唯一的 idempotency_key
+     * 隐含 (conversationId, clientOperationId, inputKind=STEER) 唯一性——与主提交
+     * (text:) 命名空间互斥，Binder 重试命中同一行而不会误伤主提交。
+     */
+    public static String steerIdempotencyKey(String conversationId, String clientOperationId) {
+        requireLowerUuid(conversationId, "conversationId");
+        requireLowerUuid(clientOperationId, "clientOperationId");
+        return "steer:" + conversationId + ":" + clientOperationId;
     }
 }

@@ -58,6 +58,30 @@ public interface ConversationStore {
 
     record SubmittedUserMessage(long sequenceNo, boolean replay) { }
 
+    // ---- steer 附属输入（评估 v1.0 §4.3；仅 REPROMPT，FORCE_TOOL/DEFER 不走此路径） ----
+
+    /**
+     * 原子追加一条 INPUT_STEER 用户消息（无 task link、无独立终态）。同一事务内：
+     * 幂等键命中返回 {@code replay=true} 不重复插入；校验会话存在/未归档且宿主任务
+     * 仍运行中（运行 link 的 userMessageId 必须等于 hostUserMessageId）——宿主终态
+     * 写入与本插入经 DB 写锁互斥，杜绝“宿主已终态却插入显示 RUNNING 的 steer”。
+     * 宿主无运行任务时抛 {@link IllegalStateException}。
+     */
+    SubmittedSteerMessage appendSteerMessage(SteerSubmission command);
+
+    record SteerSubmission(String conversationId, String messageId, int channelWire,
+            String text, String languageTag, String hostUserMessageId,
+            String idempotencyKey) { }
+
+    record SubmittedSteerMessage(long sequenceNo, boolean replay) { }
+
+    /**
+     * 投递态推进：offered=true → PENDING 变 OFFERED；false → PENDING 变 FAILED 且
+     * 消息状态收敛 FAILED（“未能并入宿主请求”）。仅 PENDING 行生效，其余 no-op
+     * （迟到回执不得覆盖已收敛事实）。
+     */
+    void updateSteerDelivery(String messageId, boolean offered);
+
     // ---- 执行期状态机 ----
 
     /** 出队时置 RUNNING（消息 + link.started_at）；任务不存在返回 false。 */
@@ -65,7 +89,9 @@ public interface ConversationStore {
 
     /**
      * 终态事务：用户消息置终态 + link 终态（assistantMessageId/terminalAtMs）+
-     * 插入 assistant 消息（assistantText 非空时）。conversation 已被 clear 的行
+     * 插入 assistant 消息（assistantText 非空时）+ **同一事务内把仍为 RUNNING 的
+     * 附属 steer 行（steer_host_user_message_id 指向本宿主）镜像收敛为同终态**
+     * （投递态 FAILED 的 steer 已自收敛，不被覆盖）。conversation 已被 clear 的行
      * 静默丢弃（返回 false）——清库后旧异步任务不得回写（epoch 等价门，§5.2）。
      */
     boolean writeTerminal(TerminalWrite command);
@@ -100,8 +126,16 @@ public interface ConversationStore {
 
     record MessageRow(String messageId, String conversationId, long sequenceNo, int roleWire,
             int statusWire, int channelWire, String text, String languageTag,
-            String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs) {
+            String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs,
+            int inputKindWire, String steerHostUserMessageId, int steerDeliveryWire) {
 
         public static final int CHANNEL_NONE_WIRE = 0;
+
+        /** ConversationMessage.INPUT_* 投影。 */
+        public static final int INPUT_PRIMARY_WIRE = 0;
+        public static final int INPUT_STEER_WIRE = 1;
+
+        /** ConversationMessage.STEER_DELIVERY_* 投影；非 steer 行恒为 NONE。 */
+        public static final int STEER_DELIVERY_NONE_WIRE = -1;
     }
 }

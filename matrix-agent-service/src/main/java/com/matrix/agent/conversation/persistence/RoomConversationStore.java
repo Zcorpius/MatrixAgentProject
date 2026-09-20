@@ -2,6 +2,7 @@ package com.matrix.agent.conversation.persistence;
 
 import android.util.Log;
 
+import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.conversation.ConversationDomain.PersistedMessageStatus;
 import com.matrix.agent.conversation.ConversationIds;
@@ -31,6 +32,11 @@ public final class RoomConversationStore implements ConversationStore {
 
     private static final String TAG = "MatrixAgent";
     private static final int WIRE_SCHEMA_VERSION = 2;
+
+    /** DB 投递态文本（评估 v1.0 §4.3 SteerInputMetadata；wire 常量在 SDK 侧）。 */
+    private static final String STEER_DELIVERY_PENDING_TEXT = "PENDING";
+    private static final String STEER_DELIVERY_OFFERED_TEXT = "OFFERED";
+    private static final String STEER_DELIVERY_FAILED_TEXT = "FAILED";
 
     private final MatrixDatabase database;
     private final ConversationDao conversations;
@@ -65,6 +71,9 @@ public final class RoomConversationStore implements ConversationStore {
         entity.createdAtMs = now;
         entity.updatedAtMs = now;
         entity.archivedAtMs = null;
+        entity.titleOrigin = ConversationInfo.TITLE_ORIGIN_DEFAULT;
+        entity.pinned = false;
+        entity.lastInputChannel = ConversationMessage.CHANNEL_NONE;
         entity.schemaVersion = command.schemaVersion();
         transaction.runInTransaction(() -> {
             conversations.upsert(entity);
@@ -172,6 +181,9 @@ public final class RoomConversationStore implements ConversationStore {
             message.createdAtMs = now;
             message.updatedAtMs = now;
             message.idempotencyKey = command.idempotencyKey();
+            message.inputKind = MessageRow.INPUT_PRIMARY_WIRE;
+            message.steerHostUserMessageId = null;
+            message.steerDeliveryState = null;
             message.schemaVersion = WIRE_SCHEMA_VERSION;
             messages.upsert(message);
 
@@ -192,6 +204,74 @@ public final class RoomConversationStore implements ConversationStore {
             result[0] = new SubmittedUserMessage(sequence, false);
         });
         return result[0];
+    }
+
+    // ---- steer 附属输入 ----
+
+    @Override
+    public SubmittedSteerMessage appendSteerMessage(SteerSubmission command) {
+        final SubmittedSteerMessage[] result = new SubmittedSteerMessage[1];
+        transaction.runInTransaction(() -> {
+            ConversationMessageEntity existing =
+                    command.idempotencyKey() == null ? null
+                            : messages.getByIdempotencyKey(command.idempotencyKey());
+            if (existing != null) {
+                result[0] = new SubmittedSteerMessage(existing.sequenceNo, true);
+                return;
+            }
+            ConversationEntity conversation = conversations.getById(command.conversationId());
+            if (conversation == null || conversation.archivedAtMs != null) {
+                throw new IllegalArgumentException(
+                        "conversation 不存在或已归档: " + command.conversationId());
+            }
+            // 线性化（评估 v1.0 §4.3）：宿主运行校验与插入同事务——宿主终态写入经
+            // 同一 DB 写锁互斥，不出现“宿主已终态却插入显示 RUNNING 的 steer”。
+            ConversationTaskLinkEntity running = links.findRunning(command.conversationId());
+            if (running == null || !running.userMessageId.equals(command.hostUserMessageId())) {
+                throw new IllegalStateException("宿主任务不在运行中: " + command.conversationId());
+            }
+            Long maxSequence = messages.maxSequence(command.conversationId());
+            long sequence = (maxSequence == null ? 0L : maxSequence) + 1L;
+            long now = System.currentTimeMillis();
+            ConversationMessageEntity steer = new ConversationMessageEntity();
+            steer.messageId = command.messageId();
+            steer.conversationId = command.conversationId();
+            steer.sequenceNo = sequence;
+            steer.role = ConversationMessage.ROLE_USER;
+            steer.status = PersistedMessageStatus.RUNNING.wire();
+            steer.channel = command.channelWire();
+            steer.text = command.text();
+            steer.languageTag = command.languageTag();
+            // 无 task link / 不触发标题 / 无能力轨迹——附属输入不是第二项任务
+            steer.conversationTaskId = null;
+            steer.replyToMessageId = null;
+            steer.failureCode = 0;
+            steer.createdAtMs = now;
+            steer.updatedAtMs = now;
+            steer.idempotencyKey = command.idempotencyKey();
+            steer.inputKind = MessageRow.INPUT_STEER_WIRE;
+            steer.steerHostUserMessageId = command.hostUserMessageId();
+            steer.steerDeliveryState = STEER_DELIVERY_PENDING_TEXT;
+            steer.schemaVersion = WIRE_SCHEMA_VERSION;
+            messages.upsert(steer);
+            conversations.touchUpdated(command.conversationId(), now);
+            result[0] = new SubmittedSteerMessage(sequence, false);
+        });
+        return result[0];
+    }
+
+    @Override
+    public void updateSteerDelivery(String messageId, boolean offered) {
+        long now = System.currentTimeMillis();
+        transaction.runInTransaction(() -> {
+            if (offered) {
+                messages.updateSteerDelivery(messageId, STEER_DELIVERY_OFFERED_TEXT, now);
+                return;
+            }
+            // 拒绝投递：附属输入自收敛 FAILED（“未能并入宿主请求”），不再随宿主镜像
+            messages.updateSteerDelivery(messageId, STEER_DELIVERY_FAILED_TEXT, now);
+            messages.updateStatus(messageId, PersistedMessageStatus.FAILED.wire(), 0, now);
+        });
     }
 
     // ---- 执行期 ----
@@ -250,11 +330,18 @@ public final class RoomConversationStore implements ConversationStore {
                 assistant.createdAtMs = now;
                 assistant.updatedAtMs = now;
                 assistant.idempotencyKey = null;
+                assistant.inputKind = MessageRow.INPUT_PRIMARY_WIRE;
+                assistant.steerHostUserMessageId = null;
+                assistant.steerDeliveryState = null;
                 assistant.schemaVersion = WIRE_SCHEMA_VERSION;
                 messages.upsert(assistant);
                 assistantMessageId = assistant.messageId;
             }
             messages.updateStatus(link.userMessageId, command.userStatusWire(),
+                    command.failureCode(), now);
+            // 附属 steer 镜像收敛（评估 v1.0 §4.3）：仍 RUNNING 的 steer 与宿主同事务
+            // 收敛；投递态保留原值（OFFERED 才声称“已并入”，PENDING 显示“未确认”）。
+            messages.convergeSteersByHost(link.userMessageId, command.userStatusWire(),
                     command.failureCode(), now);
             links.writeTerminal(command.conversationTaskId(), command.userStatusWire(),
                     assistantMessageId, now);
@@ -290,6 +377,9 @@ public final class RoomConversationStore implements ConversationStore {
             note.createdAtMs = now;
             note.updatedAtMs = now;
             note.idempotencyKey = null;
+            note.inputKind = MessageRow.INPUT_PRIMARY_WIRE;
+            note.steerHostUserMessageId = null;
+            note.steerDeliveryState = null;
             note.schemaVersion = WIRE_SCHEMA_VERSION;
             messages.upsert(note);
             conversations.touchUpdated(conversationId, now);
@@ -321,6 +411,7 @@ public final class RoomConversationStore implements ConversationStore {
                 return; // 幂等：并发/重复对账只生效一次
             }
             messages.updateStatus(link.userMessageId, userStatusWire, failureCode, now);
+            messages.convergeSteersByHost(link.userMessageId, userStatusWire, failureCode, now);
             links.writeTerminal(conversationTaskId, userStatusWire, null, now);
         });
     }
@@ -360,7 +451,19 @@ public final class RoomConversationStore implements ConversationStore {
                 entity.role, entity.status,
                 entity.channel == null ? MessageRow.CHANNEL_NONE_WIRE : entity.channel,
                 entity.text, entity.languageTag, entity.conversationTaskId,
-                entity.failureCode, entity.createdAtMs, entity.updatedAtMs);
+                entity.failureCode, entity.createdAtMs, entity.updatedAtMs,
+                entity.inputKind, entity.steerHostUserMessageId,
+                deliveryToWire(entity.steerDeliveryState));
+    }
+
+    private static int deliveryToWire(String state) {
+        if (state == null) return MessageRow.STEER_DELIVERY_NONE_WIRE;
+        switch (state) {
+            case STEER_DELIVERY_PENDING_TEXT: return ConversationMessage.STEER_DELIVERY_PENDING;
+            case STEER_DELIVERY_OFFERED_TEXT: return ConversationMessage.STEER_DELIVERY_OFFERED;
+            case STEER_DELIVERY_FAILED_TEXT: return ConversationMessage.STEER_DELIVERY_FAILED;
+            default: return MessageRow.STEER_DELIVERY_NONE_WIRE;
+        }
     }
 
     private static List<MessageRow> ascending(List<ConversationMessageEntity> descending) {
