@@ -5,7 +5,6 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
 import com.matrix.agent.api.debug.DebugTraceWireEvent;
-import com.matrix.agent.client.DebugTraceManager;
 import com.matrix.agent.launcher.data.LauncherHostGateway;
 
 import java.util.ArrayList;
@@ -39,36 +38,7 @@ public final class DebugTraceViewModel extends ViewModel {
     public void start() {
         if (subscribed) return;
         subscribed = true;
-        gateway.execute(agent -> {
-            DebugTraceManager manager = agent.getDebugTraceManager();
-            if (manager == null) return null;
-            return manager.subscribe(event -> {
-                // 回调已在 SDK eventHandler（主线程）派发
-            });
-        }, result -> {
-            if (result.isSuccess() && result.value != null) {
-                events.clear();
-                events.addAll(result.value);
-                publish(true);
-            } else {
-                publish(false);
-            }
-        });
-        // 实时事件：直接观察 Manager 的 buffer（SDK 主线程桥接）
-        gateway.execute(agent -> {
-            DebugTraceManager manager = agent.getDebugTraceManager();
-            if (manager == null) return null;
-            manager.subscribe(new DebugTraceManager.Listener() {
-                @Override public void onEvent(DebugTraceWireEvent event) {
-                    events.add(event);
-                    if (events.size() > 300) {
-                        events.remove(0);
-                    }
-                    publish(true);
-                }
-            });
-            return null;
-        }, ignored -> { });
+        // 历史由 Fragment 按需加载（buildDebugPanel → loadDebugHistory）
     }
 
     public void stop() {

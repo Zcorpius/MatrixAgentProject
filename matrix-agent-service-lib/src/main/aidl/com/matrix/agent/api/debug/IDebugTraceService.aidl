@@ -13,4 +13,8 @@ interface IDebugTraceService {
     List<DebugTraceWireEvent> subscribe(IDebugTraceCallback callback);
 
     void unsubscribe(IDebugTraceCallback callback);
+
+    /** 按宿主用户消息 + 任务分页读取已持久化的调试轨迹（升序；契约 3）。 */
+    List<DebugTraceWireEvent> loadHistory(String hostUserMessageId,
+            String conversationTaskId, int limit);
 }

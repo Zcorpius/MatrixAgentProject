@@ -30,4 +30,14 @@ public final class DebugTraceHolder {
             instance.emit(phase, taskId, payload);
         }
     }
+
+    /** 带宿主绑定的发射：内嵌面板持久化用。 */
+    public static void emit(String phase, String taskId, String payload,
+            String hostUserMessageId, long generation, long eventSequence) {
+        DebugTraceEmitter instance = emitter;
+        if (instance != null) {
+            instance.emit(phase, taskId, payload, hostUserMessageId, generation,
+                    eventSequence);
+        }
+    }
 }

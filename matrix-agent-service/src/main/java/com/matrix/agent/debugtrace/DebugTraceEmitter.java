@@ -28,6 +28,18 @@ public final class DebugTraceEmitter {
 
     private static final String TAG = "MatrixAgent";
 
+    /** 持久化端口（评估 v1.0 §4.3 契约 5：写库和回调携带同一 traceId/eventSequence）。 */
+    public interface PersistencePort {
+        void persist(String traceId, String hostUserMessageId, String conversationTaskId,
+                long generation, long eventSequence, String phase, String payload,
+                int partIndex, int partCount, long timestampMs);
+
+        int countForTask(String conversationTaskId);
+    }
+
+    /** 单 task 最大持久化事件数（§5.2 有界写入；超限写 TRUNCATED 标记后停写）。 */
+    static final int MAX_EVENTS_PER_TASK = 200;
+
     /** 单条 logcat 上限（3 KiB——Android 单条 ~4KB 实限内留头部余量，契约 5）。 */
     static final int MAX_LOG_BYTES = 3 * 1024;
 
@@ -35,12 +47,14 @@ public final class DebugTraceEmitter {
     private static final int RING_CAPACITY = 500;
 
     private final boolean uiEnabled;
+    private final PersistencePort persistence;
     private final Deque<DebugTraceEvent> ring = new ArrayDeque<>();
     private final List<Consumer<DebugTraceEvent>> subscribers = new CopyOnWriteArrayList<>();
     private final AtomicLong traceSequence = new AtomicLong();
 
-    public DebugTraceEmitter(boolean uiEnabled) {
+    public DebugTraceEmitter(boolean uiEnabled, PersistencePort persistence) {
         this.uiEnabled = uiEnabled;
+        this.persistence = persistence;
     }
 
     /** UI 汇是否开启（Host 侧 BuildConfig 门控；false 时仅日志汇）。 */
@@ -56,6 +70,15 @@ public final class DebugTraceEmitter {
      * @param payload 事件正文（**净化前**——本方法内部 redact）
      */
     public void emit(String phase, String taskId, String payload) {
+        emit(phase, taskId, payload, null, 0, 0);
+    }
+
+    /**
+     * 带宿主绑定的发射（内嵌面板用）：hostUserMessageId 绑定到具体用户消息，
+     * generation 防迟到事件、eventSequence 保证历史与实时顺序一致（契约 5）。
+     */
+    public void emit(String phase, String taskId, String payload,
+            String hostUserMessageId, long generation, long eventSequence) {
         // redactBulk 不截断——长度由 3 KiB 分片管理（契约 5：长 reasoning 可重组）
         String safePayload = DebugTraceRedactor.redactBulk(payload);
         if (safePayload == null || safePayload.isEmpty()) {
@@ -71,8 +94,26 @@ public final class DebugTraceEmitter {
         // 汇 1：无条件 logcat（3 KiB 分片 + 重组键）
         writeChunkedLog(phase, safeTaskId, traceId, timestampMs, safePayload);
 
-        // 汇 2：UI 门控的 ring buffer + 订阅者
+        // 汇 2：UI 门控的持久化 + ring buffer + 订阅者
         if (uiEnabled) {
+            // 持久化（契约 5：先写库再回调，同一 traceId/sequence 保证顺序一致）
+            if (persistence != null && hostUserMessageId != null) {
+                try {
+                    if (persistence.countForTask(taskId) >= MAX_EVENTS_PER_TASK) {
+                        persistence.persist(traceId + "-trunc", hostUserMessageId, taskId,
+                                generation, eventSequence + 10_000, "TRUNCATED",
+                                "事件数超限(" + MAX_EVENTS_PER_TASK + ")，后续事件仅入日志",
+                                0, 1, timestampMs);
+                    } else {
+                        persistence.persist(traceId, hostUserMessageId, taskId,
+                                generation, eventSequence, phase, safePayload, 0, 1,
+                                timestampMs);
+                    }
+                } catch (RuntimeException persistenceFailure) {
+                    Log.w(TAG, "[DebugTrace] 持久化失败（继续回调）: "
+                            + persistenceFailure.getClass().getSimpleName());
+                }
+            }
             List<DebugTraceEvent> chunks = chunkEvents(timestampMs, phase, safeTaskId,
                     traceId, safePayload);
             synchronized (ring) {

@@ -18,7 +18,7 @@ public final class DebugTraceEmitterTest {
 
     /** 契约 5/7：UI 关闭（uiEnabled=false）时仍写日志（日志汇无条件）——ring buffer 为空。 */
     @Test public void uiDisabledStillEmitsLogButNotRing() {
-        DebugTraceEmitter emitter = new DebugTraceEmitter(false);
+        DebugTraceEmitter emitter = new DebugTraceEmitter(false, null);
         emitter.emit(DebugTraceEvent.PHASE_MODEL_PROPOSED, "task-1", "toolCalls=2");
         // 日志汇已输出（Log.i 在 JVM 测试环境静默）——ring buffer 不写入
         assertTrue("UI 关闭时 ring buffer 恒空", emitter.snapshot().isEmpty());
@@ -26,7 +26,7 @@ public final class DebugTraceEmitterTest {
 
     /** 契约 5：UI 开启时事件进 ring buffer 且有界（容量上限截尾）。 */
     @Test public void uiEnabledWritesBoundedRingBuffer() {
-        DebugTraceEmitter emitter = new DebugTraceEmitter(true);
+        DebugTraceEmitter emitter = new DebugTraceEmitter(true, null);
         for (int i = 0; i < 550; i++) {
             emitter.emit(DebugTraceEvent.PHASE_MODEL_PROPOSED, "task-" + i, "event-" + i);
         }
@@ -37,7 +37,7 @@ public final class DebugTraceEmitterTest {
 
     /** 契约 5：3 KiB 分片 + traceId/partIndex/partCount 重组键。 */
     @Test public void longPayloadIsChunkedWithReassemblyKeys() {
-        DebugTraceEmitter emitter = new DebugTraceEmitter(true);
+        DebugTraceEmitter emitter = new DebugTraceEmitter(true, null);
         String longReasoning = "思".repeat(5000); // 15000 UTF-8 bytes → ≥5 chunks
         emitter.emit(DebugTraceEvent.PHASE_MODEL_REASONING, "task-x", longReasoning);
 
@@ -95,7 +95,7 @@ public final class DebugTraceEmitterTest {
 
     /** 契约 3：订阅实时推送；退订即停。 */
     @Test public void subscribeReceivesEventsUnsubscribeStops() {
-        DebugTraceEmitter emitter = new DebugTraceEmitter(true);
+        DebugTraceEmitter emitter = new DebugTraceEmitter(true, null);
         AtomicInteger received = new AtomicInteger();
         java.util.function.Consumer<DebugTraceEvent> subscriber = event ->
                 received.incrementAndGet();
@@ -110,7 +110,7 @@ public final class DebugTraceEmitterTest {
 
     /** 契约 3：UI 关闭时 subscribe 拒绝注册。 */
     @Test public void subscribeRejectedWhenUiDisabled() {
-        DebugTraceEmitter emitter = new DebugTraceEmitter(false);
+        DebugTraceEmitter emitter = new DebugTraceEmitter(false, null);
         AtomicInteger received = new AtomicInteger();
         java.util.function.Consumer<DebugTraceEvent> subscriber = event ->
                 received.incrementAndGet();

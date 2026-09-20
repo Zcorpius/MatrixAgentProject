@@ -40,13 +40,27 @@ public final class ConversationTaskSubmitter {
             InputSource inputSource,
             String languageTag,
             float asrConfidence,
-            boolean confidenceAvailable) { }
+            boolean confidenceAvailable,
+            String userMessageId) {
+
+        /** 源码兼容旧调用。 */
+        public PreparedTask(String runtimeRequestId, String conversationTaskId,
+                String conversationId, ClassificationSnapshot classification,
+                ConversationSeedContext seed, String text, Actor actor,
+                String agentSessionId, String arbitrationKey, InputSource inputSource,
+                String languageTag, float asrConfidence, boolean confidenceAvailable) {
+            this(runtimeRequestId, conversationTaskId, conversationId, classification,
+                    seed, text, actor, agentSessionId, arbitrationKey, inputSource,
+                    languageTag, asrConfidence, confidenceAvailable, null);
+        }
+    }
 
     /** conversation 域提交入口的输入（不含 Host 内部派生字段）。 */
     public record SubmitInput(
             String conversationTaskId,
             String runtimeRequestId,
             String conversationId,
+            String userMessageId,
             String text,
             Actor actor,
             String agentSessionId,
@@ -97,7 +111,8 @@ public final class ConversationTaskSubmitter {
                 input.inputSource(),
                 languageTag,
                 confidence,
-                input.confidenceAvailable());
+                input.confidenceAvailable(),
+                input.userMessageId());
     }
 
     /**
@@ -111,7 +126,7 @@ public final class ConversationTaskSubmitter {
                 assembler.assemble(prepared.conversationId(), prepared.text()), prepared.text(),
                 prepared.actor(), prepared.agentSessionId(), prepared.arbitrationKey(),
                 prepared.inputSource(), prepared.languageTag(), prepared.asrConfidence(),
-                prepared.confidenceAvailable());
+                prepared.confidenceAvailable(), prepared.userMessageId());
     }
 
     private static void requireNonBlank(String value, String name) {

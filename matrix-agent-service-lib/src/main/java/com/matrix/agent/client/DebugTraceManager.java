@@ -51,6 +51,20 @@ public final class DebugTraceManager extends MatrixManagerBase {
         }
     }
 
+    public java.util.List<DebugTraceWireEvent> loadHistory(String hostUserMessageId,
+            String conversationTaskId, int limit) {
+        IDebugTraceService s = service;
+        if (s == null) return java.util.Collections.emptyList();
+        try {
+            java.util.List<DebugTraceWireEvent> result =
+                    s.loadHistory(hostUserMessageId, conversationTaskId, limit);
+            return result == null ? java.util.Collections.emptyList() : result;
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+            return java.util.Collections.emptyList();
+        }
+    }
+
     public void unsubscribe() {
         IDebugTraceService s = service;
         if (s == null) return;

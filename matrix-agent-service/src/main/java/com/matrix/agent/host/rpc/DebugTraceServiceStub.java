@@ -27,10 +27,24 @@ public final class DebugTraceServiceStub extends IDebugTraceService.Stub {
     private final DebugTraceEmitter emitter;
     /** Emitter 是否启用（Host 侧 BuildConfig 门控的快照——false 时本 Stub 是空壳）。 */
     private final boolean hostUiEnabled;
+    /** 历史读取端口（Graph 注入 Room DAO 投影）。 */
+    private final HistoryLoader historyLoader;
+
+    /** 按宿主消息读取持久化调试轨迹（契约 3 分页历史读）。 */
+    public interface HistoryLoader {
+        List<DebugTraceWireEvent> load(String hostUserMessageId,
+                String conversationTaskId, int limit);
+    }
 
     public DebugTraceServiceStub(DebugTraceEmitter emitter, boolean hostUiEnabled) {
+        this(emitter, hostUiEnabled, null);
+    }
+
+    public DebugTraceServiceStub(DebugTraceEmitter emitter, boolean hostUiEnabled,
+            HistoryLoader historyLoader) {
         this.emitter = emitter;
         this.hostUiEnabled = hostUiEnabled;
+        this.historyLoader = historyLoader;
     }
 
     @Override
@@ -59,6 +73,16 @@ public final class DebugTraceServiceStub extends IDebugTraceService.Stub {
         }
         Log.i(TAG, "[DebugTrace] 订阅建立 replay=" + replay.size());
         return replay;
+    }
+
+    @Override
+    public List<DebugTraceWireEvent> loadHistory(String hostUserMessageId,
+            String conversationTaskId, int limit) {
+        if (!hostUiEnabled || emitter == null || historyLoader == null) {
+            return new ArrayList<>();
+        }
+        return historyLoader.load(hostUserMessageId, conversationTaskId,
+                Math.max(1, Math.min(limit, 500)));
     }
 
     @Override

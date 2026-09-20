@@ -69,6 +69,10 @@ public final class AgentRequest {
      * user 消息前写入模型 conversation。见 contract.ConversationSeedContext 内容契约。
      */
     private final ConversationSeedContext conversationSeed;
+    /** 调试轨迹绑定（评估 v1.0 §4.3）：宿主用户消息 id；null=非对话域触发。 */
+    private final String debugTraceHostUserMessageId;
+    /** 调试轨迹绑定：对话任务 id。 */
+    private final String debugTraceConversationTaskId;
     /** 预生成 requestId 覆盖（可空）：对话域把提交期持久化的稳定 UUID 复用为执行期 id。 */
     private final String requestIdOverride;
 
@@ -111,6 +115,8 @@ public final class AgentRequest {
         epoch = builder.epoch;
         memorySaveAllowed = builder.memorySaveAllowed;
         conversationSeed = builder.conversationSeed;
+        debugTraceHostUserMessageId = builder.debugTraceHostUserMessageId;
+        debugTraceConversationTaskId = builder.debugTraceConversationTaskId;
     }
 
     private static String requireValidRequestId(String value) {
@@ -170,6 +176,8 @@ public final class AgentRequest {
     public boolean isMemorySaveAllowed() { return memorySaveAllowed; }
     /** 跨任务对话历史种子；null 表示普通（非对话）任务。 */
     public ConversationSeedContext getConversationSeed() { return conversationSeed; }
+    public String getDebugTraceHostUserMessageId() { return debugTraceHostUserMessageId; }
+    public String getDebugTraceConversationTaskId() { return debugTraceConversationTaskId; }
 
     public static Builder builder(String text, Actor actor) {
         return new Builder(text, actor);
@@ -195,6 +203,8 @@ public final class AgentRequest {
         private long epoch = 0L;
         private boolean memorySaveAllowed = false;
         private ConversationSeedContext conversationSeed;
+        private String debugTraceHostUserMessageId;
+        private String debugTraceConversationTaskId;
         private String requestIdOverride;
 
         private Builder(String text, Actor actor) {
@@ -236,6 +246,11 @@ public final class AgentRequest {
         public Builder memorySaveAllowed(boolean value) { memorySaveAllowed = value; return this; }
         /** 注入跨任务对话历史种子（task 装配器专用；普通任务不设）。 */
         public Builder conversationSeed(ConversationSeedContext value) { conversationSeed = value; return this; }
+        public Builder debugTraceBinding(String hostUserMessageId, String conversationTaskId) {
+            this.debugTraceHostUserMessageId = hostUserMessageId;
+            this.debugTraceConversationTaskId = conversationTaskId;
+            return this;
+        }
         /** 注入提交期已持久化的稳定 requestId（对话域专用；小写 UUID，构造时校验）。 */
         public Builder requestId(String value) { requestIdOverride = value; return this; }
         public AgentRequest build() {
