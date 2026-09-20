@@ -116,6 +116,9 @@ public interface ConversationStore {
     /** 可空：无运行中任务。 */
     String findRunningTaskId(String conversationId);
 
+    /** 可空：运行中宿主任务的用户消息 id（steer 附属输入的挂载点）。 */
+    String findRunningUserMessageId(String conversationId);
+
     /** clearUserData 覆盖：按 owner 级联删除线程/消息/关联。返回删除的线程数。 */
     int clearForUsers(List<String> userIds);
 

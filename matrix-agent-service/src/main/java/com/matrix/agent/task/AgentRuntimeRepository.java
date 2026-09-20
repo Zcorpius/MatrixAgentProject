@@ -209,8 +209,8 @@ public final class AgentRuntimeRepository {
     }
 
     /** Enqueues the only two externally permitted runtime controls for the given host task. */
-    public void offerSteer(String sessionId, Steer steer) {
-        userDataResetCoordinator.offerSteer(sessionId, steer);
+    public boolean offerSteer(String sessionId, Steer steer) {
+        return userDataResetCoordinator.offerSteer(sessionId, steer);
     }
 
     /**

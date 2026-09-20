@@ -185,16 +185,21 @@ public final class ConversationServiceStub extends IConversationService.Stub
                     null);
         }
         requireOwnedConversation(conversationId);
-        boolean accepted;
+        ConversationCoordinator.SteerAccepted accepted;
         try {
-            accepted = coordinator.appendToRunningTask(conversationId, text);
+            // clientOperationId 透传协调器（评估 v1.0 §4.3）：幂等键 steer: 前缀派生，
+            // Binder 重试命中既有行不重复投递——旧路径在此参数丢失。
+            accepted = coordinator.appendSteer(conversationId, text, safeOperation);
         } catch (IllegalArgumentException invalid) {
             return new ConversationOperationResult(MatrixErrorCode.INVALID_ARGUMENT,
                     safeOperation, conversationId, null);
         }
-        return new ConversationOperationResult(
-                accepted ? MatrixErrorCode.SUCCESS : MatrixErrorCode.INVALID_STATE,
-                safeOperation, conversationId, null);
+        if (accepted == null) {
+            return new ConversationOperationResult(MatrixErrorCode.INVALID_STATE,
+                    safeOperation, conversationId, null);
+        }
+        return new ConversationOperationResult(MatrixErrorCode.SUCCESS,
+                safeOperation, conversationId, accepted.steerMessageId());
     }
 
     @Override

@@ -331,6 +331,16 @@ public final class FakeConversationStore implements ConversationStore {
     }
 
     @Override
+    public String findRunningUserMessageId(String conversationId) {
+        for (LinkRow link : links.values()) {
+            if (link.conversationId.equals(conversationId) && link.terminalStatus == null) {
+                return link.userMessageId;
+            }
+        }
+        return null;
+    }
+
+    @Override
     public int clearForUsers(List<String> userIds) {
         clearCalls++;
         int removed = 0;

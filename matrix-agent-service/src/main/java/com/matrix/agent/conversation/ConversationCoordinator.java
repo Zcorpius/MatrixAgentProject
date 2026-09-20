@@ -9,6 +9,8 @@ import com.matrix.agent.conversation.ConversationDomain.PersistedMessageStatus;
 import com.matrix.agent.conversation.ConversationStore.ConversationRow;
 import com.matrix.agent.conversation.ConversationStore.MessagePage;
 import com.matrix.agent.conversation.ConversationStore.MessageRow;
+import com.matrix.agent.conversation.ConversationStore.SteerSubmission;
+import com.matrix.agent.conversation.ConversationStore.SubmittedSteerMessage;
 import com.matrix.agent.conversation.ConversationStore.SubmittedUserMessage;
 import com.matrix.agent.conversation.ConversationStore.TerminalWrite;
 import com.matrix.agent.conversation.ConversationStore.UserSubmission;
@@ -74,9 +76,13 @@ public final class ConversationCoordinator {
     private final KeyedSerialDispatcher dispatcher;
     /** conv:<id>:<actor>:<zone> 派生（Host 装配注入；追加 steer 按 conversation 定位 session）。 */
     private final UnaryOperator<String> sessionForConversation;
-    /** steer 落点（AppContainer 注入 repository::offerSteer）。 */
+    /**
+     * steer 落点（AppContainer 注入 repository::offerSteer）。
+     * 确认式（评估 v1.0 §4.3）：返回 false = 宿主队列不可用/拒绝投递，
+     * 调用方据此把附属输入自收敛 FAILED（“未能并入宿主请求”）。
+     */
     public interface SteerSink {
-        void offerSteer(String sessionId, Steer steer);
+        boolean offerSteer(String sessionId, Steer steer);
     }
     private final SteerSink steerSink;
     private final ConcurrentHashMap<String, CancellationToken> activeTokens =
@@ -251,18 +257,58 @@ public final class ConversationCoordinator {
     // ---------------------------------------------------------------- 追加与取消
 
     /**
-     * appendMessage：仅当存在“已派发未终态”的任务时接受；向该 conversation 的
-     * conv session 投递 REPROMPT。无运行任务返回 false（stub 映射 INVALID_STATE）。
+     * appendSteer（评估 v1.0 §4.3，仅 REPROMPT）：先原子落库 INPUT_STEER 附属行
+     * （幂等键 steer: 前缀；事务内校验宿主运行 = 与宿主终态写互斥），再向宿主
+     * Agent session 确认式投递。无运行宿主返回 null（stub 映射 INVALID_STATE）。
+     * 幂等命中返回既有行（replay=true）且不重复投递——Binder 重试安全。
      */
-    public boolean appendToRunningTask(String conversationId, String text) {
+    public SteerAccepted appendSteer(String conversationId, String text,
+            String clientOperationId) {
         ConversationIds.requireLowerUuid(conversationId, "conversationId");
-        if (store.findRunningTaskId(conversationId) == null) {
-            return false;
+        ConversationIds.requireLowerUuid(clientOperationId, "clientOperationId");
+        String steerText = normalizeText(text, APPEND_MAX_CHARS);
+        String messageId = ConversationIds.newMessageId();
+        String idempotencyKey =
+                ConversationIds.steerIdempotencyKey(conversationId, clientOperationId);
+
+        // 预检只挑挂载点；真正的线性化在 appendSteerMessage 事务内（宿主终态互斥）
+        String hostUserMessageId = store.findRunningUserMessageId(conversationId);
+        if (hostUserMessageId == null) {
+            return null;
         }
-        steerSink.offerSteer(sessionForConversation.apply(conversationId),
-                Steer.reprompt(normalizeText(text, APPEND_MAX_CHARS)));
-        return true;
+        SubmittedSteerMessage submitted = store.appendSteerMessage(new SteerSubmission(
+                conversationId, messageId, ConversationMessage.CHANNEL_TEXT, steerText,
+                null, hostUserMessageId, idempotencyKey));
+        if (submitted.replay()) {
+            Log.i(TAG, "[Conversation] STEER 幂等命中 conv=" + conversationId);
+            MessageRow existing = store.findMessageByIdempotencyKey(idempotencyKey);
+            return new SteerAccepted(
+                    existing == null ? messageId : existing.messageId(),
+                    submitted.sequenceNo(), true);
+        }
+        MessageRow persisted = store.findMessage(messageId);
+        if (persisted != null) {
+            notifyUpsert(persisted);
+        }
+
+        boolean accepted = steerSink.offerSteer(sessionForConversation.apply(conversationId),
+                Steer.reprompt(steerText, messageId));
+        store.updateSteerDelivery(messageId, accepted);
+        if (!accepted) {
+            Log.w(TAG, "[Conversation] STEER 投递被拒绝，附属输入收敛 FAILED msg="
+                    + messageId);
+            MessageRow rejected = store.findMessage(messageId);
+            if (rejected != null) {
+                notifyUpsert(rejected);
+                notifyStatus(conversationId, messageId,
+                        PersistedMessageStatus.FAILED.wire(), 0);
+            }
+        }
+        return new SteerAccepted(messageId, submitted.sequenceNo(), false);
     }
+
+    /** 附属输入受理结果；replay=true 表示幂等命中既有行。 */
+    public record SteerAccepted(String steerMessageId, long sequenceNo, boolean replay) { }
 
     /** cancelMessage：对已提交未终态任务触发协作取消；终态由执行路径如实收敛。 */
     public boolean cancelByUserMessage(String conversationId, String userMessageId) {

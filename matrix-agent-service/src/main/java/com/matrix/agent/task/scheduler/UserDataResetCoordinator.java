@@ -51,10 +51,16 @@ public final class UserDataResetCoordinator {
             hook.run();
         };
     }
-    public void offerSteer(String sessionId, Steer steer) {
+    public boolean offerSteer(String sessionId, Steer steer) {
         SteerMailbox mailbox = steerMailbox;
-        if (mailbox == null) throw new IllegalStateException("steer mailbox unavailable");
+        if (mailbox == null) {
+            // 确认式（评估 v1.0 §4.3）：队列不可用不再抛异常——调用方把附属输入
+            // 自收敛 FAILED，宿主执行不受影响。
+            Log.w(TAG, "[Reset] steer mailbox 不可用，投递拒绝 session=" + sessionId);
+            return false;
+        }
         mailbox.offer(sessionId, steer);
+        return true;
     }
 
     public ClearUserDataOutcome clear() {

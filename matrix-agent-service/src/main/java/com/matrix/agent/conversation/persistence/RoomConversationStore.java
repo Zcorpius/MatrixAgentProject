@@ -423,6 +423,12 @@ public final class RoomConversationStore implements ConversationStore {
     }
 
     @Override
+    public String findRunningUserMessageId(String conversationId) {
+        ConversationTaskLinkEntity running = links.findRunning(conversationId);
+        return running == null ? null : running.userMessageId;
+    }
+
+    @Override
     public int clearForUsers(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return 0;
