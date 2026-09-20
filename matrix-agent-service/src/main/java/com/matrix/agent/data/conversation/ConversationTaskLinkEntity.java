@@ -52,4 +52,16 @@ public final class ConversationTaskLinkEntity {
 
     @ColumnInfo(name = "terminal_at_ms")
     public Long terminalAtMs;
+
+    /**
+     * 写时净化的能力事实轨迹（CapabilityExecutionTrace 列表 JSON）。
+     * null = 未投影（v8 起列存在，阶段 2 起有写入方）；读侧 null 规约为空列表。
+     * 不存原始审计 payload、模型文本、凭据或可逆敏感字段。
+     */
+    @ColumnInfo(name = "execution_trace_json")
+    public String executionTraceJson;
+
+    /** 轨迹投影版本（脱敏器版本）；null = 无轨迹。 */
+    @ColumnInfo(name = "trace_projection_version")
+    public Integer traceProjectionVersion;
 }

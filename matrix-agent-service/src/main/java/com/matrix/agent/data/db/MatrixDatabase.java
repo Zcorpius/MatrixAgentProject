@@ -63,7 +63,7 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationMessageEntity.class,
                 com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class
         },
-        version = 7,
+        version = 8,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -247,6 +247,44 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
+     * v7 → v8：对话能力评估 v1.0 的 schema 地基（一次迁移，分阶段接线）。
+     * <ul>
+     *   <li>conversation：title_origin / pinned / last_input_channel（阶段 1 列表与标题）；</li>
+     *   <li>conversation_task_link：execution_trace_json + trace_projection_version
+     *       （阶段 2 能力事实轨迹的写时净化投影，本批只立列无写入方）；</li>
+     *   <li>conversation_message：input_kind / steer_host_user_message_id /
+     *       steer_delivery_state（阶段 2 steer 持久化附属输入）。</li>
+     * </ul>
+     * 回填纪律：title 列当前无写入方（全 null），非空历史标题保守标 USER 防自动标题覆盖；
+     * 通道回填 CHANNEL_NONE、input_kind 回填 INPUT_PRIMARY、pinned 回填 false。
+     */
+    public static final Migration MIGRATION_7_8 = new Migration(7, 8) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("ALTER TABLE `conversation` "
+                    + "ADD COLUMN `title_origin` INTEGER NOT NULL DEFAULT 0");
+            // TITLE_ORIGIN_USER=2：非空标题视为用户命名，AUTO 永不覆盖
+            db.execSQL("UPDATE `conversation` SET `title_origin` = 2 "
+                    + "WHERE `title` IS NOT NULL AND `title` != ''");
+            db.execSQL("ALTER TABLE `conversation` "
+                    + "ADD COLUMN `pinned` INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE `conversation` "
+                    + "ADD COLUMN `last_input_channel` INTEGER NOT NULL DEFAULT 0");
+
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `execution_trace_json` TEXT");
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `trace_projection_version` INTEGER");
+
+            db.execSQL("ALTER TABLE `conversation_message` "
+                    + "ADD COLUMN `input_kind` INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE `conversation_message` "
+                    + "ADD COLUMN `steer_host_user_message_id` TEXT");
+            db.execSQL("ALTER TABLE `conversation_message` "
+                    + "ADD COLUMN `steer_delivery_state` TEXT");
+        }
+    };
+
+    /**
      * 加密数据库单例获取。
      *
      * <p>以下任一条件必须抛 IllegalStateException:
@@ -287,12 +325,12 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v2→v3 Migration(audit_event requestEpoch)。
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7);
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=7 entities=11 journalMode=WAL");
+                    + " version=8 entities=11 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

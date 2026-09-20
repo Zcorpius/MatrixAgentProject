@@ -32,6 +32,21 @@ public final class ConversationMessage implements Parcelable {
     public static final int CHANNEL_PTT = 2;
     public static final int CHANNEL_WAKE = 3;
 
+    /**
+     * Frozen input kind（v8 追加）：主提交触发任务；STEER 是并入运行中宿主任务的
+     * 附属输入——无独立任务链接、无能力轨迹、不触发标题生成，状态随宿主镜像收敛。
+     */
+    public static final int INPUT_PRIMARY = 0;
+    public static final int INPUT_STEER = 1;
+
+    /**
+     * Frozen steer delivery state（v8 追加）。展示规则：“已并入”只由 OFFERED 声称；
+     * 恢复后仍 PENDING 的记录必须显示“未确认是否并入”，FAILED 显示“未能并入”。
+     */
+    public static final int STEER_DELIVERY_PENDING = 0;
+    public static final int STEER_DELIVERY_OFFERED = 1;
+    public static final int STEER_DELIVERY_FAILED = 2;
+
     public final int schemaVersion;
     public final String conversationId;
     public final String messageId;

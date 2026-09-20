@@ -35,6 +35,18 @@ public final class ConversationEntity {
     @ColumnInfo(name = "archived_at_ms")
     public Long archivedAtMs;
 
+    /** ConversationInfo.TITLE_ORIGIN_*。v8 回填：null/空标题 → DEFAULT，非空 → USER。 */
+    @ColumnInfo(name = "title_origin")
+    public int titleOrigin;
+
+    /** 展示元数据（置顶排序），不进模型上下文、不影响任务策略。 */
+    @ColumnInfo(name = "pinned")
+    public boolean pinned;
+
+    /** ConversationMessage.CHANNEL_*；最近一次用户输入通道，v8 回填 CHANNEL_NONE。 */
+    @ColumnInfo(name = "last_input_channel")
+    public int lastInputChannel;
+
     @ColumnInfo(name = "schema_version")
     public int schemaVersion;
 }

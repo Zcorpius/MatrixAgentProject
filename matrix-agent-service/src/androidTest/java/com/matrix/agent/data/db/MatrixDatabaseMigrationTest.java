@@ -175,4 +175,67 @@ public final class MatrixDatabaseMigrationTest {
         cursor.close();
         db.close();
     }
+
+    /**
+     * v7 → v8（对话能力评估 v1.0 的 schema 地基）：三表加列 + titleOrigin 保守回填。
+     * 回填语义是防覆盖的关键——非空历史标题标 USER，AUTO 标题永不覆盖它。
+     */
+    @Test
+    public void migrate7To8AddsCapabilityColumnsAndBackfillsTitleOrigin() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 7);
+        // 会话两行：未命名（title NULL）与用户已命名
+        db.execSQL("INSERT INTO conversation (conversation_id, owner_user_id, vehicle_zone, "
+                + "title, created_at_ms, updated_at_ms, schema_version) VALUES "
+                + "('conv-untitled', 'driver-1', 'DRIVER', NULL, 1000, 1000, 1)");
+        db.execSQL("INSERT INTO conversation (conversation_id, owner_user_id, vehicle_zone, "
+                + "title, created_at_ms, updated_at_ms, schema_version) VALUES "
+                + "('conv-named', 'driver-1', 'DRIVER', '我的空调对话', 2000, 2000, 1)");
+        // 消息与任务链接各一行（v7 列集）
+        db.execSQL("INSERT INTO conversation_message (message_id, conversation_id, sequence_no, "
+                + "role, status, channel, text, language_tag, conversation_task_id, "
+                + "reply_to_message_id, failure_code, created_at_ms, updated_at_ms, "
+                + "idempotency_key, schema_version) VALUES "
+                + "('msg-1', 'conv-untitled', 1, 0, 2, 1, '把温度调到 24 度', 'zh-CN', "
+                + "'task-1', NULL, 0, 1000, 1100, 'idem-1', 1)");
+        db.execSQL("INSERT INTO conversation_task_link (conversation_task_id, "
+                + "runtime_request_id, conversation_id, user_message_id, assistant_message_id, "
+                + "read_only_hint, terminal_status, created_at_ms, started_at_ms, "
+                + "terminal_at_ms) VALUES "
+                + "('task-1', 'req-1', 'conv-untitled', 'msg-1', NULL, 0, NULL, "
+                + "1000, NULL, NULL)");
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 8, true,
+                MatrixDatabase.MIGRATION_7_8);
+
+        // titleOrigin 回填：NULL 标题 → DEFAULT(0)，非空 → USER(2)
+        Cursor origin = db.query("SELECT conversation_id, title_origin, pinned, "
+                + "last_input_channel FROM conversation ORDER BY conversation_id");
+        assertTrue(origin.moveToFirst());
+        assertEquals("conv-named 行：非空标题保守标 USER", 2, origin.getInt(1));
+        assertEquals(0, origin.getInt(2));
+        assertEquals(0, origin.getInt(3));
+        assertTrue(origin.moveToNext());
+        assertEquals("conv-untitled 行：NULL 标题标 DEFAULT", 0, origin.getInt(1));
+        origin.close();
+
+        // 消息：input_kind 回填 INPUT_PRIMARY，steer 列 NULL
+        Cursor message = db.query("SELECT input_kind, steer_host_user_message_id, "
+                + "steer_delivery_state FROM conversation_message WHERE message_id='msg-1'");
+        assertTrue(message.moveToFirst());
+        assertEquals(0, message.getInt(0));
+        assertTrue(message.isNull(1));
+        assertTrue(message.isNull(2));
+        message.close();
+
+        // 任务链接：轨迹列存在且为 NULL（阶段 2 才有写入方）
+        Cursor link = db.query("SELECT execution_trace_json, trace_projection_version "
+                + "FROM conversation_task_link WHERE conversation_task_id='task-1'");
+        assertTrue(link.moveToFirst());
+        assertTrue(link.isNull(0));
+        assertTrue(link.isNull(1));
+        link.close();
+
+        db.close();
+    }
 }

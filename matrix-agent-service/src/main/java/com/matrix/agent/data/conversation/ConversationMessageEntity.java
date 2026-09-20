@@ -69,6 +69,18 @@ public final class ConversationMessageEntity {
     @ColumnInfo(name = "idempotency_key")
     public String idempotencyKey;
 
+    /** ConversationMessage.INPUT_*；v8 回填 INPUT_PRIMARY。 */
+    @ColumnInfo(name = "input_kind")
+    public int inputKind;
+
+    /** 宿主主用户消息 id；仅 INPUT_STEER 行非 null。 */
+    @ColumnInfo(name = "steer_host_user_message_id")
+    public String steerHostUserMessageId;
+
+    /** 投递态（'PENDING'/'OFFERED'/'FAILED'）；仅 INPUT_STEER 行非 null。 */
+    @ColumnInfo(name = "steer_delivery_state")
+    public String steerDeliveryState;
+
     @ColumnInfo(name = "schema_version")
     public int schemaVersion;
 }
