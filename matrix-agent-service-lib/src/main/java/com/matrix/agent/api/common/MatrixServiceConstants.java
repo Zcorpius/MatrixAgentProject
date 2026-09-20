@@ -23,6 +23,8 @@ public final class MatrixServiceConstants {
     public static final String DOWNLOAD_SERVICE = "matrix.service.DOWNLOAD";
     /** 对话域发现键 → IConversationService；特性位见 {@link #FEATURE_CONVERSATION_DOMAIN}。 */
     public static final String CONVERSATION_SERVICE = "matrix.service.CONVERSATION";
+    /** 调试轨迹发现键 → IDebugTraceService（评估 v1.0 §4.3；BuildConfig 门控，UI 关闭时空壳）。 */
+    public static final String DEBUG_TRACE_SERVICE = "matrix.service.DEBUG_TRACE";
 
     /** Host notification → Launcher download page deep-link contract. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.matrix.agent.action.OPEN_DOWNLOADS";

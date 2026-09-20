@@ -112,6 +112,26 @@ public final class ModelApiClient implements LlmClient {
         }, token, deadlineAtMillis);
     }
 
+    /**
+     * 增量详情通道（评估 v1.0 §4.3 契约 4）：OpenAI 兼容协议捕获
+     * {@code reasoning_content}；Anthropic/Gemini/Ollama 单轮路径第一版不返回
+     * reasoning（契约"仅当实际返回"——未接入的字段不编造）。
+     */
+    @Override
+    public com.matrix.agent.contract.CompletionDetail completeWithDetail(
+            ModelConfig config, String systemPrompt, String userPrompt,
+            com.matrix.agent.identity.CancellationToken token, long deadlineAtMillis)
+            throws Exception {
+        config.validate();
+        return invokeWithRetry(() -> {
+            switch (config.protocol) {
+                case OPENAI_CHAT:
+                default:
+                    return callOpenAiCompatibleDetail(config, systemPrompt, userPrompt);
+            }
+        }, token, deadlineAtMillis);
+    }
+
     /** Test-visible one-turn OpenAI wire request builder. */
     static JSONObject buildOpenAiToolRequest(ModelConfig config, String system, String user,
             List<ToolDefinition> tools) throws Exception {
@@ -373,6 +393,12 @@ public final class ModelApiClient implements LlmClient {
     }
 
     private String callOpenAiCompatible(ModelConfig config, String system, String user) throws Exception {
+        return callOpenAiCompatibleDetail(config, system, user).text();
+    }
+
+    /** 详情版：捕获 OpenAI 兼容协议的 {@code reasoning_content}（GLM 思考字段）。 */
+    private com.matrix.agent.contract.CompletionDetail callOpenAiCompatibleDetail(
+            ModelConfig config, String system, String user) throws Exception {
         JSONObject body = new JSONObject()
                 .put("model", config.model)
                 .put("stream", false)
@@ -382,8 +408,20 @@ public final class ModelApiClient implements LlmClient {
                         .put(message("user", user)));
         JSONObject response = post(config.endpoint, body, "Authorization",
                 config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null);
-        return response.getJSONArray("choices").getJSONObject(0)
-                .getJSONObject("message").optString("content", "");
+        JSONObject message = response.getJSONArray("choices").getJSONObject(0)
+                .getJSONObject("message");
+        String text = message.optString("content", "");
+        String reasoning = message.optString("reasoning_content", null);
+        if (reasoning != null && reasoning.trim().isEmpty()) {
+            reasoning = null;
+        }
+        // 调试轨迹（评估 v1.0 §4.3 契约 4）：供应商实际返回的 reasoning 无条件入日志；
+        // 未返回时写 unavailable——绝不推导隐藏思维链。UI 显示由 Emitter 的门控决定。
+        com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_MODEL_REASONING,
+                "model:" + config.model,
+                reasoning == null ? "reasoning unavailable" : reasoning);
+        return new com.matrix.agent.contract.CompletionDetail(text, reasoning);
     }
 
     private String callAnthropic(ModelConfig config, String system, String user) throws Exception {

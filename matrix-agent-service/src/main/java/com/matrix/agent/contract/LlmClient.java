@@ -27,4 +27,15 @@ public interface LlmClient {
     String complete(ModelConfig config, String systemPrompt, String userPrompt,
             CancellationToken token, long deadlineAtMillis) throws Exception;
 
+    /**
+     * 增量详情通道（评估 v1.0 §4.3 契约 4）：默认包装 {@link #complete(ModelConfig,
+     * String, String, CancellationToken, long)} 只产 text（reasoning=null）。
+     * 生产实现 {@code ModelApiClient} 覆写本方法以透传供应商实际返回的 reasoning
+     * 字段；测试 fake 可按需覆写。既有 complete() 调用方零改动。
+     */
+    default CompletionDetail completeWithDetail(ModelConfig config, String systemPrompt,
+            String userPrompt, CancellationToken token, long deadlineAtMillis) throws Exception {
+        return new CompletionDetail(
+                complete(config, systemPrompt, userPrompt, token, deadlineAtMillis), null);
+    }
 }

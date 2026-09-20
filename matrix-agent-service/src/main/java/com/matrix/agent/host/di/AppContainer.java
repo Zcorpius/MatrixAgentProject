@@ -198,6 +198,12 @@ public final class AppContainer implements DownloadRuntime {
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
+        // 调试轨迹发射器（评估 v1.0 §4.3）：无条件日志 + UI 门控 ring buffer。
+        // BuildConfig 门控——false 时日志汇照常输出，UI 汇关闭。
+        com.matrix.agent.debugtrace.DebugTraceHolder.set(
+                new com.matrix.agent.debugtrace.DebugTraceEmitter(
+                        com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI));
+
         // 功能型轻量调用端口（摘要/标题共用）：与任务主路径同一 ModelApiClient + 配置源
         titleModelClient = taskDependencies.modelClient;
         titleConfigSupplier = taskDependencies.configStore::load;

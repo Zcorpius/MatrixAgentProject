@@ -1,5 +1,11 @@
 import java.util.Properties
 
+// 内部调试轨迹门控（评估 v1.0 §4.3）：只控制 UI 可见性；诊断日志无条件输出。
+// fail-closed——默认 false；release 恒 false（见 buildTypes）。
+val traceRequested = providers.gradleProperty("matrix.debugTraceUi")
+    .map(String::toBoolean)
+    .orElse(false)
+
 private val platformKeyDirectory = file("tools/key")
 private val platformKeyStore = platformKeyDirectory.resolve("platform.p12")
 private val matrixVersionName = providers.gradleProperty("MATRIX_VERSION_NAME").get()
@@ -65,9 +71,18 @@ android {
         getByName("debug") {
             // android.uid.system packages cannot be installed with the default debug key.
             signingConfig = signingConfigs.getByName("platform")
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
+        }
+        findByName("internal")?.let { internal ->
+            // 若项目定义 internal，规则与 debug 相同；无需改变 isDebuggable
+            internal.buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("platform")
+            // 即便 gradle.properties 被误设为 true，量产构建 UI 恒关（日志仍输出）
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
         }
     }
 

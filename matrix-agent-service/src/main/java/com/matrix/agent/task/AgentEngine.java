@@ -230,6 +230,12 @@ public final class AgentEngine {
     }
 
     private AgentOutcome executeLocked(AgentRequest request, long started) {
+        // 调试轨迹：轮次开始（ROUND_START）
+        com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_ROUND_START,
+                request.getRequestId(),
+                "textChars=" + safeLength(request.getText())
+                        + " deadlineMs=" + request.getDeadlineAtMillis());
         Trajectory trajectory = new Trajectory();
         SessionContext sessionContext = sessionManager.getOrCreate(request.getSessionId());
         Log.d(TAG, "[Engine] session context ready turns=" + sessionContext.getRecentTurns().size());
@@ -342,6 +348,15 @@ public final class AgentEngine {
             }
             Log.d(TAG, "[Engine] iter " + iteration + " <- model turn cost="
                     + elapsedMillis(iterationStarted) + "ms");
+            // 调试轨迹（评估 v1.0 §4.3）：模型建议（MODEL_PROPOSED）——模型产出的
+            // 候选 tool_calls 是"建议"而非"事实"，四态语义由后续事件逐级确认
+            com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                    com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_MODEL_PROPOSED,
+                    request.getRequestId(),
+                    "iter=" + iteration + " finish=" + turn.getFinishReason()
+                            + " toolCalls=" + turn.getToolCalls().size()
+                            + " contentChars="
+                            + safeLength(turn.getAssistantMessage().getContent()));
 
             // assistant message 加入前同样过预算检查(单条截断 + 条数/字符上限)
             if (!appendMessageWithBudget(conversation, turn.getAssistantMessage(), request)) {
@@ -490,6 +505,13 @@ public final class AgentEngine {
                 }
                 PolicyDecision decision = policyEngine.evaluate(request, call);
                 decisions.add(decision);
+                // 调试轨迹：策略判定（POLICY_DECIDED）——允许/拒绝与理由（Redactor 净化）
+                com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                        com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_POLICY_DECIDED,
+                        request.getRequestId(),
+                        "cap=" + call.getCapabilityName()
+                                + " allowed=" + decision.isAllowed()
+                                + " reason=" + decision.getReason());
                 if (!decision.isAllowed()) {
                     boolean capabilityBlock =
                             decision.getRejectionType() == PolicyDecision.RejectionType.CAPABILITY;
@@ -516,6 +538,12 @@ public final class AgentEngine {
                     continue;
                 }
                 Log.d(TAG, "[Engine]   -> policy ALLOW, executing provider");
+                // 调试轨迹：请求已送达（REQUEST_DELIVERED）——策略已允许，即将执行
+                com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                        com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_REQUEST_DELIVERED,
+                        request.getRequestId(),
+                        "cap=" + call.getCapabilityName()
+                                + " args=" + call.getArguments());
                 // PRE_TOOL 增量事件——policy ALLOW 后,toolExecutor.execute 前。
                 // args 走 AuditRedactor 字段级脱敏,与 TrajectoryEntity snapshots 同保护级别。
                 Map<String, Object> redactedArgsForAudit = auditRedactor.redactArguments(
@@ -533,6 +561,16 @@ public final class AgentEngine {
                         + " verified=" + toolResult.isVerified()
                         + " durationMs=" + toolResult.getDurationMillis()
                         + " msg=" + SafeLog.TOOL_RESULT_PLACEHOLDER);
+                // 调试轨迹：设备已核验（DEVICE_VERIFIED）——工具返回的 status/verified/
+                // readback 是结构化事实（消息正文不进轨迹——经 Redactor 也会截断）
+                com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                        com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_DEVICE_VERIFIED,
+                        request.getRequestId(),
+                        "cap=" + call.getCapabilityName()
+                                + " status=" + toolResult.getStatus()
+                                + " verified=" + toolResult.isVerified()
+                                + " durationMs=" + toolResult.getDurationMillis()
+                                + " observed=" + toolResult.getObservedState());
                 // POST_TOOL 增量事件——toolExecutor 返回后,observation 加入前。
                 // result message 走 AuditRedactor 文本脱敏(避免"导航到 XX 失败"等业务字段泄漏)。
                 auditEventRecorder.recordPostTool(request.getRequestId(),
@@ -603,6 +641,13 @@ public final class AgentEngine {
 
         trajectory.finish(stopReason, elapsedMillis(started), totalToolCalls);
         TaskState finalState = computeFinalState(trajectory, stopReason);
+        // 调试轨迹：轮次结束（ROUND_END）——主循环正常出口
+        com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_ROUND_END,
+                request.getRequestId(),
+                "stopReason=" + stopReason + " toolCalls=" + totalToolCalls
+                        + " finalState=" + finalState
+                        + " durationMs=" + elapsedMillis(started));
         Log.i(TAG, "[Engine] END req=" + request.getRequestId()
                 + " finalState=" + finalState
                 + " stopReason=" + stopReason
@@ -725,6 +770,12 @@ public final class AgentEngine {
     private AgentOutcome terminalOutcome(AgentRequest request, TaskState state,
             StopReason reason, String message, long started) {
         Trajectory trajectory = new Trajectory();
+        // 调试轨迹：轮次结束（ROUND_END）——terminalOutcome 路径（提前终止）
+        com.matrix.agent.debugtrace.DebugTraceHolder.emit(
+                com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_ROUND_END,
+                request.getRequestId(),
+                "stopReason=" + reason + " durationMs=" + elapsedMillis(started)
+                        + " terminal=" + state);
         trajectory.finish(reason, elapsedMillis(started), 0);
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(), state, reason, trajectory,
                 elapsedMillis(started));

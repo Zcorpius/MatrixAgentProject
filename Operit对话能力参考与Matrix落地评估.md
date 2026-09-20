@@ -22,7 +22,7 @@ Matrix 的边界更严格：它是 Host 拥有的系统 Agent，可能调用车�
 | P1 | 收藏/置顶、只读导出、引用回复、分支式追问 | 应适配后实现；需要数据模型和权限设计 |
 | P2 | 受控附件管线、对话内搜索、上下文用量的量化视图 | 值得规划；依赖隐私、存储和上下文预算评审 |
 | 延后 | 多候选回复、再生成、工作区/角色/群组、云端 ASR 多供应商 | 有价值但会显著扩大执行与产品语义，后置评审 |
-| 不采纳 | 可任意注册的 Prompt Hook、插件改写历史、内置 HTTP 聊天服务、展示/编辑原始思维链或模型生成的工具 XML、靠固定延时抢麦 | 与 Matrix 的 Host 安全模型冲突；这不排斥展示 Host 投影的结构化执行事实 |
+| 不采纳 | 可任意注册的 Prompt Hook、插件改写历史、内置 HTTP 聊天服务、在量产用户界面展示/编辑原始思维链或模型生成的工具 XML、靠固定延时抢麦 | 与 Matrix 的 Host 安全模型冲突；这不排斥展示 Host 投影的结构化执行事实，或受严格门控的内部调试轨迹 |
 
 ## 2. 调研范围与证据
 
@@ -141,7 +141,7 @@ Matrix 已经做得更稳健：`ConversationCoordinator` 的提交先原子落�
 
 - 状态卡不只是“正在执行”的文案。对每个执行过的能力，Host 应投影一条**能力事实轨迹**：稳定 capability ID 经 `CapabilitySpeechNames` 映射后的友好名、经白名单裁剪的参数摘要、请求/执行/核验结果态，以及必要时的 readback 摘要。它的数据源必须是 `ConversationTaskLink`、审计事件与 readback 等结构化执行事实，而不是解析模型输出 XML。
 - 每个可核验参数固定使用两段式字段：`requestedDisplay` 与 `verifiedDisplay`，另有 `verificationState`（例如 `VERIFIED`、`MISMATCH`、`UNAVAILABLE`、`UNKNOWN`）。UI 固定渲染为“请求 X → 核验为 Y”；二者不同必须以 **Y/readback** 为准并显式显示差异。例如 Android 15 级音量请求 30% 后读回 33%，应显示“请求 30% → 核验为 33%”，不能压扁成“已设为 30%”。音量档位量化、亮度曲线和空调温度回差都属于正常设备现实，而不是展示层可以忽略的小数误差。
-- 原始 CoT、原始 prompt、推理草稿、凭据、原始工具参数/返回、未脱敏 readback 一律不展示；模型生成的工具 XML 也不作为 UI 协议。能力事实轨迹是 Host 的安全投影，且在 `EXECUTION_UNKNOWN` 时必须保留“尝试了什么、最后得到何种核验态、为何未知”，使用户可以真正核验设备现实。
+- 量产用户界面一律不展示原始 CoT、原始 prompt、推理草稿、凭据、原始工具参数/返回或未脱敏 readback；模型生成的工具 XML 也不作为量产 UI 协议。能力事实轨迹是 Host 的安全投影，且在 `EXECUTION_UNKNOWN` 时必须保留“尝试了什么、最后得到何种核验态、为何未知”，使用户可以真正核验设备现实。受构建和运行时双重门控的内部调试模式见下文。
 - ASR partial、模型 streaming token 和工具进度都应是**内存态/订阅态**，断开或进程死亡时自然消失；最终用户文本、最终助手答复、状态和安全事实轨迹才按各自的数据保留规则落库。
 
 #### 能力事实轨迹的数据、写入与客户端通道（P0 必备）
@@ -166,6 +166,55 @@ Matrix 已经做得更稳健：`ConversationCoordinator` 的提交先原子落�
 4. 订阅严格绑定消息页/语音页生命周期；退订后 Host 直接静默丢弃，进程死亡后不恢复也不补发。
 
 不可把未完成模型文本写成一条“已完成助手消息”。
+
+#### 内部调试轨迹模式：`matrix.debugTraceUi`
+
+为排查模型理解、策略和工具链路，允许在**内部可调试构建**中显示更细的调试轨迹。它不是对量产界面解除安全限制，也不是把调试数据写入聊天记录。`matrix.debugTraceUi` **只控制页面可见性，不控制诊断日志**：无论 true 或 false，所有已取得的 reasoning 与工具调用阶段都必须以统一、脱敏、可关联的结构化日志写入 logcat。配置入口位于项目根目录的 `gradle.properties`：
+
+```properties
+# 默认不写或写 false；仅本地/internal 调试构建可临时改为 true。
+matrix.debugTraceUi=true
+```
+
+Host 与 Launcher 的 Android Gradle 模块各自生成同名 `BuildConfig.MATRIX_DEBUG_TRACE_UI`；本工程使用 Kotlin DSL，构建逻辑必须遵循 fail-closed 规则，而不是直接相信属性：
+
+```kotlin
+val traceRequested = providers.gradleProperty("matrix.debugTraceUi")
+    .map(String::toBoolean)
+    .orElse(false)
+
+android {
+    buildTypes {
+        getByName("debug") {
+            buildConfigField(
+                "boolean", "MATRIX_DEBUG_TRACE_UI", traceRequested.get().toString()
+            )
+        }
+        findByName("internal")?.let { internal ->
+            // 若项目定义 internal，规则与 debug 相同；无需改变 isDebuggable。
+            internal.buildConfigField(
+                "boolean", "MATRIX_DEBUG_TRACE_UI", traceRequested.get().toString()
+            )
+        }
+        getByName("release") {
+            // 即便 gradle.properties 被误设为 true，量产构建仍永久关闭。
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
+        }
+    }
+}
+```
+
+实际模块名或 `internal` build type 可随工程组织调整，但以下契约不可变：
+
+1. Host 与 Launcher 都只检查各自的 `BuildConfig.MATRIX_DEBUG_TRACE_UI`，不使用 `BuildConfig.DEBUG` 作为额外条件。buildType 门控已确保 release 字段恒为 false；这样 internal 不必为了调试轨迹改变 `isDebuggable` 或承受其副作用。任一侧字段为 false 时，Host 不创建/不接受订阅，Launcher 不订阅/不渲染；两侧不需要、也不应跨 Binder 查询对方的 BuildConfig。
+2. 调试页是独立的“调试轨迹”视图，不复用 `ConversationMessage`、`executionTraces` 或正式消息气泡。它只使用有界内存 ring buffer，进程重启即清空；不得进入 SQLCipher 对话库、审计导出、聊天导出、剪贴板、模型上下文或 TTS。页面关闭不影响 Host 继续输出诊断日志。
+3. Host 到 Launcher 使用独立的 append-only AIDL：`IDebugTraceCallback` 以 `oneway` 推送有界 `DebugTraceEvent`，通过独立的注册/注销方法订阅。Host 在字段为 false 时直接拒绝注册且不产生事件；Launcher 自身字段为 false 时不调用注册、不渲染。该通道不复用 `IConversationCallback`，避免正式会话 ABI、持久化事实与 debug-only 内存事件相互污染。
+4. 为满足“已取得的思考过程无论 UI 开关如何都打印日志”，`ModelApiClient → LlmClient` 必须演进为增量详情通道，例如 `completeWithDetail()` 返回 `CompletionDetail{text, reasoningIfPresent}`；保留现有 `complete()` 作为兼容包装，默认实现只产生 text。供应商实际返回 reasoning 时，将其作为 `DebugTraceEvent.MODEL_REASONING` 写入日志；未返回时写“reasoning unavailable”，绝不尝试推导隐藏思维链。reasoning 是否在 UI 显示仍受 `matrix.debugTraceUi` 门控。
+5. Host 建立唯一 `DebugTraceEmitter`：每个模型轮次、reasoning、候选工具、PolicyEngine 判定、工具请求、工具结果、readback、错误码和耗时先经过 `DebugTraceRedactor`，然后**无条件**以 `Log.i("MatrixAgent", ...)` 写入 logcat；仅当 Host 侧 UI 标志为 true 时，再复制到内存 ring buffer 并经 `IDebugTraceCallback` 下发。单条日志按 3 KiB 上限切分，附带 `traceId`、`taskId`、`partIndex/partCount`、阶段和时间，确保长 reasoning 可在 logcat 重组且不因 Android 单条长度限制被截断。
+6. `DebugTraceRedactor` 是日志与 UI 的共同边界：系统提示词、密钥、认证头、原始审计 payload、完整位置/联系人/URI 等即使在 true 模式也不输出。`FORCE_TOOL`、PolicyEngine 拒绝、工具超时和 readback 不一致必须显式区分“模型建议”“策略允许”“请求已送达”“设备已核验”，避免日志和调试页自身传播“请求即事实”的错误。
+7. 量产模式只显示用户可理解的最终安全事实，例如“请求音量 30% → 核验为 33%”；不显示模型思考、逐步工具调用或调试关联 ID。**量产 UI 隐藏不等于停止日志**：开关为 false 时仍按第 5 条输出脱敏的 reasoning/工具流程日志。`EXECUTION_UNKNOWN` 的最小核验信息不能因关闭调试模式而被隐藏。
+
+验收矩阵至少覆盖：`debugTraceUi=false` 的 debug 构建无 UI 轨迹但仍有脱敏 logcat 事件、`true` 的 debug/internal 构建同时有日志和内存轨迹、internal 不依赖 `BuildConfig.DEBUG` 仍可订阅、任何 release 变体即使属性为 true 仍无 UI 轨迹但仍输出脱敏日志、Host/Launcher 任一侧关闭都无法订阅、长 reasoning 分片可由 traceId 重组、进程重启/导出/重新进入会话均不能恢复调试内容。
 
 ### 4.4 消息操作：收藏、复制、引用、编辑与删除
 

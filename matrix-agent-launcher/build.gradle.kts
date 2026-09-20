@@ -11,6 +11,11 @@ private val platformSigningProperties = Properties().apply {
     }
 }
 
+// 内部调试轨迹门控（评估 v1.0 §4.3）
+val traceRequested = providers.gradleProperty("matrix.debugTraceUi")
+    .map(String::toBoolean)
+    .orElse(false)
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -45,10 +50,21 @@ android {
         getByName("debug") {
             // Keep local debug builds installable over the platform-signed prebuilt Launcher.
             signingConfig = signingConfigs.getByName("platform")
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
+        }
+        findByName("internal")?.let { internal ->
+            internal.buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("platform")
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

@@ -50,6 +50,12 @@ public final class MatrixServiceGraph {
     public IBinder downloadBinder() { return download.binder(); }
     public IBinder voiceBinder() { return voice.binder(); }
     public IBinder conversationBinder() { return conversation.binder(); }
+    public IBinder debugTraceBinder() { return debugTraceStub; }
+
+    private final com.matrix.agent.host.rpc.DebugTraceServiceStub debugTraceStub =
+            new com.matrix.agent.host.rpc.DebugTraceServiceStub(
+                    com.matrix.agent.debugtrace.DebugTraceHolder.get(),
+                    com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI);
     public int featureFlags() {
         int flags = MatrixServiceConstants.FEATURE_DURABLE_TASKS
                 | MatrixServiceConstants.FEATURE_MODEL_DOMAIN
