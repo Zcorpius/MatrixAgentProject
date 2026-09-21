@@ -239,7 +239,7 @@
     <string name="launcher_nav_index_conversation">01</string>
     <string name="conversation_eyebrow">CONVERSATION</string>
     <string name="conversation_title">对话交互</string>
-    <string name="conversation_intro">文字、按键录音与唤醒后的语音，都会汇入同一条可追溯的对话与执行链路。</string>
+    <string name="conversation_intro">文字、按键与唤醒后的语音，会汇入同一条可追溯的对话与执行链路。</string>
     <string name="conversation_input_hint">输入消息…</string>
     <string name="conversation_send">发送</string>
     <string name="conversation_voice_hold">按住说话</string>

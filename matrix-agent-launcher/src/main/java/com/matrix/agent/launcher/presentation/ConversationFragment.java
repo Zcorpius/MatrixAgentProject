@@ -464,24 +464,20 @@ public final class ConversationFragment extends Fragment {
     private View buildDebugTraceRow(ConversationViewModel.UiMessage userMessage) {
         float density = getResources().getDisplayMetrics().density;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int maxWidth = (int) (screenWidth * 0.78f);
+        // 过程是辅助信息而非第三种聊天气泡。收起时只保留居中的细分隔标题；展开后
+        // 才在其下挂出独立详情卡，避免和用户/助手的会话层级争夺注意力。
+        int maxWidth = (int) (screenWidth * 0.86f);
 
         LinearLayout row = new LinearLayout(requireContext());
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding((int) (13 * density + .5f), (int) (8 * density + .5f),
-                (int) (13 * density + .5f), (int) (8 * density + .5f));
-        row.setBackground(roundedBackground(color(R.color.matrix_trace_group_bg),
-                color(R.color.matrix_trace_group_stroke), 12 * density));
+        row.setPadding(0, (int) (6 * density + .5f), 0, (int) (6 * density + .5f));
         row.setTag(R.id.conversation_messages, "process:" + signatureOf(userMessage));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(maxWidth,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = android.view.Gravity.START;
-        params.leftMargin = (int) (4 * density + .5f);
-        params.rightMargin = (int) (48 * density + .5f);
-        params.bottomMargin = (int) (5 * density + .5f);
+        params.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        params.bottomMargin = (int) (3 * density + .5f);
         row.setLayoutParams(params);
-        row.addView(buildDebugTracePanel(userMessage.debugTraces(), maxWidth - (int) (26 * density),
-                density));
+        row.addView(buildDebugTracePanel(userMessage.debugTraces(), maxWidth, density));
         return row;
     }
 
@@ -502,21 +498,33 @@ public final class ConversationFragment extends Fragment {
 
         LinearLayout panel = new LinearLayout(requireContext());
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(0, (int) (7 * density + .5f), 0, (int) (4 * density + .5f));
-
-        TextView header = new TextView(requireContext());
-        header.setTextSize(11);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setTextColor(color(R.color.matrix_trace_group_title));
-        header.setCompoundDrawablePadding((int) (5 * density + .5f));
-        header.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_info_details,
-                0, android.R.drawable.arrow_down_float, 0);
         String groupText = thinkingCount == 0
                 ? getString(R.string.conversation_debug_trace_group_without_reasoning, toolCount)
                 : getString(R.string.conversation_debug_trace_group, thinkingCount, toolCount);
-        header.setText(groupText);
-        header.setContentDescription(groupText);
-        header.setPadding(0, (int) (3 * density + .5f), 0, (int) (4 * density + .5f));
+
+        // 收起态仿照 Operit 的“过程分隔器”：没有背景、没有描边、没有信息图标，只把
+        // 标题置于两条细线之间。箭头是唯一的交互暗示，过程不会再误读成助手气泡。
+        LinearLayout header = new LinearLayout(requireContext());
+        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        header.setPadding(0, (int) (3 * density + .5f), 0, (int) (3 * density + .5f));
+        View leftRule = traceRule(density);
+        header.addView(leftRule, new LinearLayout.LayoutParams(0, Math.max(1, (int) density), 1f));
+        TextView title = new TextView(requireContext());
+        title.setText(groupText);
+        title.setContentDescription(groupText);
+        title.setTextSize(10);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(color(R.color.matrix_trace_group_title));
+        title.setPadding((int) (10 * density + .5f), 0, (int) (5 * density + .5f), 0);
+        header.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.ImageButton affordance = traceDisclosure(false, density);
+        LinearLayout.LayoutParams affordanceParams = new LinearLayout.LayoutParams(
+                (int) (22 * density + .5f), (int) (22 * density + .5f));
+        affordanceParams.rightMargin = (int) (5 * density + .5f);
+        header.addView(affordance, affordanceParams);
+        View rightRule = traceRule(density);
+        header.addView(rightRule, new LinearLayout.LayoutParams(0, Math.max(1, (int) density), 1f));
         panel.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -534,16 +542,44 @@ public final class ConversationFragment extends Fragment {
             detail.addView(buildDebugTraceNode(nodes.get(i), i == nodes.size() - 1,
                     maxBubbleWidth - inset * 2, density));
         }
-        panel.addView(detail, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = (int) (8 * density + .5f);
+        panel.addView(detail, detailParams);
         header.setOnClickListener(ignored -> {
             boolean expanding = detail.getVisibility() != View.VISIBLE;
             detail.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            header.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_info_details,
-                    0, expanding ? android.R.drawable.arrow_up_float
-                            : android.R.drawable.arrow_down_float, 0);
+            updateTraceDisclosure(affordance, expanding);
         });
         return panel;
+    }
+
+    private View traceRule(float density) {
+        View rule = new View(requireContext());
+        rule.setBackgroundColor(color(R.color.matrix_trace_group_stroke));
+        return rule;
+    }
+
+    /**
+     * 借鉴 Operit 的无底座 Material 图标造型：Matrix 的收起态向左，展开态向下。
+     * 它没有背景或文字，排布仍由 Matrix 的居中分隔器与节点标题负责。
+     */
+    private android.widget.ImageButton traceDisclosure(boolean expanded, float density) {
+        android.widget.ImageButton disclosure = new android.widget.ImageButton(requireContext());
+        disclosure.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        disclosure.setPadding((int) (2 * density + .5f), (int) (2 * density + .5f),
+                (int) (2 * density + .5f), (int) (2 * density + .5f));
+        disclosure.setBackground(null);
+        updateTraceDisclosure(disclosure, expanded);
+        return disclosure;
+    }
+
+    private void updateTraceDisclosure(android.widget.ImageButton disclosure, boolean expanded) {
+        disclosure.setImageResource(expanded ? R.drawable.ic_trace_disclosure_down
+                : R.drawable.ic_trace_disclosure_right);
+        disclosure.setContentDescription(expanded
+                ? getString(R.string.conversation_debug_trace_expanded)
+                : getString(R.string.conversation_debug_trace_collapsed, 0));
     }
 
     private View buildDebugTraceNode(DebugTraceTimeline.Node node, boolean last, int maxWidth,
@@ -578,25 +614,20 @@ public final class ConversationFragment extends Fragment {
         LinearLayout card = new LinearLayout(requireContext());
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding((int) (6 * density + .5f), 0, 0, 0);
+        LinearLayout nodeHeader = new LinearLayout(requireContext());
+        nodeHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView title = new TextView(requireContext());
         title.setTextSize(11);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(color(R.color.matrix_trace_node_title));
-        title.setCompoundDrawablePadding((int) (4 * density + .5f));
-        title.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.arrow_down_float, 0);
         title.setText(node.title(requireContext()));
-        title.setMaxWidth(maxWidth - (int) (24 * density + .5f));
-        card.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView preview = new TextView(requireContext());
-        preview.setTextSize(10);
-        preview.setTextColor(color(R.color.matrix_trace_node_preview));
-        preview.setText(node.preview(requireContext()));
-        preview.setMaxLines(2);
-        preview.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        preview.setMaxWidth(maxWidth - (int) (24 * density + .5f));
-        card.addView(preview, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+        nodeHeader.addView(title, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        android.widget.ImageButton affordance = traceDisclosure(false, density);
+        LinearLayout.LayoutParams nodeAffordanceParams = new LinearLayout.LayoutParams(
+                (int) (22 * density + .5f), (int) (22 * density + .5f));
+        nodeHeader.addView(affordance, nodeAffordanceParams);
+        card.addView(nodeHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView content = new TextView(requireContext());
@@ -611,13 +642,16 @@ public final class ConversationFragment extends Fragment {
         content.setVisibility(View.GONE);
         card.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
-        title.setOnClickListener(ignored -> {
+        // 节点标题只承担语义与折叠控制。此前同时渲染两行 preview 和完整 detail，
+        // 使同一段 reasoning/tool payload 在展开时重复出现；调试信息应完整保留一次，
+        // 而不是用重复文本换取“摘要”。
+        View.OnClickListener toggle = ignored -> {
             boolean expanding = content.getVisibility() != View.VISIBLE;
             content.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            title.setCompoundDrawablesWithIntrinsicBounds(0, 0,
-                    expanding ? android.R.drawable.arrow_up_float
-                            : android.R.drawable.arrow_down_float, 0);
-        });
+            updateTraceDisclosure(affordance, expanding);
+        };
+        nodeHeader.setOnClickListener(toggle);
+        affordance.setOnClickListener(toggle);
         item.addView(card, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         return item;
     }

@@ -16,38 +16,40 @@
         android:paddingBottom="13dp">
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/conversation_dynamic_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="serif"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/conversation_title"
+                android:textColor="@color/matrix_primary_dark"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
             <View
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:layout_marginStart="12dp"
                 android:background="@drawable/bg_accent_dot" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="7dp"
                 android:text="@string/conversation_eyebrow"
                 android:textColor="@color/matrix_accent"
-                android:textSize="12sp"
+                android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/conversation_dynamic_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="serif"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:text="@string/conversation_title"
-            android:textColor="@color/matrix_primary_dark"
-            android:textSize="17sp"
-            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/conversation_summary_badge"

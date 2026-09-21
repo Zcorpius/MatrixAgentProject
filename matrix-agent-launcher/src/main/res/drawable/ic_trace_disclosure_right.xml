@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Matrix 的收起语义为向左：与展开态的向下图标构成指定的 < / ∨ 状态对。 -->
+    <path
+        android:fillColor="#4E6A74"
+        android:pathData="M15.41,16.59L10.83,12L15.41,7.41L14,6L8,12L14,18Z" />
+</vector>

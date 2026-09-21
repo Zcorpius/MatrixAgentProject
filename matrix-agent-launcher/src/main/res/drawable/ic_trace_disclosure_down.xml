@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Operit 的同一箭头旋转 90° 后的展开方向。 -->
+    <path
+        android:fillColor="#4E6A74"
+        android:pathData="M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10Z" />
+</vector>
