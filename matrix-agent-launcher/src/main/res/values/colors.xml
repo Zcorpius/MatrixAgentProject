@@ -10,4 +10,31 @@
     <color name="matrix_muted">#71808A</color>
     <color name="matrix_border">#D5E0DC</color>
     <color name="matrix_badge">#E6F1ED</color>
+
+    <!-- 对话气泡（微信式三角色）：用户/助手/系统，含描边与头像底色。 -->
+    <color name="matrix_chat_user_bubble">#D4EDDA</color>
+    <color name="matrix_chat_user_bubble_stroke">#B8DCC5</color>
+    <color name="matrix_chat_system_bubble">#F0F2F1</color>
+    <color name="matrix_chat_assistant_bubble">#FEFFFC</color>
+    <color name="matrix_chat_assistant_bubble_stroke">#D5E0DC</color>
+    <color name="matrix_chat_avatar_user_bg">#DCEEF9</color>
+    <color name="matrix_chat_avatar_assistant_bg">#D6E9E4</color>
+
+    <!-- 调试过程卡（debugTraceUi 门控）：组卡、明细卡、时间线轨道与节点文本。 -->
+    <color name="matrix_trace_group_title">#4B6470</color>
+    <color name="matrix_trace_group_bg">#F3F7F7</color>
+    <color name="matrix_trace_group_stroke">#D2DFE1</color>
+    <color name="matrix_trace_detail_bg">#F4F7F8</color>
+    <color name="matrix_trace_detail_stroke">#D6E0E4</color>
+    <color name="matrix_trace_thinking_dot">#5C7D89</color>
+    <color name="matrix_trace_guide_line">#CBD8DD</color>
+    <color name="matrix_trace_node_title">#38505B</color>
+    <color name="matrix_trace_node_preview">#657980</color>
+    <color name="matrix_trace_node_content">#455B64</color>
+    <color name="matrix_trace_node_content_bg">#EAF0F2</color>
+
+    <!-- 调试节点状态色：策略拒绝/失败、已核验/成功、进行中。 -->
+    <color name="matrix_trace_status_failed">#B65B5B</color>
+    <color name="matrix_trace_status_verified">#3C8A69</color>
+    <color name="matrix_trace_status_pending">#B5813E</color>
 </resources>

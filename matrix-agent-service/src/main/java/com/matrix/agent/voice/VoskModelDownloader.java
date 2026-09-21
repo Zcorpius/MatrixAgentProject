@@ -119,7 +119,7 @@ public final class VoskModelDownloader {
             File active = ModelPathResolver.activeDir(spec.targetDir);
             long installed = active == null ? 0L : dirSize(active);
             return new ModelDownloadInfo(spec.name, ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED,
-                    installed, installed, MatrixErrorCode.SUCCESS);
+                    installed, installed, MatrixErrorCode.SUCCESS, spec.version);
         }
         long downloaded = entity == null ? 0L : Math.max(0L, entity.downloadedBytes);
         long total = entity == null || entity.totalBytes <= 0L
@@ -128,7 +128,7 @@ public final class VoskModelDownloader {
         int state = downloadState(persistedStatus);
         int error = state == ModelDownloadInfo.DOWNLOAD_STATE_FAILED
                 ? MatrixErrorCode.TASK_FAILED : MatrixErrorCode.SUCCESS;
-        return new ModelDownloadInfo(spec.name, state, downloaded, total, error);
+        return new ModelDownloadInfo(spec.name, state, downloaded, total, error, spec.version);
     }
 
     /**

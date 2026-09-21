@@ -50,7 +50,7 @@
     <string name="voice_model_english">英文唤醒模型</string>
     <string name="voice_model_chinese">中文识别模型</string>
     <string name="voice_model_unknown">离线语音模型</string>
-    <string name="voice_model_version">v%1$s</string>
+    <string name="voice_model_version">版本 %1$s</string>
     <string name="voice_model_sherpa_asr">Sherpa 中英识别模型（流式）</string>
     <string name="voice_model_sherpa_vad">Sherpa Silero 语音活动检测</string>
     <string name="voice_model_sherpa_kws">Sherpa 关键词唤醒模型（hi matrix / hey matrix）</string>
@@ -269,6 +269,7 @@
     <string name="conversation_debug_trace_policy_rejected">策略拒绝</string>
     <string name="conversation_debug_trace_verified">已核验</string>
     <string name="conversation_debug_trace_unverified">未通过核验</string>
+    <string name="conversation_debug_trace_failed">未成功</string>
     <string name="conversation_debug_trace_requesting">正在调用</string>
     <string name="conversation_debug_trace_planned">已规划</string>
     <string name="conversation_menu_favorite">收藏</string>
@@ -284,4 +285,18 @@
     <string name="voice_tencent_tts_configure">配置腾讯云凭证</string>
     <string name="voice_tencent_tts_clear">删除云端凭证</string>
     <string name="voice_tencent_tts_update">更新腾讯云凭证</string>
+    <string name="voice_cloud_tts_eyebrow">云端播报</string>
+    <string name="voice_tencent_tts_title">腾讯云 TTS</string>
+    <string name="voice_tencent_tts_loading">正在读取安全配置…</string>
+    <string name="voice_tencent_tts_configured">已安全配置 · 标准音色 %1$d · 云端失败时自动回退本地 Piper 或系统播报</string>
+    <string name="voice_tencent_tts_unconfigured">未配置 · 凭证仅在本机 Keystore 中加密保存，不会回显或写入日志。</string>
+    <string name="voice_tencent_tts_dialog_title">腾讯云 TTS 安全配置</string>
+    <string name="voice_tencent_tts_help">请输入 CAM 子账号的 SecretId 与 SecretKey。密钥提交后不会再显示；请勿使用主账号密钥。</string>
+    <string name="voice_tencent_tts_required">SecretId 和 SecretKey 都不能为空。</string>
+    <string name="voice_tencent_tts_save">安全保存</string>
+    <string name="voice_tencent_tts_save_failed">配置未保存，错误码：%1$d。请核对 SecretId、SecretKey 与子账号权限。</string>
+    <string name="voice_tencent_tts_acknowledge">知道了</string>
+    <string name="voice_tencent_tts_clear_title">删除腾讯云 TTS 凭证</string>
+    <string name="voice_tencent_tts_clear_message">将删除本机加密保存的腾讯云凭证。播报会继续使用 Piper 或系统 TTS。</string>
+    <string name="value_unavailable">—</string>
 </resources>

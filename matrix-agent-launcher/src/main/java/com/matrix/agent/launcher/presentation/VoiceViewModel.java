@@ -141,7 +141,22 @@ public final class VoiceViewModel extends ViewModel {
             else statusSubscription = result.value;
         });
         refresh();
-        if (modelPolling == null) modelPolling = repository.scheduleModelRefresh(this::refreshModels);
+    }
+
+    /**
+     * 离线模型进度轮询由页面可见性驱动（onStart/onStop），与 DownloadFragment 的治理对齐：
+     * 离开语音页后不再每秒拉取；订阅本身保持，回页时轮询自动续上。
+     */
+    public void startModelPolling() {
+        if (cleared) return;
+        if (modelPolling != null && !modelPolling.isCancelled()) return;
+        refreshModels();
+        modelPolling = repository.scheduleModelRefresh(this::refreshModels);
+    }
+
+    public void stopModelPolling() {
+        if (modelPolling != null) modelPolling.cancel(false);
+        modelPolling = null;
     }
 
     public void refresh() {
@@ -165,8 +180,26 @@ public final class VoiceViewModel extends ViewModel {
         repository.offlineModels(result -> {
             modelRefreshInFlight = false;
             if (cleared || !result.isSuccess() || result.value == null) return;
+            // 投影未变化就不发布：1 秒轮询不应对不变的模型列表反复触发整段重建。
+            if (sameModels(current.models, result.value)) return;
             update(current.withModels(result.value));
         });
+    }
+
+    /** 模型投影等值（逐字段）：ViewModel 去重发布与 Fragment 跳过重建共用同一判定。 */
+    static boolean sameModels(List<ModelDownloadInfo> left, List<ModelDownloadInfo> right) {
+        if (left.size() != right.size()) return false;
+        for (int index = 0; index < left.size(); index++) {
+            ModelDownloadInfo a = left.get(index);
+            ModelDownloadInfo b = right.get(index);
+            if (!java.util.Objects.equals(a.modelId, b.modelId) || a.state != b.state
+                    || a.bytesDownloaded != b.bytesDownloaded || a.bytesTotal != b.bytesTotal
+                    || a.errorCode != b.errorCode
+                    || !java.util.Objects.equals(a.version, b.version)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void deleteOfflineModel(@NonNull String modelId) {

@@ -33,6 +33,7 @@ import com.matrix.agent.task.tool.ToolResult;
 import com.matrix.agent.data.audit.AuditEventRecorder;
 import com.matrix.agent.task.port.TaskAuditSink;
 import com.matrix.agent.task.port.TaskMemoryWriter;
+import com.matrix.agent.api.debug.DebugTracePayloads;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -505,12 +506,14 @@ public final class AgentEngine {
                 }
                 PolicyDecision decision = policyEngine.evaluate(request, call);
                 decisions.add(decision);
-                // 调试轨迹：策略判定（POLICY_DECIDED）——允许/拒绝与理由（Redactor 净化）
+                // 调试轨迹：策略判定（POLICY_DECIDED）——允许/拒绝与理由（Redactor 净化）。
+                // 结构化键走 SDK 线格式契约；reason 是含空格的自由文本，只能作末尾记号。
                 com.matrix.agent.debugtrace.DebugTraceHolder.emit(
                         com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_POLICY_DECIDED,
                         request.getRequestId(),
-                        "cap=" + call.getCapabilityName()
-                                + " allowed=" + decision.isAllowed()
+                        DebugTracePayloads.capability(call.getCapabilityName())
+                                + " " + DebugTracePayloads.token(DebugTracePayloads.KEY_ALLOWED,
+                                        decision.isAllowed())
                                 + " reason=" + decision.getReason());
                 if (!decision.isAllowed()) {
                     boolean capabilityBlock =
@@ -542,7 +545,7 @@ public final class AgentEngine {
                 com.matrix.agent.debugtrace.DebugTraceHolder.emit(
                         com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_REQUEST_DELIVERED,
                         request.getRequestId(),
-                        "cap=" + call.getCapabilityName()
+                        DebugTracePayloads.capability(call.getCapabilityName())
                                 + " argumentShape="
                                 + com.matrix.agent.debugtrace.DebugTraceRedactor.argumentShape(
                                         call.getArguments()));
@@ -568,9 +571,11 @@ public final class AgentEngine {
                 com.matrix.agent.debugtrace.DebugTraceHolder.emit(
                         com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_DEVICE_VERIFIED,
                         request.getRequestId(),
-                        "cap=" + call.getCapabilityName()
-                                + " status=" + toolResult.getStatus()
-                                + " verified=" + toolResult.isVerified()
+                        DebugTracePayloads.capability(call.getCapabilityName())
+                                + " " + DebugTracePayloads.token(DebugTracePayloads.KEY_STATUS,
+                                        toolResult.getStatus())
+                                + " " + DebugTracePayloads.token(DebugTracePayloads.KEY_VERIFIED,
+                                        toolResult.isVerified())
                                 + " durationMs=" + toolResult.getDurationMillis()
                                 + " observedKeys="
                                 + com.matrix.agent.debugtrace.DebugTraceRedactor.argumentShape(

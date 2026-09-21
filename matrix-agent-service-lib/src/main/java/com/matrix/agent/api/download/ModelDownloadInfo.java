@@ -20,20 +20,33 @@ public final class ModelDownloadInfo implements Parcelable {
     public final long bytesDownloaded;
     public final long bytesTotal;
     public final int errorCode;
+    /** 模型版本（v6 追加；Host 规格事实，无来源时为空串，客户端负责兜底展示）。 */
+    public final String version;
 
     public ModelDownloadInfo(String modelId, int state, long bytesDownloaded, long bytesTotal,
             int errorCode) {
-        this(ParcelSchema.CURRENT, modelId, state, bytesDownloaded, bytesTotal, errorCode);
+        this(ParcelSchema.CURRENT, modelId, state, bytesDownloaded, bytesTotal, errorCode, "");
+    }
+
+    public ModelDownloadInfo(String modelId, int state, long bytesDownloaded, long bytesTotal,
+            int errorCode, String version) {
+        this(ParcelSchema.CURRENT, modelId, state, bytesDownloaded, bytesTotal, errorCode, version);
     }
 
     public ModelDownloadInfo(int schemaVersion, String modelId, int state, long bytesDownloaded,
             long bytesTotal, int errorCode) {
+        this(schemaVersion, modelId, state, bytesDownloaded, bytesTotal, errorCode, "");
+    }
+
+    public ModelDownloadInfo(int schemaVersion, String modelId, int state, long bytesDownloaded,
+            long bytesTotal, int errorCode, String version) {
         this.schemaVersion = schemaVersion;
         this.modelId = modelId;
         this.state = state;
         this.bytesDownloaded = bytesDownloaded;
         this.bytesTotal = bytesTotal;
         this.errorCode = errorCode;
+        this.version = version == null ? "" : version;
     }
 
     private ModelDownloadInfo(Parcel in) {
@@ -43,6 +56,11 @@ public final class ModelDownloadInfo implements Parcelable {
         bytesDownloaded = in.readLong();
         bytesTotal = in.readLong();
         errorCode = in.readInt();
+        version = schemaVersion >= 6 ? orEmpty(in.readString()) : "";
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     @Override
@@ -53,6 +71,7 @@ public final class ModelDownloadInfo implements Parcelable {
         dest.writeLong(bytesDownloaded);
         dest.writeLong(bytesTotal);
         dest.writeInt(errorCode);
+        dest.writeString(version);
     }
 
     @Override

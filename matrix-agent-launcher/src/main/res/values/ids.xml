@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 对话消息行携带的 sequence 锚点 id：列表重建后的滚动恢复按它定位，不解析签名串。 -->
+    <item name="conversation_row_sequence" type="id" />
+</resources>

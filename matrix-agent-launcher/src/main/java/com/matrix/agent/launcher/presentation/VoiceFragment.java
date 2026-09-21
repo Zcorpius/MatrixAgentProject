@@ -44,6 +44,9 @@ public final class VoiceFragment extends Fragment {
     private Button tencentTtsConfigure, tencentTtsClear;
     private Button start, finish, interrupt, refresh;
     @Nullable private VoiceViewModel.State rendered;
+    /** 上一次重建模型卡片所用的投影与删除态；与本次相同时跳过重建。 */
+    @Nullable private List<ModelDownloadInfo> renderedModels;
+    @Nullable private String renderedDeletingModelId;
     private boolean connected;
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
@@ -104,15 +107,15 @@ public final class VoiceFragment extends Fragment {
         transcriptCard.addView(partialTranscript, top(12));
         root.addView(transcriptCard, top(8));
 
-        root.addView(eyebrow("云端播报"), top(25));
+        root.addView(eyebrow(getString(R.string.voice_cloud_tts_eyebrow)), top(25));
         LinearLayout tencentCard = card();
         TextView tencentTitle = new TextView(requireContext());
-        tencentTitle.setText("腾讯云 TTS");
+        tencentTitle.setText(R.string.voice_tencent_tts_title);
         tencentTitle.setTextColor(color(R.color.matrix_text));
         tencentTitle.setTextSize(17);
         tencentTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tencentCard.addView(tencentTitle);
-        tencentTtsSummary = copy("正在读取安全配置…");
+        tencentTtsSummary = copy(getString(R.string.voice_tencent_tts_loading));
         tencentCard.addView(tencentTtsSummary, top(4));
         tencentTtsConfigure = button(R.string.voice_tencent_tts_configure, true,
                 ignored -> showTencentTtsDialog());
@@ -166,17 +169,32 @@ public final class VoiceFragment extends Fragment {
         viewModel.tencentTtsOperation().observe(getViewLifecycleOwner(), code -> {
             if (code == MatrixErrorCode.SUCCESS) return;
             viewModel.clearTencentTtsOperation();
-            new AlertDialog.Builder(requireContext()).setTitle("腾讯云 TTS")
-                    .setMessage("配置未保存，错误码：" + code + "。请核对 SecretId、SecretKey 与子账号权限。")
-                    .setPositiveButton("知道了", null).show();
+            new AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.voice_tencent_tts_title)
+                    .setMessage(getString(R.string.voice_tencent_tts_save_failed, code))
+                    .setPositiveButton(R.string.voice_tencent_tts_acknowledge, null).show();
         });
         new ViewModelProvider(requireActivity(), activity().viewModelFactory())
                 .get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), value -> {
                     connected = viewModel.isHostConnected();
-                    if (connected) viewModel.startObserving();
+                    if (connected) {
+                        viewModel.startObserving();
+                        viewModel.startModelPolling();
+                    }
                     renderControls();
                 });
         return scroll;
+    }
+
+    @Override public void onStart() {
+        super.onStart();
+        // 模型进度轮询跟随页面可见性；未连接时 startObserving 的连接回调会补齐首次拉取。
+        if (connected) viewModel.startModelPolling();
+    }
+
+    @Override public void onStop() {
+        viewModel.stopModelPolling();
+        super.onStop();
     }
 
     private void render(@NonNull VoiceViewModel.State value) {
@@ -190,14 +208,15 @@ public final class VoiceFragment extends Fragment {
                 ? R.color.matrix_muted : R.color.matrix_text));
         partialTranscript.setText(value.partialText);
         partialTranscript.setVisibility(value.partialText.isEmpty() ? View.GONE : View.VISIBLE);
-        renderModels(value);
+        renderModelNotice(value);
+        renderModelCards(value);
         renderControls();
     }
 
     /** 引擎卡片投影（引擎名 + 引擎化模型说明）。 */
     private void renderEngine(@Nullable String engine) {
         boolean sherpa = "SHERPA".equals(engine);
-        String name = engine == null ? "—"
+        String name = engine == null ? getString(R.string.value_unavailable)
                 : sherpa ? getString(R.string.voice_engine_sherpa_short)
                         : getString(R.string.voice_engine_vosk_short);
         engineTitle.setText(getString(R.string.voice_engine_current, name));
@@ -229,11 +248,11 @@ public final class VoiceFragment extends Fragment {
     private void renderTencentTts(@Nullable TencentTtsConfig config) {
         boolean ready = config != null && config.configured;
         if (ready) {
-            tencentTtsSummary.setText("已安全配置 · 标准音色 " + config.voiceType
-                    + " · 云端失败时自动回退本地 Piper 或系统播报");
+            tencentTtsSummary.setText(getString(
+                    R.string.voice_tencent_tts_configured, config.voiceType));
             tencentTtsConfigure.setText(R.string.voice_tencent_tts_update);
         } else {
-            tencentTtsSummary.setText("未配置 · 凭证仅在本机 Keystore 中加密保存，不会回显或写入日志。");
+            tencentTtsSummary.setText(R.string.voice_tencent_tts_unconfigured);
             tencentTtsConfigure.setText(R.string.voice_tencent_tts_configure);
         }
         tencentTtsClear.setVisibility(ready ? View.VISIBLE : View.GONE);
@@ -245,7 +264,7 @@ public final class VoiceFragment extends Fragment {
         LinearLayout form = new LinearLayout(requireContext());
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(24), dp(4), dp(24), 0);
-        TextView help = copy("请输入 CAM 子账号的 SecretId 与 SecretKey。密钥提交后不会再显示；请勿使用主账号密钥。");
+        TextView help = copy(getString(R.string.voice_tencent_tts_help));
         form.addView(help);
         EditText id = new EditText(requireContext());
         id.setHint("SecretId");
@@ -257,9 +276,10 @@ public final class VoiceFragment extends Fragment {
         key.setSingleLine(true);
         key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         form.addView(key, top(8));
-        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setTitle("腾讯云 TTS 安全配置")
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.voice_tencent_tts_dialog_title)
                 .setView(form).setNegativeButton(R.string.cancel, null)
-                .setPositiveButton("安全保存", null).create();
+                .setPositiveButton(R.string.voice_tencent_tts_save, null).create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
                 .setOnClickListener(button -> {
                     char[] idChars = id.getText().toString().trim().toCharArray();
@@ -269,7 +289,7 @@ public final class VoiceFragment extends Fragment {
                     if (idChars.length == 0 || keyChars.length == 0) {
                         java.util.Arrays.fill(idChars, '\0');
                         java.util.Arrays.fill(keyChars, '\0');
-                        help.setText("SecretId 和 SecretKey 都不能为空。");
+                        help.setText(R.string.voice_tencent_tts_required);
                         return;
                     }
                     viewModel.saveTencentTts(idChars, keyChars);
@@ -279,10 +299,12 @@ public final class VoiceFragment extends Fragment {
     }
 
     private void confirmClearTencentTts() {
-        new AlertDialog.Builder(requireContext()).setTitle("删除腾讯云 TTS 凭证")
-                .setMessage("将删除本机加密保存的腾讯云凭证。播报会继续使用 Piper 或系统 TTS。")
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.voice_tencent_tts_clear_title)
+                .setMessage(R.string.voice_tencent_tts_clear_message)
                 .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton("删除", (dialog, which) -> viewModel.clearTencentTts()).show();
+                .setPositiveButton(R.string.delete,
+                        (dialog, which) -> viewModel.clearTencentTts()).show();
     }
 
     /** Ask before the first potentially metered, one-time offline-model download. */
@@ -335,7 +357,30 @@ public final class VoiceFragment extends Fragment {
         refresh.setEnabled(connected);
     }
 
-    private void renderModels(@NonNull VoiceViewModel.State value) {
+    /** 模型区提示（仅依赖状态字段，每次 render 都刷新）。 */
+    private void renderModelNotice(@NonNull VoiceViewModel.State value) {
+        if (value.deletingModelId != null) {
+            modelNotice.setText(getString(R.string.voice_models_deleting, modelName(value.deletingModelId)));
+            modelNotice.setVisibility(View.VISIBLE);
+        } else if (value.modelOperationError != MatrixErrorCode.SUCCESS) {
+            modelNotice.setText(getString(R.string.voice_models_delete_failed, value.modelOperationError));
+            modelNotice.setVisibility(View.VISIBLE);
+        } else {
+            modelNotice.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * 模型卡片重建有值判定：模型投影或删除态未变化时跳过整段 removeAllViews 重建，
+     * 会话相位变化（录音/播报）不再连带重建模型列表。
+     */
+    private void renderModelCards(@NonNull VoiceViewModel.State value) {
+        boolean changed = renderedModels == null
+                || !VoiceViewModel.sameModels(renderedModels, value.models)
+                || !java.util.Objects.equals(renderedDeletingModelId, value.deletingModelId);
+        if (!changed) return;
+        renderedModels = value.models;
+        renderedDeletingModelId = value.deletingModelId;
         transfers.removeAllViews();
         installedModels.removeAllViews();
         List<ModelDownloadInfo> active = new ArrayList<>();
@@ -364,16 +409,6 @@ public final class VoiceFragment extends Fragment {
             installedModels.addView(modelEmpty(R.string.voice_models_installed_empty));
         }
         for (ModelDownloadInfo model : pending) addSpaced(installedModels, modelCard(model, value));
-
-        if (value.deletingModelId != null) {
-            modelNotice.setText(getString(R.string.voice_models_deleting, modelName(value.deletingModelId)));
-            modelNotice.setVisibility(View.VISIBLE);
-        } else if (value.modelOperationError != MatrixErrorCode.SUCCESS) {
-            modelNotice.setText(getString(R.string.voice_models_delete_failed, value.modelOperationError));
-            modelNotice.setVisibility(View.VISIBLE);
-        } else {
-            modelNotice.setVisibility(View.GONE);
-        }
     }
 
     private View modelCard(@NonNull ModelDownloadInfo model, @NonNull VoiceViewModel.State state) {
@@ -384,8 +419,12 @@ public final class VoiceFragment extends Fragment {
         title.setTextSize(17);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         value.addView(title);
-        TextView version = copy(getString(R.string.voice_model_version, modelVersion(model.modelId)));
-        value.addView(version, top(3));
+        // 版本是 Host 规格事实（ModelDownloadInfo.version），不在客户端复写；
+        // 旧 Host 未携带（schema < v6）时以"—"诚实表示未知。
+        String version = model.version == null || model.version.isEmpty()
+                ? getString(R.string.value_unavailable) : model.version;
+        TextView versionLine = copy(getString(R.string.voice_model_version, version));
+        value.addView(versionLine, top(3));
 
         if (model.state == ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED) {
             TextView detail = copy(getString(R.string.voice_model_installed_detail,
@@ -473,16 +512,6 @@ public final class VoiceFragment extends Fragment {
         if ("sherpa-kws-zh-en".equals(id)) return getString(R.string.voice_model_sherpa_kws);
         if ("sherpa-tts-zh-xiaoya".equals(id)) return getString(R.string.voice_model_sherpa_tts);
         return id == null ? getString(R.string.voice_model_unknown) : id;
-    }
-
-    private String modelVersion(@Nullable String id) {
-        if ("vosk-en".equals(id)) return "0.15";
-        if ("vosk-cn".equals(id)) return "0.22";
-        if ("sherpa-asr-zh-en".equals(id)) return "2023-02-20";
-        if ("sherpa-vad-silero".equals(id)) return "v5";
-        if ("sherpa-kws-zh-en".equals(id)) return "2025-12-20";
-        if ("sherpa-tts-zh-xiaoya".equals(id)) return "2026.09";
-        return "—";
     }
 
     private String formatBytes(long bytes) {

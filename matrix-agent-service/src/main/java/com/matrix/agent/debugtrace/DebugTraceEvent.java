@@ -15,13 +15,14 @@ import java.util.List;
  */
 public final class DebugTraceEvent {
 
-    public static final String PHASE_ROUND_START = "ROUND_START";
-    public static final String PHASE_ROUND_END = "ROUND_END";
-    public static final String PHASE_MODEL_REASONING = "MODEL_REASONING";
-    public static final String PHASE_MODEL_PROPOSED = "MODEL_PROPOSED";
-    public static final String PHASE_POLICY_DECIDED = "POLICY_DECIDED";
-    public static final String PHASE_REQUEST_DELIVERED = "REQUEST_DELIVERED";
-    public static final String PHASE_DEVICE_VERIFIED = "DEVICE_VERIFIED";
+    /** 阶段名的单一事实源是 SDK wire 契约（DebugTraceWireEvent），发射端只做委托。 */
+    public static final String PHASE_ROUND_START = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_ROUND_START;
+    public static final String PHASE_ROUND_END = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_ROUND_END;
+    public static final String PHASE_MODEL_REASONING = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_MODEL_REASONING;
+    public static final String PHASE_MODEL_PROPOSED = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_MODEL_PROPOSED;
+    public static final String PHASE_POLICY_DECIDED = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_POLICY_DECIDED;
+    public static final String PHASE_REQUEST_DELIVERED = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_REQUEST_DELIVERED;
+    public static final String PHASE_DEVICE_VERIFIED = com.matrix.agent.api.debug.DebugTraceWireEvent.PHASE_DEVICE_VERIFIED;
 
     public final long timestampMs;
     public final String phase;

@@ -74,7 +74,8 @@ public final class SherpaModelDownloader {
             long installed = active == null ? 0 : dirSize(active);
             return new com.matrix.agent.api.download.ModelDownloadInfo(spec.name,
                     com.matrix.agent.api.download.ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED,
-                    installed, installed, com.matrix.agent.api.common.MatrixErrorCode.SUCCESS);
+                    installed, installed, com.matrix.agent.api.common.MatrixErrorCode.SUCCESS,
+                    spec.version);
         }
         long downloaded = entity == null ? 0 : Math.max(0, entity.downloadedBytes);
         long total = entity == null || entity.totalBytes <= 0 ? spec.sizeBytes : entity.totalBytes;
@@ -86,7 +87,7 @@ public final class SherpaModelDownloader {
                 ? com.matrix.agent.api.common.MatrixErrorCode.TASK_FAILED
                 : com.matrix.agent.api.common.MatrixErrorCode.SUCCESS;
         return new com.matrix.agent.api.download.ModelDownloadInfo(spec.name,
-                state, downloaded, total, error);
+                state, downloaded, total, error, spec.version);
     }
 
     /** 删除模型（递归 + DAO 清理）。 */

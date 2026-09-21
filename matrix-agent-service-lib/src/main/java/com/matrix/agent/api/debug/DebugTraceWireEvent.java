@@ -10,6 +10,18 @@ import android.os.Parcelable;
  */
 public final class DebugTraceWireEvent implements Parcelable {
 
+    /**
+     * 线阶段名（append-only 冻结值）。单一事实源：Host 的发射端常量与客户端的
+     * 时间线编译器都引用此处，防止两端字符串漂移后静默失配。
+     */
+    public static final String PHASE_ROUND_START = "ROUND_START";
+    public static final String PHASE_ROUND_END = "ROUND_END";
+    public static final String PHASE_MODEL_REASONING = "MODEL_REASONING";
+    public static final String PHASE_MODEL_PROPOSED = "MODEL_PROPOSED";
+    public static final String PHASE_POLICY_DECIDED = "POLICY_DECIDED";
+    public static final String PHASE_REQUEST_DELIVERED = "REQUEST_DELIVERED";
+    public static final String PHASE_DEVICE_VERIFIED = "DEVICE_VERIFIED";
+
     public final long timestampMs;
     public final String phase;
     public final String taskId;

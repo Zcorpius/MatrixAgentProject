@@ -198,7 +198,7 @@ android {
         }
         getByName("release") {
             // 即便 gradle.properties 被误设为 true，量产构建仍永久关闭。
-            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", traceRequested.get().toString())
         }
     }
 }
@@ -206,7 +206,7 @@ android {
 
 实际模块名或 `internal` build type 可随工程组织调整，但以下契约不可变：
 
-1. Host 与 Launcher 都只检查各自的 `BuildConfig.MATRIX_DEBUG_TRACE_UI`，不使用 `BuildConfig.DEBUG` 作为额外条件。buildType 门控已确保 release 字段恒为 false；这样 internal 不必为了调试轨迹改变 `isDebuggable` 或承受其副作用。任一侧字段为 false 时，Host 不创建/不接受订阅，Launcher 不订阅/不渲染；两侧不需要、也不应跨 Binder 查询对方的 BuildConfig。
+1. Host 与 Launcher 都只检查各自的 `BuildConfig.MATRIX_DEBUG_TRACE_UI`，不使用 `BuildConfig.DEBUG` 或 buildType 作为额外条件。唯一权威是项目级 `matrix.debugTraceUi`：它会为每个变体生成同值字段，因此脚本以 debug 或 release 构建都不会改变该显式选择。任一侧字段为 false 时，Host 不创建/不接受订阅，Launcher 不订阅/不渲染；两侧不需要、也不应跨 Binder 查询对方的 BuildConfig。
 2. 调试页是独立的“调试轨迹”视图，不复用 `ConversationMessage`、`executionTraces` 或正式消息气泡。它只使用有界内存 ring buffer，进程重启即清空；不得进入 SQLCipher 对话库、审计导出、聊天导出、剪贴板、模型上下文或 TTS。页面关闭不影响 Host 继续输出诊断日志。
 3. Host 到 Launcher 使用独立的 append-only AIDL：`IDebugTraceCallback` 以 `oneway` 推送有界 `DebugTraceEvent`，通过独立的注册/注销方法订阅。Host 在字段为 false 时直接拒绝注册且不产生事件；Launcher 自身字段为 false 时不调用注册、不渲染。该通道不复用 `IConversationCallback`，避免正式会话 ABI、持久化事实与 debug-only 内存事件相互污染。
 4. 为满足“已取得的思考过程无论 UI 开关如何都打印日志”，`ModelApiClient → LlmClient` 必须演进为增量详情通道，例如 `completeWithDetail()` 返回 `CompletionDetail{text, reasoningIfPresent}`；保留现有 `complete()` 作为兼容包装，默认实现只产生 text。供应商实际返回 reasoning 时，将其作为 `DebugTraceEvent.MODEL_REASONING` 写入日志；未返回时写“reasoning unavailable”，绝不尝试推导隐藏思维链。reasoning 是否在 UI 显示仍受 `matrix.debugTraceUi` 门控。

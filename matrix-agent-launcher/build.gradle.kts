@@ -59,7 +59,10 @@ android {
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("platform")
-            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
+            // 轨迹可见性只由项目级 matrix.debugTraceUi 决定；不要让 buildType 悄悄
+            // 覆盖该显式开关，否则同一份配置在脚本 release 构建时会表现不一致。
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
         }
     }
 

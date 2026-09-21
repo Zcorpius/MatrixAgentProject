@@ -44,6 +44,8 @@ public final class ConversationFragment extends Fragment {
     private TextView summaryBadge;
     private ConversationViewModel viewModel;
     private int renderedCount;
+    /** 上一次重建入列的消息快照：用于把本次变化归类为前插/追加/重载，驱动滚动策略。 */
+    private List<ConversationViewModel.UiMessage> renderedSnapshot = List.of();
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
             @Nullable ViewGroup parent, @Nullable Bundle state) {
@@ -168,7 +170,15 @@ public final class ConversationFragment extends Fragment {
         if (messages.size() == renderedCount && rowsMatch(messages)) {
             return; // 快照等值：避免订阅风暴期间的整列表重建
         }
+        List<ConversationViewModel.UiMessage> previous = renderedSnapshot;
+        renderedSnapshot = List.copyOf(messages);
         renderedCount = messages.size();
+        android.widget.ScrollView scroll =
+                messageRows.getParent() instanceof android.widget.ScrollView view ? view : null;
+        // 整列表重建会丢掉滚动位置：先按"首条可见消息行"捕获锚点，再按列表变化
+        // 类别决定贴底还是原位恢复——翻旧历史不能把用户拽回底部。
+        ScrollAnchor anchor = captureAnchor(scroll);
+        boolean stickToBottom = shouldStickToBottom(scroll, previous, messages);
         messageRows.removeAllViews();
         int from = Math.max(0, messages.size() - MAX_RENDERED_ROWS);
         for (int i = from; i < messages.size(); i++) {
@@ -180,8 +190,107 @@ public final class ConversationFragment extends Fragment {
                 messageRows.addView(buildDebugTraceRow(message));
             }
         }
-        if (messageRows.getParent() instanceof android.widget.ScrollView scroll) {
+        if (scroll == null) return;
+        if (stickToBottom) {
             scroll.post(() -> scroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN));
+        } else {
+            final ScrollAnchor captured = anchor;
+            scroll.post(() -> restoreAnchor(scroll, captured));
+        }
+    }
+
+    /** 列表变化类别：决定整列表重建后的滚动策略。 */
+    private enum ListGrowth { INITIAL, PREPENDED, APPENDED, REPLACED, IN_PLACE }
+
+    private boolean shouldStickToBottom(android.widget.ScrollView scroll,
+            List<ConversationViewModel.UiMessage> previous,
+            List<ConversationViewModel.UiMessage> next) {
+        switch (classifyGrowth(previous, next)) {
+            case INITIAL:
+            case REPLACED:
+                // 首次载入或切换会话后的全量重载：贴底展示最新一轮。
+                return true;
+            case APPENDED:
+                // 新消息到达：只有用户本来就在底部才跟随，读旧历史时不打断。
+                return isNearBottom(scroll);
+            case PREPENDED:
+            case IN_PLACE:
+            default:
+                // 向前翻页或原地状态更新：保持锚点原位。
+                return false;
+        }
+    }
+
+    private static ListGrowth classifyGrowth(List<ConversationViewModel.UiMessage> previous,
+            List<ConversationViewModel.UiMessage> next) {
+        if (previous.isEmpty()) return ListGrowth.INITIAL;
+        if (next.size() == previous.size()) return ListGrowth.IN_PLACE;
+        if (isHead(previous, next, 0)) return ListGrowth.APPENDED;
+        if (isHead(previous, next, next.size() - previous.size())) return ListGrowth.PREPENDED;
+        return ListGrowth.REPLACED;
+    }
+
+    /** previous 是否与 next 在 offset 处起的连续子序列按 sequence 完全一致。 */
+    private static boolean isHead(List<ConversationViewModel.UiMessage> previous,
+            List<ConversationViewModel.UiMessage> next, int offset) {
+        if (offset < 0 || next.size() - offset < previous.size()) return false;
+        for (int i = 0; i < previous.size(); i++) {
+            if (previous.get(i).sequence() != next.get(offset + i).sequence()) return false;
+        }
+        return true;
+    }
+
+    private boolean isNearBottom(android.widget.ScrollView scroll) {
+        if (scroll == null) return true;
+        View content = scroll.getChildAt(0);
+        return content == null
+                || content.getHeight() - scroll.getHeight() - scroll.getScrollY() <= activity().dp(36);
+    }
+
+    /** 重建前的滚动锚点：第一条与视口顶相交的消息行、其行内偏移与绝对 scrollY。 */
+    private ScrollAnchor captureAnchor(android.widget.ScrollView scroll) {
+        if (scroll == null) return null;
+        int scrollY = scroll.getScrollY();
+        for (int i = 0; i < messageRows.getChildCount(); i++) {
+            View child = messageRows.getChildAt(i);
+            Object sequence = child.getTag(R.id.conversation_row_sequence);
+            if (!(sequence instanceof Long value) || child.getBottom() <= scrollY) continue;
+            return new ScrollAnchor(value, scrollY - child.getTop(), scrollY);
+        }
+        // 视口内只有过程卡可锚：按绝对 scrollY 恢复，由内容高度收敛。
+        return new ScrollAnchor(Long.MIN_VALUE, 0, scrollY);
+    }
+
+    private void restoreAnchor(android.widget.ScrollView scroll, ScrollAnchor anchor) {
+        if (anchor == null) {
+            scroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN);
+            return;
+        }
+        if (anchor.sequence != Long.MIN_VALUE) {
+            for (int i = 0; i < messageRows.getChildCount(); i++) {
+                View child = messageRows.getChildAt(i);
+                Object sequence = child.getTag(R.id.conversation_row_sequence);
+                if (sequence instanceof Long value && value == anchor.sequence) {
+                    scroll.scrollTo(0, child.getTop() + anchor.offsetWithinRow);
+                    return;
+                }
+            }
+        }
+        View content = scroll.getChildAt(0);
+        int maxScroll = content == null ? 0
+                : Math.max(0, content.getHeight() - scroll.getHeight());
+        scroll.scrollTo(0, Math.min(anchor.absoluteScrollY, maxScroll));
+    }
+
+    private static final class ScrollAnchor {
+        final long sequence;
+        final int offsetWithinRow;
+        final int absoluteScrollY;
+
+        ScrollAnchor(long sequence, int offsetWithinRow, int absoluteScrollY) {
+            this.sequence = sequence;
+            this.offsetWithinRow = offsetWithinRow;
+            this.absoluteScrollY = absoluteScrollY;
         }
     }
 
@@ -223,18 +332,22 @@ public final class ConversationFragment extends Fragment {
         boolean isSystem = message.role() == ConversationMessage.ROLE_SYSTEM;
         int avatarSize = (int) (42 * density + .5f);
         int avatarGap = (int) (8 * density + .5f);
-        int sideInset = (int) (13 * density + .5f);
+        // 头像距屏幕的边距唯一由消息列表容器的 padding（XML）决定：行自身不再叠加水平
+        // padding，头像贴近屏幕边缘（微信式），气泡随之外移并获得更多可用宽度。
+        int contentInset = Math.max(messageRows.getPaddingStart(),
+                messageRows.getPaddingEnd());
         // 头像与气泡必须共同受屏宽约束，不能让长文本把头像挤出可视区。
         int maxBubbleWidth = Math.min((int) (screenWidth * 0.72f),
-                screenWidth - avatarSize - avatarGap - sideInset * 2);
+                screenWidth - avatarSize - avatarGap - contentInset * 2);
 
         // 外层负责微信式左右编排；气泡只承载内容，不再承载“用户/助手”身份文字。
         LinearLayout row = new LinearLayout(requireContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.TOP);
-        row.setPadding(sideInset, (int) (7 * density + .5f), sideInset,
+        row.setPadding(0, (int) (7 * density + .5f), 0,
                 (int) (7 * density + .5f));
         row.setTag(R.id.conversation_messages, signatureOf(message));
+        row.setTag(R.id.conversation_row_sequence, message.sequence());
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rowParams.bottomMargin = (int) (3 * density + .5f);
@@ -250,13 +363,13 @@ public final class ConversationFragment extends Fragment {
                 new android.graphics.drawable.GradientDrawable();
         bubble.setCornerRadius(15 * density);
         if (isUser) {
-            bubble.setColor(0xFFD4EDDA);
-            bubble.setStroke(1, 0xFFB8DCC5);
+            bubble.setColor(color(R.color.matrix_chat_user_bubble));
+            bubble.setStroke(1, color(R.color.matrix_chat_user_bubble_stroke));
         } else if (isSystem) {
-            bubble.setColor(0xFFF0F2F1);
+            bubble.setColor(color(R.color.matrix_chat_system_bubble));
         } else {
-            bubble.setColor(0xFFFEFFFC);
-            bubble.setStroke(1, 0xFFD5E0DC);
+            bubble.setColor(color(R.color.matrix_chat_assistant_bubble));
+            bubble.setStroke(1, color(R.color.matrix_chat_assistant_bubble_stroke));
         }
         bubbleContent.setBackground(bubble);
         LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(
@@ -300,11 +413,11 @@ public final class ConversationFragment extends Fragment {
             row.addView(weightSpacer());
             row.addView(bubbleContent, bubbleParams);
             row.addView(avatarView(R.drawable.avatar_user_penguin,
-                    R.string.conversation_avatar_user, 0xFFDCEEF9),
+                    R.string.conversation_avatar_user, R.color.matrix_chat_avatar_user_bg),
                     avatarLayoutParams(avatarSize, avatarGap, true));
         } else {
             row.addView(avatarView(R.drawable.avatar_assistant_matrix,
-                    R.string.conversation_avatar_assistant, 0xFFD6E9E4),
+                    R.string.conversation_avatar_assistant, R.color.matrix_chat_avatar_assistant_bg),
                     avatarLayoutParams(avatarSize, avatarGap, false));
             row.addView(bubbleContent, bubbleParams);
             row.addView(weightSpacer());
@@ -331,14 +444,14 @@ public final class ConversationFragment extends Fragment {
     }
 
     private android.widget.ImageView avatarView(int drawableRes, int descriptionRes,
-            int backgroundColor) {
+            int backgroundColorRes) {
         android.widget.ImageView avatar = new android.widget.ImageView(requireContext());
         avatar.setImageResource(drawableRes);
         avatar.setContentDescription(getString(descriptionRes));
         avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         GradientDrawable mask = new GradientDrawable();
         mask.setShape(GradientDrawable.OVAL);
-        mask.setColor(backgroundColor);
+        mask.setColor(color(backgroundColorRes));
         avatar.setBackground(mask);
         avatar.setClipToOutline(true);
         return avatar;
@@ -357,7 +470,8 @@ public final class ConversationFragment extends Fragment {
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding((int) (13 * density + .5f), (int) (8 * density + .5f),
                 (int) (13 * density + .5f), (int) (8 * density + .5f));
-        row.setBackground(roundedBackground(0xFFF3F7F7, 0xFFD2DFE1, 12 * density));
+        row.setBackground(roundedBackground(color(R.color.matrix_trace_group_bg),
+                color(R.color.matrix_trace_group_stroke), 12 * density));
         row.setTag(R.id.conversation_messages, "process:" + signatureOf(userMessage));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(maxWidth,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -393,7 +507,7 @@ public final class ConversationFragment extends Fragment {
         TextView header = new TextView(requireContext());
         header.setTextSize(11);
         header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setTextColor(0xFF4B6470);
+        header.setTextColor(color(R.color.matrix_trace_group_title));
         header.setCompoundDrawablePadding((int) (5 * density + .5f));
         header.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_info_details,
                 0, android.R.drawable.arrow_down_float, 0);
@@ -408,7 +522,8 @@ public final class ConversationFragment extends Fragment {
 
         LinearLayout detail = new LinearLayout(requireContext());
         detail.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable background = roundedBackground(0xFFF4F7F8, 0xFFD6E0E4, 9 * density);
+        GradientDrawable background = roundedBackground(color(R.color.matrix_trace_detail_bg),
+                color(R.color.matrix_trace_detail_stroke), 9 * density);
         detail.setBackground(background);
         int inset = (int) (8 * density + .5f);
         detail.setPadding(inset, inset, inset, inset);
@@ -445,12 +560,13 @@ public final class ConversationFragment extends Fragment {
         dot.setTextSize(12);
         dot.setGravity(android.view.Gravity.CENTER);
         dot.setTextColor(node.kind == DebugTraceTimeline.Kind.TOOL
-                ? node.statusColor() : 0xFF5C7D89);
+                ? ContextCompat.getColor(requireContext(), node.statusColorRes())
+                : color(R.color.matrix_trace_thinking_dot));
         rail.addView(dot, new LinearLayout.LayoutParams((int) (18 * density + .5f),
                 (int) (18 * density + .5f)));
         if (!last) {
             View guide = new View(requireContext());
-            guide.setBackgroundColor(0xFFCBD8DD);
+            guide.setBackgroundColor(color(R.color.matrix_trace_guide_line));
             LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(
                     Math.max(1, (int) density), 0, 1f);
             guideParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
@@ -465,7 +581,7 @@ public final class ConversationFragment extends Fragment {
         TextView title = new TextView(requireContext());
         title.setTextSize(11);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(0xFF38505B);
+        title.setTextColor(color(R.color.matrix_trace_node_title));
         title.setCompoundDrawablePadding((int) (4 * density + .5f));
         title.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.arrow_down_float, 0);
         title.setText(node.title(requireContext()));
@@ -475,7 +591,7 @@ public final class ConversationFragment extends Fragment {
 
         TextView preview = new TextView(requireContext());
         preview.setTextSize(10);
-        preview.setTextColor(0xFF657980);
+        preview.setTextColor(color(R.color.matrix_trace_node_preview));
         preview.setText(node.preview(requireContext()));
         preview.setMaxLines(2);
         preview.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -486,11 +602,12 @@ public final class ConversationFragment extends Fragment {
         TextView content = new TextView(requireContext());
         content.setTextSize(10);
         content.setTypeface(Typeface.MONOSPACE);
-        content.setTextColor(0xFF455B64);
+        content.setTextColor(color(R.color.matrix_trace_node_content));
         content.setText(node.detail(requireContext()));
         content.setMaxWidth(maxWidth - (int) (30 * density + .5f));
         content.setPadding((int) (9 * density + .5f), (int) (5 * density + .5f), 0, 0);
-        content.setBackground(roundedBackground(0xFFEAF0F2, 0x00000000, 5 * density));
+        content.setBackground(roundedBackground(color(R.color.matrix_trace_node_content_bg),
+                0x00000000, 5 * density));
         content.setVisibility(View.GONE);
         card.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -511,6 +628,10 @@ public final class ConversationFragment extends Fragment {
         background.setCornerRadius(radius);
         if (strokeColor != 0x00000000) background.setStroke(1, strokeColor);
         return background;
+    }
+
+    private int color(int resource) {
+        return ContextCompat.getColor(requireContext(), resource);
     }
 
     private String steerNoteText(int steerDeliveryState, int status) {

@@ -1,7 +1,7 @@
 import java.util.Properties
 
 // 内部调试轨迹门控（评估 v1.0 §4.3）：只控制 UI 可见性；诊断日志无条件输出。
-// fail-closed——默认 false；release 恒 false（见 buildTypes）。
+// 默认 false；所有构建变体均以该项目级显式配置为唯一可见性开关。
 val traceRequested = providers.gradleProperty("matrix.debugTraceUi")
     .map(String::toBoolean)
     .orElse(false)
@@ -87,8 +87,10 @@ android {
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("platform")
-            // 即便 gradle.properties 被误设为 true，量产构建 UI 恒关（日志仍输出）
-            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI", "false")
+            // release 与其他变体保持同一契约：仅 matrix.debugTraceUi 决定调试轨迹
+            // 是否允许持久化及订阅，避免构建类型形成隐藏的第二开关。
+            buildConfigField("boolean", "MATRIX_DEBUG_TRACE_UI",
+                    traceRequested.get().toString())
         }
     }
 
