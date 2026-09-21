@@ -1,6 +1,7 @@
 package com.matrix.agent.api.conversation;
 
 import com.matrix.agent.api.conversation.ConversationMessage;
+import com.matrix.agent.api.conversation.ConversationInfo;
 
 /**
  * 对话事件回调。注册后 Host 先回放一个有界快照（最近 N 条 onMessageUpsert），
@@ -13,6 +14,9 @@ oneway interface IConversationCallback {
     /** 仅状态/错误码变化（ACCEPTED→RUNNING→终态）。 */
     void onMessageStatusChanged(String conversationId, String messageId, int status,
             int errorCode);
+
+    /** 会话展示元数据变化（例如自动标题已生成）；不影响任何消息或任务状态。 */
+    void onConversationInfoChanged(in ConversationInfo info);
 
     /** 语音会话的临时转写（partial/flush）；只在语音绑定生效时出现，final 后清除。 */
     void onTransientTranscript(String conversationId, String voiceSessionId, String text,

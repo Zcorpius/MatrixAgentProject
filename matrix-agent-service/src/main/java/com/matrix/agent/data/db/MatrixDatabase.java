@@ -64,9 +64,10 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationTaskLinkEntity.class,
                 com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity.class,
                 com.matrix.agent.data.conversation.ConversationQuoteEntity.class,
-                com.matrix.agent.data.conversation.ConversationLineageEntity.class
+                com.matrix.agent.data.conversation.ConversationLineageEntity.class,
+                com.matrix.agent.data.debugtrace.DebugTraceEventEntity.class
         },
-        version = 9,
+        version = 10,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -86,6 +87,7 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract com.matrix.agent.data.conversation.ConversationMessageAnnotationDao conversationMessageAnnotationDao();
     public abstract com.matrix.agent.data.conversation.ConversationQuoteDao conversationQuoteDao();
     public abstract com.matrix.agent.data.conversation.ConversationLineageDao conversationLineageDao();
+    public abstract com.matrix.agent.data.debugtrace.DebugTraceEventDao debugTraceEventDao();
 
     /**
      * schema v1 → v2 迁移——audit_event 加 userId 列 + idx_audit_user_zone 索引。
@@ -337,6 +339,33 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
+     * v9 → v10：仅供 internal/debug 构建恢复内嵌调试轨迹的加密投影表。
+     *
+     * <p>表在所有构建中随 schema 存在，以保证升级路径确定；release 从不写入，且 Host
+     * 启动时会清理任何历史 internal 行。没有外键是有意的：对话清理先以 owner scope
+     * 删除轨迹，避免旧版本 SQLite 在跨表级联与 SQLCipher WAL 组合下的删除顺序差异。</p>
+     */
+    public static final Migration MIGRATION_9_10 = new Migration(9, 10) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `debug_trace_event` ("
+                    + "`event_id` TEXT NOT NULL, `runtime_request_id` TEXT NOT NULL, "
+                    + "`conversation_task_id` TEXT NOT NULL, `conversation_id` TEXT NOT NULL, "
+                    + "`host_user_message_id` TEXT NOT NULL, `event_sequence` INTEGER NOT NULL, "
+                    + "`timestamp_ms` INTEGER NOT NULL, `phase` TEXT NOT NULL, "
+                    + "`trace_id` TEXT NOT NULL, `part_index` INTEGER NOT NULL, "
+                    + "`part_count` INTEGER NOT NULL, `payload` TEXT NOT NULL, "
+                    + "`schema_version` INTEGER NOT NULL, PRIMARY KEY(`event_id`))");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_debug_trace_host_order` "
+                    + "ON `debug_trace_event` (`host_user_message_id`, `timestamp_ms`, "
+                    + "`event_sequence`, `part_index`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_debug_trace_conversation_host` "
+                    + "ON `debug_trace_event` (`conversation_id`, `host_user_message_id`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_debug_trace_runtime_request` "
+                    + "ON `debug_trace_event` (`runtime_request_id`)");
+        }
+    };
+
+    /**
      * 加密数据库单例获取。
      *
      * <p>以下任一条件必须抛 IllegalStateException:
@@ -377,12 +406,13 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v2→v3 Migration(audit_event requestEpoch)。
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9);
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                    MIGRATION_9_10);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=9 entities=14 journalMode=WAL");
+                    + " version=10 entities=15 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

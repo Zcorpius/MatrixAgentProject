@@ -516,13 +516,15 @@ public final class ConversationCoordinator {
                         AssistantReply.synthesized("任务执行异常，未完成。"));
                 return;
             }
-            AssistantReply reply = ConversationAssistantProjector.project(outcome,
-                    ConversationAssistantProjector.MAX_REPLY_CHARS);
             // 轨迹投影（评估 v1.0 §4.3）：结构化执行事实经白名单净化后随终态落列。
             // 异常兜底路径（convergeTerminal 的其它调用点）无 outcome——traceJson 保持
             // null（空轨迹），绝不编造事实。
-            String traceJson = CapabilityTraceCodec.encode(
-                    CapabilityTraceProjector.project(outcome));
+            java.util.List<CapabilityExecutionTrace> executionTraces =
+                    CapabilityTraceProjector.project(outcome);
+            AssistantReply reply = ConversationExecutionReplyProjector.replaceGenericCompletion(
+                    ConversationAssistantProjector.project(outcome,
+                            ConversationAssistantProjector.MAX_REPLY_CHARS), executionTraces);
+            String traceJson = CapabilityTraceCodec.encode(executionTraces);
             convergeTerminal(conversationId, userMessageId, conversationTaskId,
                     toPersistedStatus(outcome), failureCodeOf(outcome), reply, traceJson);
             notifyTerminal(conversationTaskId, outcome);

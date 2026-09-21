@@ -623,6 +623,9 @@ public final class RoomConversationStore implements ConversationStore {
         transaction.runInTransaction(() -> {
             // 两张子表的删除条件依赖 conversation 表；先删父表会让子表子查询为空，
             // 留下未加外键级联保护的敏感正文与 task link。
+            // Debug trace 是会话产品数据的 debug-only 投影，必须在父 conversation 尚可
+            // 由 owner scope 定位时一并删除；否则重新进入会话可能看到已删正文的残留轨迹。
+            database.debugTraceEventDao().deleteByOwnerUsers(userIds);
             messages.deleteByOwnerUsers(userIds);
             links.deleteByOwnerUsers(userIds);
             removed[0] = conversations.deleteByOwners(userIds);

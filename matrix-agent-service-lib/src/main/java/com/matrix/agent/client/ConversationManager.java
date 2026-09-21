@@ -152,18 +152,6 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
-    /** 只读导出：返回受授予 content URI；失败/降级 null。 */
-    public String exportConversation(String conversationId, String clientOperationId) {
-        IConversationService s = service;
-        if (s == null) return null;
-        try {
-            return s.exportConversation(conversationId, clientOperationId);
-        } catch (RemoteException e) {
-            handleRemoteException(e);
-            return null;
-        }
-    }
-
     public ConversationPage getMessages(String conversationId, long beforeSequenceExclusive,
             int limit) {
         IConversationService s = service;
@@ -236,6 +224,10 @@ public final class ConversationManager extends MatrixManagerBase {
                         listener.onMessageStatusChanged(convId, messageId, status, errorCode));
             }
 
+            @Override public void onConversationInfoChanged(ConversationInfo info) {
+                eventHandler().post(() -> listener.onConversationInfoChanged(info));
+            }
+
             @Override public void onTransientTranscript(String convId, String voiceSessionId,
                     String text, boolean isFinal) {
                 eventHandler().post(() ->
@@ -275,6 +267,7 @@ public final class ConversationManager extends MatrixManagerBase {
         default void onMessageUpsert(ConversationMessage message) { }
         default void onMessageStatusChanged(String conversationId, String messageId,
                 int status, int errorCode) { }
+        default void onConversationInfoChanged(ConversationInfo info) { }
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
         default void onConversationError(String conversationId, int errorCode) { }

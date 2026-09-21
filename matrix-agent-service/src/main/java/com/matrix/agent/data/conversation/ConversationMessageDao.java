@@ -52,9 +52,13 @@ public interface ConversationMessageDao {
     List<ConversationMessageEntity> windowFromAnchorAscending(String conversationId,
             long anchorSequence, int afterCount);
 
-    /** 向前翻页：sequence 严格小于 beforeSequenceExclusive，降序取 limit+1 条以判定 hasMore。 */
+    /**
+     * 向前翻页：首屏用 {@code beforeSequenceExclusive < 0} 作为“从最新开始”的稳定哨兵；
+     * 后续页才按 sequence 严格小于游标。不能把 -1 直接代入 {@code sequence_no < -1}，
+     * 否则任何合法（正数）序号都会被过滤，造成“标题存在但页面永远没有消息”。
+     */
     @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
-            + " AND sequence_no < :beforeSequenceExclusive"
+            + " AND (:beforeSequenceExclusive < 0 OR sequence_no < :beforeSequenceExclusive)"
             + " ORDER BY sequence_no DESC LIMIT :limit")
     List<ConversationMessageEntity> pageBeforeDescending(String conversationId,
             long beforeSequenceExclusive, int limit);

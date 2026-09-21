@@ -198,11 +198,20 @@ public final class AppContainer implements DownloadRuntime {
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
-        // 调试轨迹发射器（评估 v1.0 §4.3）：无条件日志 + UI 门控 ring buffer。
-        // BuildConfig 门控——false 时日志汇照常输出，UI 汇关闭。
+        // 调试轨迹发射器：日志汇无条件开启。仅 internal/debug + 显式 Gradle 属性时把
+        // 已净化投影写入 SQLCipher 并允许 UI 订阅；release/false 会主动清掉残留 trace 行。
+        boolean debugTraceUi = com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI;
+        com.matrix.agent.debugtrace.DebugTraceStore debugTraceStore = null;
+        if (database != null && debugTraceUi) {
+            debugTraceStore = new com.matrix.agent.debugtrace.RoomDebugTraceStore(database,
+                    executorRegistry.dbExecutor());
+        } else if (database != null) {
+            // 以当前构建配置为准 fail-closed：避免刷成 release 后遗留 internal 调试内容。
+            new com.matrix.agent.debugtrace.RoomDebugTraceStore(database,
+                    executorRegistry.dbExecutor()).clearAll();
+        }
         com.matrix.agent.debugtrace.DebugTraceHolder.set(
-                new com.matrix.agent.debugtrace.DebugTraceEmitter(
-                        com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI));
+                new com.matrix.agent.debugtrace.DebugTraceEmitter(debugTraceUi, debugTraceStore));
 
         // 功能型轻量调用端口（摘要/标题共用）：与任务主路径同一 ModelApiClient + 配置源
         titleModelClient = taskDependencies.modelClient;
@@ -223,8 +232,10 @@ public final class AppContainer implements DownloadRuntime {
                             new ConversationHistoryAdapter(conversationStore));
             conversationTaskSubmitter = new ConversationTaskSubmitter(
                     appClassifier, KeywordMemoryIntentDetector.INSTANCE, conversationAssembler);
-            conversationClearHook = () -> conversationStore.clearForUsers(
-                    java.util.List.of(ActorUsers.USER_DRIVER, ActorUsers.USER_PASSENGER));
+            conversationClearHook = () -> {
+                conversationStore.clearForUsers(
+                        java.util.List.of(ActorUsers.USER_DRIVER, ActorUsers.USER_PASSENGER));
+            };
             agentRuntimeRepository.setConversationClearHook(conversationClearHook);
         }
 

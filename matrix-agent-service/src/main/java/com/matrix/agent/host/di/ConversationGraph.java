@@ -7,7 +7,6 @@ import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.conversation.ConversationIds;
 import com.matrix.agent.conversation.ConversationRecoveryCoordinator;
 import com.matrix.agent.conversation.ConversationServiceGate;
-import com.matrix.agent.conversation.ConversationExporter;
 import com.matrix.agent.conversation.ConversationReadbackService;
 import com.matrix.agent.conversation.ConversationSummaryMarker;
 import com.matrix.agent.conversation.ConversationTitleService;
@@ -52,8 +51,6 @@ final class ConversationGraph {
     private final ConversationCoordinator coordinator;
     /** 恢复对账的标题触发（降级装配为 null）。 */
     private final ConversationCoordinator.TerminalRoundSink recoveryTitleSink;
-    /** 会话只读导出（评估 v1.0 §4.9；降级装配为 null）。 */
-    private final ConversationExporter exporter;
     /** 助手回复朗读（评估 v1.0 §4.8；降级装配为 null）。 */
     private final ConversationReadbackService readback;
     /** 摘要续聊标记（评估 v1.0 §4.6；降级装配为 null）。 */
@@ -82,7 +79,6 @@ final class ConversationGraph {
             this.bindingStore = null;
             this.voiceBridge = null;
             this.recoveryTitleSink = null;
-            this.exporter = null;
             this.readback = null;
             this.summaryMarker = null;
             this.gate = new ConversationServiceGate();
@@ -103,7 +99,6 @@ final class ConversationGraph {
                 titleModelClient, titleConfigSupplier);
         this.coordinator.setTerminalRoundSink(titleService::onTerminalRound);
         this.recoveryTitleSink = titleService::onTerminalRound;
-        this.exporter = new ConversationExporter(store, databaseExecutor);
         this.bindingStore = new ConversationVoiceBindingStore();
         runtime.addConversationClearHook(bindingStore::clearAll);
         this.readback = new ConversationReadbackService(store,
@@ -121,16 +116,14 @@ final class ConversationGraph {
                 new com.matrix.agent.conversation.ConversationHistoryAdapter(store),
                 sharedBudget);
         this.service = new ConversationServiceStub(coordinator, gate, persistence, callers,
-                bindingStore, exporter, readback, summaryMarker, appContext);
+                bindingStore, readback, summaryMarker);
+        // 标题落库属于独立的低优先级功能调用；通过既有会话订阅只推展示元数据，
+        // 让当前页面无需重进或轮询就能从默认标题切到 AUTO 标题。
+        titleService.setTitleChangedSink(service::onConversationInfoChanged);
         // 阶段 C：创建对话桥；配置器由 MatrixServiceGraph 注册到 VoiceRuntime，保证当前
         // 与未来（引擎切换后重建）的 Controller 都会接到同一套治理。
         this.voiceBridge = createVoiceBridge();
         recoverOffMainThread(databaseExecutor, store);
-    }
-
-    /** 会话导出器（对话域可用时非空）。 */
-    ConversationExporter exporter() {
-        return exporter;
     }
 
     boolean isAvailable() {

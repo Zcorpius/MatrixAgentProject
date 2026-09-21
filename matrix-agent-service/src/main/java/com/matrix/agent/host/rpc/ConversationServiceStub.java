@@ -17,7 +17,6 @@ import com.matrix.agent.api.conversation.IConversationService;
 import com.matrix.agent.api.conversation.SendTextRequest;
 import com.matrix.agent.conversation.CapabilityTraceCodec;
 import com.matrix.agent.conversation.ConversationCoordinator;
-import com.matrix.agent.conversation.ConversationExporter;
 import com.matrix.agent.conversation.ConversationReadbackService;
 import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.conversation.ConversationIds;
@@ -60,35 +59,29 @@ public final class ConversationServiceStub extends IConversationService.Stub
             new HashMap<>();
     private final Object subscribeLock = new Object();
 
-    private final ConversationExporter exporter;
     private final ConversationReadbackService readback;
     private final com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker;
-    private final android.content.Context appContext;
 
     public ConversationServiceStub(ConversationCoordinator coordinator,
             ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
             ModelServiceStub.CallerResolver callerResolver,
             ConversationVoiceBindingStore bindingStore) {
         this(coordinator, recoveryGate, persistenceGate, callerResolver, bindingStore,
-                null, null, null, null);
+                null, null);
     }
 
     public ConversationServiceStub(ConversationCoordinator coordinator,
             ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
             ModelServiceStub.CallerResolver callerResolver,
-            ConversationVoiceBindingStore bindingStore, ConversationExporter exporter,
-            ConversationReadbackService readback,
-            com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker,
-            android.content.Context appContext) {
+            ConversationVoiceBindingStore bindingStore, ConversationReadbackService readback,
+            com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker) {
         this.coordinator = coordinator;
         this.recoveryGate = recoveryGate;
         this.persistenceGate = persistenceGate;
         this.callerResolver = callerResolver;
         this.bindingStore = bindingStore;
-        this.exporter = exporter;
         this.readback = readback;
         this.summaryMarker = summaryMarker;
-        this.appContext = appContext;
         coordinator.setListener(this);
     }
 
@@ -107,6 +100,14 @@ public final class ConversationServiceStub extends IConversationService.Stub
         registryOf(conversationId, registry -> registry.dispatch(
                 callback -> callback.onMessageStatusChanged(conversationId, messageId,
                         statusWire, failureCode)));
+    }
+
+    /** 自动标题等展示元数据已持久化后的增量通知；不复用消息状态事件。 */
+    public void onConversationInfoChanged(ConversationStore.ConversationRow row) {
+        if (row == null) return;
+        ConversationInfo info = toInfoDto(row);
+        registryOf(row.conversationId(), registry -> registry.dispatch(
+                callback -> callback.onConversationInfoChanged(info)));
     }
 
     // ---------------------------------------------------------------- Binder 实现
@@ -373,38 +374,6 @@ public final class ConversationServiceStub extends IConversationService.Stub
         }
         return lineage.parentTitleAtFork() == null || lineage.parentTitleAtFork().isBlank()
                 ? "来自另一段对话" : "来自“" + lineage.parentTitleAtFork() + "”";
-    }
-
-    /**
-     * 只读导出（评估 v1.0 §4.9 / 阶段 4）：Host 进程内生成 Markdown 到私有 exports
-     * 目录，经 FileProvider 受授予 URI 返回。导出不外发——分享由用户显式动作触发。
-     * 未装配导出器（降级）返回 INVALID_STATE。
-     */
-    @Override
-    public String exportConversation(String conversationId, String clientOperationId) {
-        callerResolver.caller();
-        HostInputValidator.requireOperationId(clientOperationId);
-        ConversationIds.requireLowerUuid(conversationId, "conversationId");
-        if (availabilityError() != MatrixErrorCode.SUCCESS) {
-            return null;
-        }
-        if (exporter == null || appContext == null) {
-            return null;
-        }
-        requireOwnedConversation(conversationId);
-        ConversationExporter.ExportResult result = exporter.exportMarkdownSync(
-                appContext, conversationId, ActorUsers.USER_DRIVER, null, () -> false);
-        if (!result.success() || result.file() == null) {
-            return null;
-        }
-        try {
-            return androidx.core.content.FileProvider.getUriForFile(appContext,
-                    appContext.getPackageName() + ".conversation_export",
-                    result.file()).toString();
-        } catch (IllegalArgumentException noProvider) {
-            android.util.Log.w("MatrixAgent", "[Conversation] 导出 FileProvider 缺失", noProvider);
-            return null;
-        }
     }
 
     @Override

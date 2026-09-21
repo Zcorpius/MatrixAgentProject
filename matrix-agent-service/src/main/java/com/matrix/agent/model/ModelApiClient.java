@@ -245,6 +245,7 @@ public final class ModelApiClient implements LlmClient {
             JSONObject request = buildOpenAiToolRequest(config, system, conversation, tools);
             JSONObject response = post(config.endpoint, request, "Authorization",
                     config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null, token);
+            emitProviderReasoning(config, response);
             ModelTurn turn = parseOpenAiToolResponse(response, tools);
             Log.d(TAG, "[Http] openai-native turn hasToolCalls=" + turn.hasToolCalls()
                     + " toolCalls=" + (turn.hasToolCalls() ? turn.getToolCalls().size() : 0));
@@ -417,11 +418,30 @@ public final class ModelApiClient implements LlmClient {
         }
         // 调试轨迹（评估 v1.0 §4.3 契约 4）：供应商实际返回的 reasoning 无条件入日志；
         // 未返回时写 unavailable——绝不推导隐藏思维链。UI 显示由 Emitter 的门控决定。
+        emitReasoning(config, reasoning);
+        return new com.matrix.agent.contract.CompletionDetail(text, reasoning);
+    }
+
+    /** OpenAI/GLM 原生 tool response 的 reasoning_content 与普通补全同样进入轨迹。 */
+    private static void emitProviderReasoning(ModelConfig config, JSONObject response) {
+        try {
+            JSONObject message = response.getJSONArray("choices").getJSONObject(0)
+                    .getJSONObject("message");
+            String reasoning = message.optString("reasoning_content", null);
+            if (reasoning != null && reasoning.trim().isEmpty()) reasoning = null;
+            emitReasoning(config, reasoning);
+        } catch (Exception ignored) {
+            // 响应本身会在下游 parser 给出协议错误；debug 旁路不能改变错误语义。
+        }
+    }
+
+    private static void emitReasoning(ModelConfig config, String reasoning) {
+        String runtimeRequestId = com.matrix.agent.debugtrace.DebugTraceContext
+                .runtimeRequestIdOrNull();
         com.matrix.agent.debugtrace.DebugTraceHolder.emit(
                 com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_MODEL_REASONING,
-                "model:" + config.model,
+                runtimeRequestId == null ? "model:" + config.model : runtimeRequestId,
                 reasoning == null ? "reasoning unavailable" : reasoning);
-        return new com.matrix.agent.contract.CompletionDetail(text, reasoning);
     }
 
     private String callAnthropic(ModelConfig config, String system, String user) throws Exception {

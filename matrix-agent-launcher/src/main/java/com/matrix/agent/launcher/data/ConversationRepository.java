@@ -12,12 +12,16 @@ import com.matrix.agent.api.conversation.ConversationPage;
 import com.matrix.agent.api.conversation.ConversationSubmission;
 import com.matrix.agent.api.conversation.CreateConversationRequest;
 import com.matrix.agent.api.conversation.SendTextRequest;
+import com.matrix.agent.api.debug.DebugTraceWireEvent;
+import com.matrix.agent.client.DebugTraceManager;
+import com.matrix.agent.launcher.BuildConfig;
 
 import com.matrix.agent.launcher.data.LauncherHostGateway.Result;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** SDK-backed conversation data source. UI never sees a Manager instance or Binder type. */
 public final class ConversationRepository {
@@ -30,9 +34,16 @@ public final class ConversationRepository {
         default void onMessageUpsert(ConversationMessage message) { }
         default void onMessageStatusChanged(String conversationId, String messageId,
                 int status, int errorCode) { }
+        default void onConversationInfoChanged(ConversationInfo info) { }
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
         default void onConversationError(String conversationId, int errorCode) { }
+    }
+
+    /** debug/internal 专用旁路；正常会话订阅完全不依赖它。 */
+    @FunctionalInterface
+    public interface DebugTraceListener {
+        void onDebugTrace(DebugTraceWireEvent event);
     }
 
     private final LauncherHostGateway gateway;
@@ -136,17 +147,6 @@ public final class ConversationRepository {
         }, receiver);
     }
 
-    public void exportConversation(@NonNull String conversationId,
-            @NonNull Consumer<Result<String>> receiver) {
-        gateway.execute(agent -> {
-            com.matrix.agent.client.ConversationManager manager =
-                    agent.getConversationManager();
-            return manager == null ? null
-                    : manager.exportConversation(conversationId,
-                            java.util.UUID.randomUUID().toString());
-        }, receiver);
-    }
-
     public void speakAssistantMessage(@NonNull String conversationId,
             @NonNull String assistantMessageId,
             @NonNull Consumer<Result<ConversationOperationResult>> receiver) {
@@ -211,6 +211,9 @@ public final class ConversationRepository {
                             listener.onMessageStatusChanged(conversationId, messageId, status,
                                     errorCode);
                         }
+                        @Override public void onConversationInfoChanged(ConversationInfo info) {
+                            listener.onConversationInfoChanged(info);
+                        }
                         @Override public void onTransientTranscript(String conversationId,
                                 String voiceSessionId, String text, boolean isFinal) {
                             listener.onTransientTranscript(conversationId, voiceSessionId, text,
@@ -230,6 +233,56 @@ public final class ConversationRepository {
                 // 进程销毁路径；Binder 已死时 SDK 侧为 no-op。
             }
         };
+    }
+
+    /**
+     * 订阅 Host 侧已净化的调试轨迹。两端均要开 Gradle 标志才会有任何数据；release
+     * 直接返回 no-op，避免误把 Binder 服务存在等同于有权显示内部诊断。
+     */
+    public AutoCloseable subscribeDebug(@NonNull DebugTraceListener listener,
+            @NonNull Consumer<Result<AutoCloseable>> receiver) {
+        if (!BuildConfig.MATRIX_DEBUG_TRACE_UI) {
+            receiver.accept(Result.success(() -> { }));
+            return () -> { };
+        }
+        final AutoCloseable[] handle = new AutoCloseable[1];
+        final AtomicBoolean closed = new AtomicBoolean();
+        gateway.execute(agent -> {
+            DebugTraceManager manager = agent.getDebugTraceManager();
+            if (manager == null) return null;
+            handle[0] = manager.subscribe(listener::onDebugTrace);
+            // 页面在 SDK worker 排队期间退出时，不能等 callback 回来后留下幽灵 Binder
+            // 订阅；这是跨进程 one-way 通道最常见的生命周期泄漏点。
+            if (closed.get()) {
+                try {
+                    handle[0].close();
+                } catch (Exception ignored) {
+                }
+            }
+            return handle[0];
+        }, receiver);
+        return () -> {
+            closed.set(true);
+            try {
+                if (handle[0] != null) handle[0].close();
+            } catch (Exception ignored) {
+                // Binder death / 页面销毁均可安全退订。
+            }
+        };
+    }
+
+    /** 重进会话后的历史恢复；只有 debug/internal 才实际触发 IPC。 */
+    public void loadDebugHistory(@NonNull String hostUserMessageId,
+            @NonNull Consumer<Result<List<DebugTraceWireEvent>>> receiver) {
+        if (!BuildConfig.MATRIX_DEBUG_TRACE_UI) {
+            receiver.accept(Result.success(List.of()));
+            return;
+        }
+        gateway.execute(agent -> {
+            DebugTraceManager manager = agent.getDebugTraceManager();
+            return manager == null ? List.<DebugTraceWireEvent>of()
+                    : manager.getHistory(hostUserMessageId, 1_000);
+        }, receiver);
     }
 
     // ---------------------------------------------------------------- PTT 语音

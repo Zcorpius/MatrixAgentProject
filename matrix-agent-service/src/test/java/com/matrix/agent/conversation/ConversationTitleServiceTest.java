@@ -129,13 +129,29 @@ public final class ConversationTitleServiceTest {
         assertEquals("空调调温", ConversationTitleService.sanitizeTitle("「空调调温」"));
         assertEquals("空调调温", ConversationTitleService.sanitizeTitle("空调调温\n"));
         String overlong = "长".repeat(45);
-        assertEquals("超长截断到 TITLE_MAX_CHARS",
-                "长".repeat(ConversationCoordinator.TITLE_MAX_CHARS),
+        assertEquals("超长截断到自动标题 10 字上限",
+                "长".repeat(ConversationTitleService.AUTO_TITLE_MAX_CODE_POINTS),
                 ConversationTitleService.sanitizeTitle(overlong));
         assertEquals("换行单行化", "空调 调温",
                 ConversationTitleService.sanitizeTitle("空调" + (char) 10 + "调温"));
         assertEquals("", ConversationTitleService.sanitizeTitle("   "));
         assertEquals("", ConversationTitleService.sanitizeTitle(null));
+    }
+
+    @Test public void notifiesPresentationOnlyAfterSuccessfulTitleWrite() {
+        FakeConversationStore store = new FakeConversationStore();
+        store.seedConversation(CONV, UUID.randomUUID().toString());
+        FakeClient client = new FakeClient();
+        ConversationTitleService title = service(store, client);
+        java.util.concurrent.atomic.AtomicReference<ConversationStore.ConversationRow> notified =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        title.setTitleChangedSink(notified::set);
+
+        String userMessageId = seedTerminalRound(store, PersistedMessageStatus.COMPLETED);
+        title.onTerminalRound(CONV, userMessageId, PersistedMessageStatus.COMPLETED.wire());
+
+        assertEquals("空调调温", notified.get().title());
+        assertEquals(ConversationInfo.TITLE_ORIGIN_AUTO, notified.get().titleOrigin());
     }
 
     /** EXECUTION_UNKNOWN 同样触发（写操作的未知终态仍是该轮的终态）。 */

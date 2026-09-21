@@ -3,6 +3,7 @@ package com.matrix.agent.launcher.data;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -13,6 +14,7 @@ import com.matrix.agent.api.common.ConnectionState;
 import com.matrix.agent.client.MatrixAgent;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Callable;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -29,6 +31,7 @@ import java.util.function.Consumer;
  * worker from the Host APK, and marshals every result back to the main thread.</p>
  */
 public final class LauncherHostGateway {
+    private static final String TAG = "MatrixAgent";
     private final Context applicationContext;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService calls;
@@ -58,12 +61,13 @@ public final class LauncherHostGateway {
     public void connect() {
         if (!connecting.compareAndSet(false, true)) return;
         final long generation = connectionGeneration.get();
+        Log.i(TAG, "[LauncherHost] connect begin generation=" + generation);
         try {
             calls.execute(() -> {
                 MatrixAgent replacement = null;
                 try {
                     replacement = MatrixAgent.create(applicationContext,
-                            (value, state) -> publishConnectionState(generation, state));
+                            (value, state) -> publishConnectionState(generation, value, state));
                     // Activity/ViewModel teardown may race the blocking SDK handshake.  A late
                     // client must never resurrect a deliberately disconnected Launcher.
                     if (generation != connectionGeneration.get()) {
@@ -73,16 +77,20 @@ public final class LauncherHostGateway {
                     MatrixAgent previous = agent;
                     agent = replacement;
                     if (previous != null && previous != replacement) previous.release();
-                    publishConnectionState(generation, replacement.getState());
+                    Log.i(TAG, "[LauncherHost] connect completed generation=" + generation
+                            + " state=" + stateName(replacement.getState()));
+                    publishConnectionState(generation, replacement, replacement.getState());
                 } catch (RuntimeException failure) {
-                    publishConnectionState(generation, ConnectionState.DISCONNECTED);
+                    Log.w(TAG, "[LauncherHost] connect failed generation=" + generation, failure);
+                    publishConnectionState(generation, null, ConnectionState.DISCONNECTED);
                 } finally {
                     connecting.set(false);
                 }
             });
         } catch (RejectedExecutionException unavailable) {
             connecting.set(false);
-            publishConnectionState(generation, ConnectionState.DISCONNECTED);
+            Log.w(TAG, "[LauncherHost] connect rejected generation=" + generation, unavailable);
+            publishConnectionState(generation, null, ConnectionState.DISCONNECTED);
         }
     }
 
@@ -114,7 +122,7 @@ public final class LauncherHostGateway {
         MatrixAgent current = agent;
         agent = null;
         if (current != null) current.release();
-        publishConnectionState(connectionGeneration.get(), ConnectionState.DISCONNECTED);
+        publishConnectionState(connectionGeneration.get(), null, ConnectionState.DISCONNECTED);
     }
 
     public ScheduledFuture<?> scheduleWithFixedDelay(@NonNull Runnable task, long delay,
@@ -142,10 +150,78 @@ public final class LauncherHostGateway {
         }
     }
 
-    private void publishConnectionState(long generation, int state) {
+    /**
+     * Runs bounded Launcher-owned follow-up work (for example copying an already-authorized
+     * Binder file descriptor to an SAF document) off the UI thread.  This is intentionally not
+     * an SDK call: it keeps presentation from performing file I/O on the main looper without
+     * creating an unowned executor per feature.
+     */
+    public <T> void executeClientWork(@NonNull Callable<T> work,
+            @NonNull Consumer<Result<T>> receiver) {
+        try {
+            calls.execute(() -> {
+                Result<T> result;
+                try {
+                    result = Result.success(work.call());
+                } catch (Exception failure) {
+                    result = Result.failure(failure);
+                }
+                Result<T> delivery = result;
+                main.post(() -> receiver.accept(delivery));
+            });
+        } catch (RejectedExecutionException unavailable) {
+            main.post(() -> receiver.accept(Result.failure(unavailable)));
+        }
+    }
+
+    @NonNull
+    public Context applicationContext() {
+        return applicationContext;
+    }
+
+    /**
+     * Publishes only callbacks belonging to the active SDK client.
+     *
+     * <p>{@link MatrixAgent} dispatches its lifecycle callbacks asynchronously.  In particular,
+     * its initial CONNECTING callback can be queued behind a later CONNECTED callback from the
+     * worker that completed negotiation.  A generation check alone cannot distinguish those two
+     * callbacks because both belong to one connection attempt.  Comparing the source client to
+     * the installed client makes the state stream monotonic from the Launcher's perspective and
+     * prevents an obsolete CONNECTING from repainting a connected Host.</p>
+     */
+    private void publishConnectionState(long generation, @Nullable MatrixAgent source, int state) {
         main.post(() -> {
-            if (generation == connectionGeneration.get()) connectionState.setValue(state);
+            if (generation != connectionGeneration.get()) return;
+            MatrixAgent current = agent;
+            if (source != null && current != null && source != current) {
+                Log.d(TAG, "[LauncherHost] ignore stale lifecycle state=" + stateName(state)
+                        + " generation=" + generation);
+                return;
+            }
+            // A CONNECTING notification may have been posted before the client was installed
+            // but execute after its direct CONNECTED publication.  The installed client's
+            // current state is authoritative in that narrow ordering window.
+            if (state == ConnectionState.CONNECTING && current != null
+                    && current.getState() == ConnectionState.CONNECTED) {
+                Log.d(TAG, "[LauncherHost] suppress late CONNECTING generation=" + generation);
+                return;
+            }
+            Log.i(TAG, "[LauncherHost] state=" + stateName(state)
+                    + " generation=" + generation);
+            connectionState.setValue(state);
         });
+    }
+
+    @NonNull
+    private static String stateName(int state) {
+        switch (state) {
+            case ConnectionState.DISCONNECTED: return "DISCONNECTED";
+            case ConnectionState.CONNECTING: return "CONNECTING";
+            case ConnectionState.CONNECTED: return "CONNECTED";
+            case ConnectionState.SERVICE_NOT_READY: return "SERVICE_NOT_READY";
+            case ConnectionState.PERMISSION_DENIED: return "PERMISSION_DENIED";
+            default: return "UNKNOWN(" + state + ')';
+        }
     }
 
     @FunctionalInterface public interface SdkCall<T> { T run(MatrixAgent agent); }

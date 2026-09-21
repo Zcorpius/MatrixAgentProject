@@ -1,1 +1,3 @@
-<shape xmlns:android="http://schemas.android.com/apk/res/android"><gradient android:angle="45" android:startColor="#0C2531" android:endColor="#16414A"/></shape>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/matrix_chrome" />
+</shape>

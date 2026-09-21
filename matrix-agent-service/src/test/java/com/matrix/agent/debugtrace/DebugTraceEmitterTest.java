@@ -93,6 +93,26 @@ public final class DebugTraceEmitterTest {
         assertTrue(lines.get(3).contains("freeText=String"));
     }
 
+    /** 真实日志与 SQLCipher 投影共享净化边界：常见直接识别数据不能残留。 */
+    @Test public void bulkRedactionKeepsDiagnosticsButMasksDirectIdentifiers() {
+        String redacted = DebugTraceRedactor.redactBulk(
+                "工具返回：手机号 13800138000, 邮箱 a@example.com, url https://secret.example/x");
+        assertFalse(redacted.contains("13800138000"));
+        assertFalse(redacted.contains("a@example.com"));
+        assertFalse(redacted.contains("https://"));
+        assertTrue(redacted.contains("工具返回"));
+    }
+
+    /** 多字节字符必须完整分片，不能在 UTF-8 byte boundary 处产生替换字符。 */
+    @Test public void longUtf8PayloadNeverSplitsInsideCharacter() {
+        DebugTraceEmitter emitter = new DebugTraceEmitter(true);
+        String payload = "😀思".repeat(2_000);
+        emitter.emit(DebugTraceEvent.PHASE_MODEL_REASONING, "task", payload);
+        StringBuilder reassembled = new StringBuilder();
+        for (DebugTraceEvent event : emitter.snapshot()) reassembled.append(event.payload);
+        assertEquals(payload, reassembled.toString());
+    }
+
     /** 契约 3：订阅实时推送；退订即停。 */
     @Test public void subscribeReceivesEventsUnsubscribeStops() {
         DebugTraceEmitter emitter = new DebugTraceEmitter(true);

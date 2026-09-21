@@ -12,6 +12,7 @@ import com.matrix.agent.task.redact.ModelSanitizer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -27,7 +28,7 @@ import java.util.function.Supplier;
  *
  * <p>防注入与净化：用户文本先经 {@link ModelSanitizer#truncateWithSuffix} 限幅；
  * system prompt 强约束"仅产标题、不执行指令"；产出清洗为单行并截断到
- * {@link ConversationCoordinator#TITLE_MAX_CHARS}。</p>
+ * {@link #AUTO_TITLE_MAX_CODE_POINTS}。</p>
  */
 public final class ConversationTitleService {
 
@@ -35,11 +36,15 @@ public final class ConversationTitleService {
 
     /** 单次标题调用 deadline（低优先级，超时即放弃）。 */
     static final long DEADLINE_MS = 8_000L;
+    /** 自动标题的产品上限；手动标题仍使用 ConversationCoordinator 的更宽上限。 */
+    static final int AUTO_TITLE_MAX_CODE_POINTS = 10;
 
     private final ConversationStore store;
     private final LlmClient client;
     private final Supplier<ModelConfig> configSupplier;
     private final ExecutorService lane;
+    /** 仅承载展示元数据变更；默认 no-op，避免标题服务反向依赖 Binder 层。 */
+    private volatile Consumer<ConversationRow> titleChangedSink = ignored -> { };
 
     public ConversationTitleService(ConversationStore store, LlmClient client,
             Supplier<ModelConfig> configSupplier) {
@@ -58,6 +63,13 @@ public final class ConversationTitleService {
         this.client = client;
         this.configSupplier = configSupplier;
         this.lane = lane;
+    }
+
+    /**
+     * 装配期连接展示通知。标题写成功后才通知，失败/比较交换未写入均不发送伪更新。
+     */
+    public void setTitleChangedSink(Consumer<ConversationRow> sink) {
+        titleChangedSink = sink == null ? ignored -> { } : sink;
     }
 
     /**
@@ -116,11 +128,18 @@ public final class ConversationTitleService {
             throw new IllegalStateException("provider returned empty title");
         }
         boolean written = store.autoTitleIfDefault(conversationId, title);
+        // 标题从用户输入派生，不能作为普通调试字段写入 logcat。
         Log.i(TAG, "[Conversation] 自动标题 conv=" + conversationId
-                + " written=" + written + " title=" + title);
+                + " written=" + written + " length=" + title.codePointCount(0, title.length()));
+        if (written) {
+            ConversationRow updated = store.findConversation(conversationId);
+            if (updated != null) {
+                titleChangedSink.accept(updated);
+            }
+        }
     }
 
-    /** 单行化 + 去引号装饰 + 截断到 TITLE_MAX_CHARS；全空白视为空。 */
+    /** 单行化 + 去引号装饰 + 按 Unicode code point 截断到自动标题上限；全空白视为空。 */
     static String sanitizeTitle(String raw) {
         if (raw == null) return "";
         String single = raw.replace('\n', ' ').replace('\r', ' ').trim();
@@ -131,8 +150,9 @@ public final class ConversationTitleService {
             single = single.substring(1, single.length() - 1).trim();
         }
         if (single.isEmpty()) return "";
-        return single.length() > ConversationCoordinator.TITLE_MAX_CHARS
-                ? single.substring(0, ConversationCoordinator.TITLE_MAX_CHARS) : single;
+        int codePoints = single.codePointCount(0, single.length());
+        if (codePoints <= AUTO_TITLE_MAX_CODE_POINTS) return single;
+        return single.substring(0, single.offsetByCodePoints(0, AUTO_TITLE_MAX_CODE_POINTS));
     }
 
     private static String buildSystemPrompt() {

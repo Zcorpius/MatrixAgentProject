@@ -35,12 +35,25 @@ public final class DebugTraceEmitter {
     private static final int RING_CAPACITY = 500;
 
     private final boolean uiEnabled;
+    /** null 表示仅内存调试（JVM 测试）或量产日志模式。 */
+    private final DebugTraceStore store;
     private final Deque<DebugTraceEvent> ring = new ArrayDeque<>();
     private final List<Consumer<DebugTraceEvent>> subscribers = new CopyOnWriteArrayList<>();
     private final AtomicLong traceSequence = new AtomicLong();
+    /** 防止进程重启后 dt1:0 与 SQLCipher 中旧分片的主键碰撞。 */
+    private final String processTraceNonce = java.util.UUID.randomUUID().toString()
+            .replace("-", "").substring(0, 12);
 
     public DebugTraceEmitter(boolean uiEnabled) {
+        this(uiEnabled, null);
+    }
+
+    /**
+     * @param store 仅 debug/internal 装配的 SQLCipher 投影端口；null 保持纯内存测试语义
+     */
+    public DebugTraceEmitter(boolean uiEnabled, DebugTraceStore store) {
         this.uiEnabled = uiEnabled;
+        this.store = store;
     }
 
     /** UI 汇是否开启（Host 侧 BuildConfig 门控；false 时仅日志汇）。 */
@@ -66,28 +79,21 @@ public final class DebugTraceEmitter {
             safeTaskId = "-";
         }
         long timestampMs = System.currentTimeMillis();
-        String traceId = "dt" + traceSequence.incrementAndGet();
+        long eventSequence = traceSequence.incrementAndGet();
+        String traceId = "dt-" + processTraceNonce + "-" + eventSequence;
+
+        List<DebugTraceEvent> chunks = chunkEvents(timestampMs, phase, safeTaskId, traceId,
+                eventSequence, safePayload);
 
         // 汇 1：无条件 logcat（3 KiB 分片 + 重组键）
-        writeChunkedLog(phase, safeTaskId, traceId, timestampMs, safePayload);
+        writeChunkedLog(chunks);
 
         // 汇 2：UI 门控的 ring buffer + 订阅者
         if (uiEnabled) {
-            List<DebugTraceEvent> chunks = chunkEvents(timestampMs, phase, safeTaskId,
-                    traceId, safePayload);
-            synchronized (ring) {
-                for (DebugTraceEvent event : chunks) {
-                    ring.addLast(event);
-                    while (ring.size() > RING_CAPACITY) {
-                        ring.removeFirst();
-                    }
-                }
-            }
-            for (DebugTraceEvent event : chunks) {
-                for (Consumer<DebugTraceEvent> subscriber : subscribers) {
-                    subscriber.accept(event);
-                }
-            }
+            // 有持久化 Store 时，先以 runtimeRequestId 解析到用户消息并完成 SQLCipher
+            // 写入，再发布实时事件。无映射的模型配置/标题任务只会留在日志里。
+            if (store != null) store.persist(chunks, this::publishUi);
+            else for (DebugTraceEvent event : chunks) publishUi(event);
         }
     }
 
@@ -96,6 +102,12 @@ public final class DebugTraceEmitter {
         synchronized (ring) {
             return new ArrayList<>(ring);
         }
+    }
+
+    /** 调试构建的 SQLCipher 历史；量产/纯内存模式刻意返回空。 */
+    public List<DebugTraceEvent> history(String hostUserMessageId, int limit) {
+        if (!uiEnabled || store == null) return java.util.Collections.emptyList();
+        return store.history(hostUserMessageId, limit);
     }
 
     /** 订阅实时事件（Host Stub 的 IDebugTraceCallback 桥接注册于此）。 */
@@ -111,36 +123,53 @@ public final class DebugTraceEmitter {
 
     // ---------------------------------------------------------------- 内部
 
-    private void writeChunkedLog(String phase, String taskId, String traceId,
-            long timestampMs, String payload) {
-        // 以 UTF-8 字节计量切分（logcat 限制按字节）
-        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        int totalParts = Math.max(1, (bytes.length + MAX_LOG_BYTES - 1) / MAX_LOG_BYTES);
-        int offset = 0;
-        for (int part = 0; part < totalParts; part++) {
-            int end = Math.min(bytes.length, offset + MAX_LOG_BYTES);
-            String chunk = new String(bytes, offset, end - offset,
-                    java.nio.charset.StandardCharsets.UTF_8);
-            Log.i(TAG, "[DebugTrace] phase=" + phase + " task=" + taskId
-                    + " trace=" + traceId + " part=" + part + "/" + totalParts
-                    + " ts=" + timestampMs + " :: " + chunk);
-            offset = end;
+    private void publishUi(DebugTraceEvent event) {
+        synchronized (ring) {
+            ring.addLast(event);
+            while (ring.size() > RING_CAPACITY) ring.removeFirst();
+        }
+        for (Consumer<DebugTraceEvent> subscriber : subscribers) subscriber.accept(event);
+    }
+
+    private static void writeChunkedLog(List<DebugTraceEvent> chunks) {
+        for (DebugTraceEvent event : chunks) {
+            Log.i(TAG, "[DebugTrace] phase=" + event.phase + " task=" + event.taskId
+                    + " trace=" + event.traceId + " part=" + event.partIndex + "/"
+                    + event.partCount + " ts=" + event.timestampMs + " :: "
+                    + event.payload);
         }
     }
 
     private static List<DebugTraceEvent> chunkEvents(long timestampMs, String phase,
-            String taskId, String traceId, String payload) {
-        byte[] bytes = payload.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        int totalParts = Math.max(1, (bytes.length + MAX_LOG_BYTES - 1) / MAX_LOG_BYTES);
-        List<DebugTraceEvent> events = new ArrayList<>(totalParts);
-        int offset = 0;
-        for (int part = 0; part < totalParts; part++) {
-            int end = Math.min(bytes.length, offset + MAX_LOG_BYTES);
-            events.add(new DebugTraceEvent(timestampMs, phase, taskId, traceId, part,
-                    totalParts, new String(bytes, offset, end - offset,
-                            java.nio.charset.StandardCharsets.UTF_8)));
-            offset = end;
+            String taskId, String traceId, long eventSequence, String payload) {
+        List<String> chunks = splitUtf8Safely(payload);
+        List<DebugTraceEvent> events = new ArrayList<>(chunks.size());
+        for (int part = 0; part < chunks.size(); part++) {
+            events.add(new DebugTraceEvent(timestampMs, phase, taskId, traceId,
+                    eventSequence, part, chunks.size(), chunks.get(part), null, null, null));
         }
         return events;
+    }
+
+    /** 按 code point 切分，避免原实现按任意 UTF-8 字节截断而损坏中文/emoji。 */
+    private static List<String> splitUtf8Safely(String payload) {
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int currentBytes = 0;
+        for (int offset = 0; offset < payload.length();) {
+            int codePoint = payload.codePointAt(offset);
+            String glyph = new String(Character.toChars(codePoint));
+            int glyphBytes = glyph.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (currentBytes > 0 && currentBytes + glyphBytes > MAX_LOG_BYTES) {
+                chunks.add(current.toString());
+                current.setLength(0);
+                currentBytes = 0;
+            }
+            current.append(glyph);
+            currentBytes += glyphBytes;
+            offset += Character.charCount(codePoint);
+        }
+        if (current.length() > 0 || chunks.isEmpty()) chunks.add(current.toString());
+        return chunks;
     }
 }

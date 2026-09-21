@@ -3,7 +3,7 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">@color/matrix_accent</item>
         <item name="android:navigationBarColor">@color/matrix_primary_dark</item>
-        <item name="android:statusBarColor">@color/matrix_primary_dark</item>
+        <item name="android:statusBarColor">@color/matrix_chrome</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowBackground">@color/matrix_surface</item>
     </style>

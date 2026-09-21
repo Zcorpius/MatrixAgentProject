@@ -83,7 +83,9 @@ public final class LlmModelGateway implements ModelGateway {
                 + " tools=" + tools.size()
                 + " route=" + routeName()
                 + " conversationMsgs=" + request.getConversation().size());
-        try {
+        try (com.matrix.agent.debugtrace.DebugTraceContext.Scope ignored =
+                com.matrix.agent.debugtrace.DebugTraceContext.bind(
+                        request.getAgentRequest().getRequestId())) {
             com.matrix.agent.identity.CancellationToken token =
                     request.getAgentRequest().getCancellationToken();
             long deadlineAtMillis = request.getAgentRequest().getDeadlineAtMillis();

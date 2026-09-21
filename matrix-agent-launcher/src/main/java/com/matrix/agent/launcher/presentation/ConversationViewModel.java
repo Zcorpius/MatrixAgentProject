@@ -6,15 +6,23 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationMessage;
+import com.matrix.agent.api.debug.DebugTraceWireEvent;
+import com.matrix.agent.launcher.BuildConfig;
 import com.matrix.agent.launcher.data.ConversationRepository.ConversationListener;
 import com.matrix.agent.launcher.data.ConversationRepository;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -24,25 +32,34 @@ import java.util.UUID;
  */
 public final class ConversationViewModel extends ViewModel {
 
+    private static final String TAG = "MatrixAgent";
+
     /** 可渲染消息（Host 投影的不可变快照；v5 元数据随行）。 */
     public record UiMessage(String messageId, long sequence, int role, int status, int channel,
             String text, int failureCode, int inputKind, String steerHostUserMessageId,
-            int steerDeliveryState,
-            List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces) {
+            int steerDeliveryState, String conversationTaskId,
+            List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces,
+            List<DebugTraceWireEvent> debugTraces) {
 
         /** 兼容构造（v5 元数据缺省）。 */
         public UiMessage(String messageId, long sequence, int role, int status, int channel,
                 String text, int failureCode) {
             this(messageId, sequence, role, status, channel, text, failureCode,
                     ConversationMessage.INPUT_PRIMARY, null,
-                    ConversationMessage.STEER_DELIVERY_PENDING, List.of());
+                    ConversationMessage.STEER_DELIVERY_PENDING, null, List.of(), List.of());
         }
 
         /** 状态迁移拷贝（保留全部元数据）。 */
         public UiMessage withStatus(int newStatus, int newFailureCode) {
             return new UiMessage(messageId, sequence, role, newStatus, channel, text,
                     newFailureCode, inputKind, steerHostUserMessageId, steerDeliveryState,
-                    executionTraces);
+                    conversationTaskId, executionTraces, debugTraces);
+        }
+
+        public UiMessage withDebugTraces(List<DebugTraceWireEvent> traces) {
+            return new UiMessage(messageId, sequence, role, status, channel, text, failureCode,
+                    inputKind, steerHostUserMessageId, steerDeliveryState, conversationTaskId,
+                    executionTraces, traces == null ? List.of() : List.copyOf(traces));
         }
     }
 
@@ -90,6 +107,7 @@ public final class ConversationViewModel extends ViewModel {
 
     private String conversationId;
     private AutoCloseable subscription;
+    private AutoCloseable debugSubscription;
     private boolean sending;
     private boolean loadingHistory;
     private boolean recording;
@@ -104,6 +122,10 @@ public final class ConversationViewModel extends ViewModel {
     private boolean summaryActive;
     private String conversationTitle;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    /** host userMessageId → 已持久化/实时调试事件；只在 debug build 有内容。 */
+    private final Map<String, List<DebugTraceWireEvent>> debugByHostMessage =
+            new LinkedHashMap<>();
+    private final Set<String> debugHistoryRequested = new HashSet<>();
 
     public ConversationViewModel(ConversationRepository repository) {
         this.repository = repository;
@@ -165,20 +187,27 @@ public final class ConversationViewModel extends ViewModel {
     public void send(@NonNull String rawText) {
         String text = rawText.strip();
         if (text.isEmpty() || conversationId == null || sending) {
+            Log.w(TAG, "[ConversationUi] send ignored empty=" + text.isEmpty()
+                    + " hasConversation=" + (conversationId != null) + " sending=" + sending);
             return;
         }
+        Log.i(TAG, "[ConversationUi] send requested chars=" + text.length()
+                + " conversation=" + conversationId);
         sending = true;
         publish(null);
         repository.sendText(conversationId, text, UUID.randomUUID().toString(), result -> {
             sending = false;
             if (!result.isSuccess() || result.value == null) {
+                Log.w(TAG, "[ConversationUi] send transport failed");
                 publish("发送失败：Host 未连接");
                 return;
             }
             if (result.value.code != MatrixErrorCode.SUCCESS) {
+                Log.w(TAG, "[ConversationUi] send rejected code=" + result.value.code);
                 publish("发送被拒绝（错误码：" + result.value.code + "）");
                 return;
             }
+            Log.i(TAG, "[ConversationUi] send accepted by Host");
             // 受理成功：ACCEPTED 行由订阅事件回填；此处仅解除 sending。
             publish(null);
         });
@@ -395,6 +424,8 @@ public final class ConversationViewModel extends ViewModel {
         if (targetConversationId == null) return;
         conversationId = targetConversationId;
         bySequence.clear();
+        debugByHostMessage.clear();
+        debugHistoryRequested.clear();
         hasMoreHistory = false;
         conversationTitle = null;
         summaryActive = false;
@@ -402,18 +433,6 @@ public final class ConversationViewModel extends ViewModel {
         loadHistory();
         refreshTitleAndMarker();
         publish(null);
-    }
-
-    /** 导出当前会话（返回 content URI 给 UI 发分享 intent）。 */
-    public void exportCurrent(java.util.function.Consumer<String> onUri) {
-        if (conversationId == null || onUri == null) return;
-        repository.exportConversation(conversationId, result -> {
-            if (result.isSuccess() && result.value != null) {
-                onUri.accept(result.value);
-            } else {
-                publish("导出未完成（Host 未就绪或会话为空）");
-            }
-        });
     }
 
     /** 朗读一条助手最终回复。 */
@@ -464,6 +483,14 @@ public final class ConversationViewModel extends ViewModel {
             } catch (Exception ignored) {
             }
         }
+        AutoCloseable debugHandle = debugSubscription;
+        debugSubscription = null;
+        if (debugHandle != null) {
+            try {
+                debugHandle.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @Override protected void onCleared() {
@@ -502,6 +529,12 @@ public final class ConversationViewModel extends ViewModel {
                 }
             }
 
+            @Override public void onConversationInfoChanged(ConversationInfo info) {
+                if (info == null || !target.equals(info.conversationId)) return;
+                conversationTitle = displayTitle(info);
+                publish(null);
+            }
+
             @Override public void onConversationError(String conversationId, int errorCode) {
                 if (target.equals(conversationId)) {
                     publish("会话事件异常（错误码：" + errorCode + "）");
@@ -511,6 +544,18 @@ public final class ConversationViewModel extends ViewModel {
             if (!result.isSuccess()) {
                 publish("订阅建立失败，将以刷新恢复");
             }
+        });
+        subscribeDebug(target);
+    }
+
+    private void subscribeDebug(String target) {
+        if (!BuildConfig.MATRIX_DEBUG_TRACE_UI) return;
+        debugSubscription = repository.subscribeDebug(event -> {
+            if (!target.equals(event.conversationId) || event.hostUserMessageId == null) return;
+            mergeDebugEvent(event);
+            publish(null);
+        }, result -> {
+            // Host 端开关不同/旧 Host 都属于正常降级：对话主链路不能为此报错。
         });
     }
 
@@ -536,14 +581,61 @@ public final class ConversationViewModel extends ViewModel {
         UiMessage mapped = new UiMessage(message.messageId, message.sequenceNo, message.role,
                 message.status, message.channel, message.text, message.failureCode,
                 message.inputKind, message.steerHostUserMessageId,
-                message.steerDeliveryState,
-                message.executionTraces == null ? List.of() : message.executionTraces);
-        UiMessage existing = bySequence.get(message.sequenceNo);
-        if (existing == null || existing.status() != message.status
-                || !existing.text().equals(message.text)) {
-            bySequence.put(mapped.sequence(), mapped);
+                message.steerDeliveryState, message.conversationTaskId,
+                message.executionTraces == null ? List.of() : message.executionTraces,
+                debugTracesFor(message));
+        // Host 的 upsert 可能只补充 capability trace / steer 投递态；不能仅比较 status/text，
+        // 否则 UI 会错过同序号的后续事实。调试轨迹同样随本行不可变快照带入。
+        bySequence.put(mapped.sequence(), mapped);
+        if (BuildConfig.MATRIX_DEBUG_TRACE_UI
+                && message.role == ConversationMessage.ROLE_USER
+                && message.inputKind == ConversationMessage.INPUT_PRIMARY) {
+            requestDebugHistoryOnce(message.messageId);
         }
         recomputeRunningFlag();
+    }
+
+    private static String displayTitle(ConversationInfo info) {
+        return info.title == null || info.title.isBlank() ? "未命名对话" : info.title;
+    }
+
+    private void requestDebugHistoryOnce(String hostUserMessageId) {
+        if (!debugHistoryRequested.add(hostUserMessageId)) return;
+        repository.loadDebugHistory(hostUserMessageId, result -> {
+            if (!result.isSuccess() || result.value == null) return;
+            for (DebugTraceWireEvent event : result.value) mergeDebugEvent(event);
+            publish(null);
+        });
+    }
+
+    private void mergeDebugEvent(DebugTraceWireEvent event) {
+        if (event == null || event.hostUserMessageId == null) return;
+        List<DebugTraceWireEvent> existing = new ArrayList<>(
+                debugByHostMessage.getOrDefault(event.hostUserMessageId, List.of()));
+        String identity = event.traceId + ":" + event.partIndex;
+        for (DebugTraceWireEvent item : existing) {
+            if ((item.traceId + ":" + item.partIndex).equals(identity)) return;
+        }
+        existing.add(event);
+        existing.sort(Comparator.comparingLong((DebugTraceWireEvent item) -> item.timestampMs)
+                .thenComparingLong(item -> item.eventSequence)
+                .thenComparingInt(item -> item.partIndex));
+        debugByHostMessage.put(event.hostUserMessageId, List.copyOf(existing));
+        for (UiMessage message : new ArrayList<>(bySequence.values())) {
+            // 过程流的锚点是本轮 USER message。这样 Host 在最终 ASSISTANT message
+            // 产生前推送的事件也能立即渲染，绝不能等待任务结束后才“补到回复里”。
+            if (event.hostUserMessageId.equals(message.messageId())) {
+                bySequence.put(message.sequence(), message.withDebugTraces(existing));
+            }
+        }
+    }
+
+    private List<DebugTraceWireEvent> debugTracesFor(ConversationMessage message) {
+        if (message.role == ConversationMessage.ROLE_USER) {
+            return debugByHostMessage.getOrDefault(message.messageId, List.of());
+        }
+        // 最终答复只承载最终文本；过程由它前面的独立 process card 呈现。
+        return List.of();
     }
 
     private void recomputeRunningFlag() {

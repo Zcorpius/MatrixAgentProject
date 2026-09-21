@@ -5,6 +5,12 @@ import java.util.Properties
 val traceRequested = providers.gradleProperty("matrix.debugTraceUi")
     .map(String::toBoolean)
     .orElse(false)
+// Instrumentation APK 会以 target package 的身份访问真实的 system-UID 数据区。该设备又是
+// 用户联调机，安装/运行 androidTest 可能重置 updated-system-app 的 data inode；必须由调用者
+// 显式承认这一破坏性动作，不能把普通 ./gradlew connected... 误当成无副作用检查。
+val destructiveConnectedTestAllowed = providers.gradleProperty(
+    "matrix.allowDestructiveConnectedTest",
+).map(String::toBoolean).orElse(false)
 
 private val platformKeyDirectory = file("tools/key")
 private val platformKeyStore = platformKeyDirectory.resolve("platform.p12")
@@ -224,6 +230,19 @@ tasks.register("connectedVoiceCertificationAndroidTest") {
             )
         } finally {
             shell("pm", "grant", "com.matrix.agent", "android.permission.RECORD_AUDIO")
+        }
+    }
+}
+
+// AGP 的 connectedDebugAndroidTest 以及两条自定义认证任务都会依赖此安装步骤。将保险丝
+// 放在 installDebugAndroidTest 上，确保阻止发生在 Instrumentation APK 触碰设备之前，而不是
+// 等 connected task 的 doFirst（那时依赖任务已经执行）。CI/专用测试机须显式传 true。
+tasks.matching { it.name == "installDebugAndroidTest" }.configureEach {
+    doFirst {
+        check(destructiveConnectedTestAllowed.get()) {
+            "拒绝在未明确授权时安装 androidTest APK：该步骤可能重置真机的 " +
+                    "Matrix Agent 私有数据。请仅在专用测试设备上执行，并显式加 " +
+                    "-Pmatrix.allowDestructiveConnectedTest=true。"
         }
     }
 }

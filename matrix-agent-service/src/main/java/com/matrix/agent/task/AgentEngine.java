@@ -543,7 +543,9 @@ public final class AgentEngine {
                         com.matrix.agent.debugtrace.DebugTraceEvent.PHASE_REQUEST_DELIVERED,
                         request.getRequestId(),
                         "cap=" + call.getCapabilityName()
-                                + " args=" + call.getArguments());
+                                + " argumentShape="
+                                + com.matrix.agent.debugtrace.DebugTraceRedactor.argumentShape(
+                                        call.getArguments()));
                 // PRE_TOOL 增量事件——policy ALLOW 后,toolExecutor.execute 前。
                 // args 走 AuditRedactor 字段级脱敏,与 TrajectoryEntity snapshots 同保护级别。
                 Map<String, Object> redactedArgsForAudit = auditRedactor.redactArguments(
@@ -570,7 +572,9 @@ public final class AgentEngine {
                                 + " status=" + toolResult.getStatus()
                                 + " verified=" + toolResult.isVerified()
                                 + " durationMs=" + toolResult.getDurationMillis()
-                                + " observed=" + toolResult.getObservedState());
+                                + " observedKeys="
+                                + com.matrix.agent.debugtrace.DebugTraceRedactor.argumentShape(
+                                        toolResult.getObservedState()));
                 // POST_TOOL 增量事件——toolExecutor 返回后,observation 加入前。
                 // result message 走 AuditRedactor 文本脱敏(避免"导航到 XX 失败"等业务字段泄漏)。
                 auditEventRecorder.recordPostTool(request.getRequestId(),

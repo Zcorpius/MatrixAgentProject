@@ -22,10 +22,28 @@ public final class DemoModelGatewaySystemControlTest {
         assertEquals(35, ((Number) turn.getToolCalls().get(0).argument("percent")).intValue());
     }
 
+    @Test public void routesLowestMediaVolumeToVerifiedZeroPercentCommand() {
+        ModelTurn turn = decide("设置音量到最低");
+        assertEquals("system.media.set_volume", turn.getToolCalls().get(0).getCapabilityName());
+        assertEquals(0, turn.getToolCalls().get(0).getArguments().get("percent"));
+    }
+
+    @Test public void routesMaximumBrightnessToOneHundredPercentCommand() {
+        ModelTurn turn = decide("把屏幕亮度调到最大");
+        assertEquals("system.display.set_brightness", turn.getToolCalls().get(0).getCapabilityName());
+        assertEquals(100, turn.getToolCalls().get(0).getArguments().get("percent"));
+    }
+
     @Test public void routesExplicitScreenBrightnessPercentage() {
         ModelTurn turn = decide("把屏幕亮度设为45%");
         assertEquals("system.display.set_brightness", turn.getToolCalls().get(0).getCapabilityName());
         assertEquals(45, ((Number) turn.getToolCalls().get(0).argument("percent")).intValue());
+    }
+
+    @Test public void routesEnglishMediaVolumeEndpointForKeyboardSafeDeviceSmokeTest() {
+        ModelTurn turn = decide("set media volume to minimum");
+        assertEquals("system.media.set_volume", turn.getToolCalls().get(0).getCapabilityName());
+        assertEquals(0, turn.getToolCalls().get(0).getArguments().get("percent"));
     }
 
     private static ModelTurn decide(String command) {

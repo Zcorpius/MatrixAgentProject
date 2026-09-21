@@ -320,4 +320,25 @@ public final class MatrixDatabaseMigrationTest {
 
         db.close();
     }
+
+    /** v9 → v10：debug trace 迁移必须与 Room 导出的 v10 schema 完整对齐。 */
+    @Test
+    public void migrate9To10CreatesEncryptedDebugTraceProjectionTable() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 9);
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 10, true,
+                MatrixDatabase.MIGRATION_9_10);
+        db.execSQL("INSERT INTO debug_trace_event (event_id, runtime_request_id, "
+                + "conversation_task_id, conversation_id, host_user_message_id, "
+                + "event_sequence, timestamp_ms, phase, trace_id, part_index, part_count, "
+                + "payload, schema_version) VALUES "
+                + "('dt-test:0', 'req-1', 'ct-1', 'conv-1', 'msg-1', 1, 1000, "
+                + "'MODEL_REASONING', 'dt-test', 0, 1, 'safe', 1)");
+        Cursor cursor = db.query("SELECT payload FROM debug_trace_event WHERE event_id='dt-test:0'");
+        assertTrue(cursor.moveToFirst());
+        assertEquals("safe", cursor.getString(0));
+        cursor.close();
+        db.close();
+    }
 }

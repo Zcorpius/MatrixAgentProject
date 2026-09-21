@@ -5,7 +5,8 @@ package com.matrix.agent.task.conversation;
  *
  * <p>由 {@link ConversationAssistantProjector} 在 task 可信上下文中构造：
  * {@code MODEL_FINAL} 只承载 StopReason.NO_TOOL_CALL 且非空白的模型终答（经凭据清洗与
- * 长度上限）；其余终态一律 {@code SYNTHESIZED_TERMINAL}——非误导的固定说明文案，
+ * 长度上限）；{@code HOST_FACTS} 是执行侧从白名单事实生成的结果摘要；其余终态一律
+ * {@code SYNTHESIZED_TERMINAL}——非误导的固定说明文案，
  * 绝不从 trajectory 反解析、不把截断片段伪装成完整回复。{@code displaySafe} 恒为
  * true：本对象的存在即代表“可展示”，未过投影器的模型原始文本不得进入对话表。</p>
  *
@@ -15,7 +16,7 @@ package com.matrix.agent.task.conversation;
  */
 public final class AssistantReply {
 
-    public enum Source { MODEL_FINAL, SYNTHESIZED_TERMINAL }
+    public enum Source { MODEL_FINAL, HOST_FACTS, SYNTHESIZED_TERMINAL }
 
     private final String text;
     private final Source source;
@@ -38,6 +39,14 @@ public final class AssistantReply {
 
     public static AssistantReply modelFinal(String sanitizedText, boolean truncated) {
         return new AssistantReply(sanitizedText, Source.MODEL_FINAL, true, truncated);
+    }
+
+    /**
+     * Host 依据已经结构化、写时净化的执行事实生成的最终说明。
+     * 它不是模型复述，也不是从审计文本猜测，因此可在模型只返回“任务完成”时兜住真机结果。
+     */
+    public static AssistantReply executionFacts(String explanation) {
+        return new AssistantReply(explanation, Source.HOST_FACTS, true, false);
     }
 
     public static AssistantReply synthesized(String explanation) {

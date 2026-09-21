@@ -6,6 +6,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -18,6 +19,8 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.matrix.agent.api.conversation.ConversationMessage;
+import com.matrix.agent.api.debug.DebugTraceWireEvent;
+import com.matrix.agent.launcher.BuildConfig;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
 
@@ -39,7 +42,6 @@ public final class ConversationFragment extends Fragment {
     private android.widget.Button voiceButton;
     private TextView dynamicTitle;
     private TextView summaryBadge;
-    private View exportButton;
     private ConversationViewModel viewModel;
     private int renderedCount;
 
@@ -57,8 +59,6 @@ public final class ConversationFragment extends Fragment {
         voiceButton = root.findViewById(R.id.conversation_voice);
         dynamicTitle = root.findViewById(R.id.conversation_dynamic_title);
         summaryBadge = root.findViewById(R.id.conversation_summary_badge);
-        exportButton = root.findViewById(R.id.conversation_export);
-        exportButton.setOnClickListener(ignored -> exportCurrentConversation());
         dynamicTitle.setOnLongClickListener(ignored -> {
             promptRename();
             return true;
@@ -66,7 +66,11 @@ public final class ConversationFragment extends Fragment {
 
         sendButton.setOnClickListener(ignored -> submitInput());
         input.setOnEditorActionListener((view, actionId, event) -> {
-            if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+            boolean imeSend = actionId == EditorInfo.IME_ACTION_SEND;
+            boolean hardwareEnter = event != null
+                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_DOWN;
+            if (imeSend || hardwareEnter) {
                 submitInput();
                 return true;
             }
@@ -137,8 +141,6 @@ public final class ConversationFragment extends Fragment {
             dynamicTitle.setText(value.conversationTitle);
         }
         summaryBadge.setVisibility(value.summaryActive ? View.VISIBLE : View.GONE);
-        exportButton.setEnabled(value.conversationId != null
-                && !value.messages.isEmpty());
     }
 
     private void renderNotice(ConversationViewModel.State value) {
@@ -170,7 +172,13 @@ public final class ConversationFragment extends Fragment {
         messageRows.removeAllViews();
         int from = Math.max(0, messages.size() - MAX_RENDERED_ROWS);
         for (int i = from; i < messages.size(); i++) {
-            messageRows.addView(buildRow(messages.get(i)));
+            ConversationViewModel.UiMessage message = messages.get(i);
+            messageRows.addView(buildRow(message));
+            // 过程不是最终答复的附属文案。它跟随本轮用户输入出现，最终回复自然排在其后；
+            // 因此调试事件到达时无需等待 assistant message 落库。
+            if (hasDebugTracePanel(message)) {
+                messageRows.addView(buildDebugTraceRow(message));
+            }
         }
         if (messageRows.getParent() instanceof android.widget.ScrollView scroll) {
             scroll.post(() -> scroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN));
@@ -178,35 +186,69 @@ public final class ConversationFragment extends Fragment {
     }
 
     private boolean rowsMatch(List<ConversationViewModel.UiMessage> messages) {
-        if (messageRows.getChildCount() != messages.size()) return false;
-        for (int i = 0; i < messages.size(); i++) {
-            Object tag = messageRows.getChildAt(i).getTag(R.id.conversation_messages);
-            ConversationViewModel.UiMessage expected = messages.get(i);
-            if (!(tag instanceof String signature) || !signature.equals(signatureOf(expected))) {
+        int expectedRowCount = 0;
+        for (ConversationViewModel.UiMessage message : messages) {
+            expectedRowCount += hasDebugTracePanel(message) ? 2 : 1;
+        }
+        if (messageRows.getChildCount() != expectedRowCount) return false;
+        int rowIndex = 0;
+        for (ConversationViewModel.UiMessage expected : messages) {
+            String signature = signatureOf(expected);
+            Object tag = messageRows.getChildAt(rowIndex++).getTag(R.id.conversation_messages);
+            if (!(tag instanceof String value) || !signature.equals(value)) {
                 return false;
+            }
+            if (hasDebugTracePanel(expected)) {
+                Object processTag = messageRows.getChildAt(rowIndex++)
+                        .getTag(R.id.conversation_messages);
+                if (!(processTag instanceof String processValue)
+                        || !("process:" + signature).equals(processValue)) {
+                    return false;
+                }
             }
         }
         return true;
     }
 
+    private boolean hasDebugTracePanel(ConversationViewModel.UiMessage message) {
+        return message.role() == ConversationMessage.ROLE_USER
+                && BuildConfig.MATRIX_DEBUG_TRACE_UI
+                && message.debugTraces() != null && !message.debugTraces().isEmpty();
+    }
+
     private View buildRow(ConversationViewModel.UiMessage message) {
         float density = getResources().getDisplayMetrics().density;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int maxBubbleWidth = (int) (screenWidth * 0.78f);
         boolean isUser = message.role() == ConversationMessage.ROLE_USER;
         boolean isSystem = message.role() == ConversationMessage.ROLE_SYSTEM;
+        int avatarSize = (int) (42 * density + .5f);
+        int avatarGap = (int) (8 * density + .5f);
+        int sideInset = (int) (13 * density + .5f);
+        // 头像与气泡必须共同受屏宽约束，不能让长文本把头像挤出可视区。
+        int maxBubbleWidth = Math.min((int) (screenWidth * 0.72f),
+                screenWidth - avatarSize - avatarGap - sideInset * 2);
 
+        // 外层负责微信式左右编排；气泡只承载内容，不再承载“用户/助手”身份文字。
         LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.VERTICAL);
-        int padH = (int) (13 * density + .5f);
-        int padV = (int) (9 * density + .5f);
-        row.setPadding(padH, padV, padH, padV);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.TOP);
+        row.setPadding(sideInset, (int) (7 * density + .5f), sideInset,
+                (int) (7 * density + .5f));
         row.setTag(R.id.conversation_messages, signatureOf(message));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.bottomMargin = (int) (3 * density + .5f);
+        row.setLayoutParams(rowParams);
 
-        // 气泡背景：user 浅绿，assistant 白色卡片，system 灰色
+        LinearLayout bubbleContent = new LinearLayout(requireContext());
+        bubbleContent.setOrientation(LinearLayout.VERTICAL);
+        int bubblePadH = (int) (12 * density + .5f);
+        int bubblePadV = (int) (9 * density + .5f);
+        bubbleContent.setPadding(bubblePadH, bubblePadV, bubblePadH, bubblePadV);
+
         android.graphics.drawable.GradientDrawable bubble =
                 new android.graphics.drawable.GradientDrawable();
-        bubble.setCornerRadius(12 * density);
+        bubble.setCornerRadius(15 * density);
         if (isUser) {
             bubble.setColor(0xFFD4EDDA);
             bubble.setStroke(1, 0xFFB8DCC5);
@@ -216,135 +258,259 @@ public final class ConversationFragment extends Fragment {
             bubble.setColor(0xFFFEFFFC);
             bubble.setStroke(1, 0xFFD5E0DC);
         }
-        row.setBackground(bubble);
+        bubbleContent.setBackground(bubble);
+        LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 
-        // 左右对齐：助手靠左、用户靠右（聊天式布局）
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = isUser
-                ? android.view.Gravity.END
-                : android.view.Gravity.START;
-        int edgeMargin = (int) (4 * density + .5f);
-        int gapMargin = (int) (48 * density + .5f);
-        if (isUser) {
-            params.leftMargin = gapMargin;
-            params.rightMargin = edgeMargin;
-        } else {
-            params.leftMargin = edgeMargin;
-            params.rightMargin = gapMargin;
-        }
-        params.bottomMargin = (int) (5 * density + .5f);
-        row.setLayoutParams(params);
-
-        // 标题行（角色名 + 来源标签）
-        TextView heading = new TextView(requireContext());
-        heading.setTextSize(10);
-        heading.setTypeface(Typeface.DEFAULT_BOLD);
-        heading.setTextColor(ContextCompat.getColor(requireContext(),
-                isUser ? R.color.matrix_accent : R.color.matrix_primary));
-        heading.setText(headingText(message));
-        heading.setMaxWidth(maxBubbleWidth);
-        row.addView(heading, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        // 正文
         TextView body = new TextView(requireContext());
         body.setTextSize(14);
         body.setTextColor(ContextCompat.getColor(requireContext(),
                 isSystem ? R.color.matrix_muted : R.color.matrix_text));
         body.setText(message.text());
         body.setMaxWidth(maxBubbleWidth);
-        row.addView(body, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        bubbleContent.addView(body, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 状态行（仅用户消息非终态时显示）
         if (isUser && !isTerminalStatus(message.status())) {
             TextView status = new TextView(requireContext());
             status.setTextSize(10);
-            status.setTextColor(ContextCompat.getColor(requireContext(),
-                    R.color.matrix_muted));
+            status.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
             status.setText(statusText(message.status()));
             status.setMaxWidth(maxBubbleWidth);
-            row.addView(status, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            bubbleContent.addView(status, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
-        // steer 附属输入注记（评估 v1.0 §4.3）：“已并入”只由 OFFERED 声称
         if (isUser && message.inputKind() == ConversationMessage.INPUT_STEER) {
             TextView steerNote = new TextView(requireContext());
             steerNote.setTextSize(10);
             steerNote.setTypeface(Typeface.DEFAULT_BOLD);
-            steerNote.setTextColor(ContextCompat.getColor(requireContext(),
-                    R.color.matrix_primary));
-            steerNote.setText(steerNoteText(message.steerDeliveryState(),
-                            message.status()));
+            steerNote.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_primary));
+            steerNote.setText(steerNoteText(message.steerDeliveryState(), message.status()));
             steerNote.setMaxWidth(maxBubbleWidth);
-            row.addView(steerNote, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            bubbleContent.addView(steerNote, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
-        // 能力事实轨迹（评估 v1.0 §4.3）：两段式“请求 X → 核验为 Y”，不一致以 Y 为准
-        if (isUser && message.executionTraces() != null
-                && !message.executionTraces().isEmpty()) {
-            for (com.matrix.agent.api.conversation.CapabilityTraceEntry trace
-                    : message.executionTraces()) {
-                row.addView(buildTraceRow(trace, maxBubbleWidth, density));
-            }
+        if (isSystem) {
+            row.addView(weightSpacer());
+            row.addView(bubbleContent, bubbleParams);
+            row.addView(weightSpacer());
+        } else if (isUser) {
+            row.addView(weightSpacer());
+            row.addView(bubbleContent, bubbleParams);
+            row.addView(avatarView(R.drawable.avatar_user_penguin,
+                    R.string.conversation_avatar_user, 0xFFDCEEF9),
+                    avatarLayoutParams(avatarSize, avatarGap, true));
+        } else {
+            row.addView(avatarView(R.drawable.avatar_assistant_matrix,
+                    R.string.conversation_avatar_assistant, 0xFFD6E9E4),
+                    avatarLayoutParams(avatarSize, avatarGap, false));
+            row.addView(bubbleContent, bubbleParams);
+            row.addView(weightSpacer());
         }
 
-        // 长按菜单（阶段 3/4 入口）：收藏 / 引用回复 / 分支 / 朗读 / 复制
         row.setOnLongClickListener(view -> {
             showActions(message);
             return true;
         });
-
         return row;
     }
 
-    private View buildTraceRow(com.matrix.agent.api.conversation.CapabilityTraceEntry trace,
-            int maxBubbleWidth, float density) {
-        LinearLayout line = new LinearLayout(requireContext());
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        TextView text = new TextView(requireContext());
-        text.setTextSize(10);
-        text.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
-        StringBuilder sb = new StringBuilder("· ");
-        sb.append(trace.friendlyName == null ? trace.capabilityId : trace.friendlyName);
-        if (trace.requestedDisplay != null) {
-            sb.append("：请求 ").append(trace.requestedDisplay);
-        }
-        if (trace.verifiedDisplay != null) {
-            sb.append(" → 核验为 ").append(trace.verifiedDisplay);
-        }
-        sb.append("（").append(verifyText(trace.verificationState)).append("）");
-        text.setText(sb.toString());
-        text.setMaxWidth(maxBubbleWidth);
-        line.addView(text, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        return line;
+    private View weightSpacer() {
+        View spacer = new View(requireContext());
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        return spacer;
     }
 
-    private String verifyText(String verificationState) {
-        String state = verificationState == null ? "" : verificationState;
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_MISMATCH
-                .equals(state)) {
-            return getString(R.string.conversation_trace_mismatch);
+    private LinearLayout.LayoutParams avatarLayoutParams(int size, int gap, boolean userSide) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+        if (userSide) params.setMarginStart(gap);
+        else params.setMarginEnd(gap);
+        return params;
+    }
+
+    private android.widget.ImageView avatarView(int drawableRes, int descriptionRes,
+            int backgroundColor) {
+        android.widget.ImageView avatar = new android.widget.ImageView(requireContext());
+        avatar.setImageResource(drawableRes);
+        avatar.setContentDescription(getString(descriptionRes));
+        avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setShape(GradientDrawable.OVAL);
+        mask.setColor(backgroundColor);
+        avatar.setBackground(mask);
+        avatar.setClipToOutline(true);
+        return avatar;
+    }
+
+    /**
+     * 独立的过程卡，不属于最终 assistant 气泡。它的顺序由 renderMessages 保证为：
+     * USER → PROCESS → ASSISTANT；真实事实的所有权仍在 user/task link，不被 UI 重写。
+     */
+    private View buildDebugTraceRow(ConversationViewModel.UiMessage userMessage) {
+        float density = getResources().getDisplayMetrics().density;
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int maxWidth = (int) (screenWidth * 0.78f);
+
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding((int) (13 * density + .5f), (int) (8 * density + .5f),
+                (int) (13 * density + .5f), (int) (8 * density + .5f));
+        row.setBackground(roundedBackground(0xFFF3F7F7, 0xFFD2DFE1, 12 * density));
+        row.setTag(R.id.conversation_messages, "process:" + signatureOf(userMessage));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(maxWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.gravity = android.view.Gravity.START;
+        params.leftMargin = (int) (4 * density + .5f);
+        params.rightMargin = (int) (48 * density + .5f);
+        params.bottomMargin = (int) (5 * density + .5f);
+        row.setLayoutParams(params);
+        row.addView(buildDebugTracePanel(userMessage.debugTraces(), maxWidth - (int) (26 * density),
+                density));
+        return row;
+    }
+
+    /**
+     * Operit 同构的过程组：一轮 AI 回复把连续的思考、工具请求和工具结果编排成一个
+     * 可折叠组；组内“思考”和每个 capability 又各自独立折叠。这里不是 Logcat 的镜像：
+     * 只展示写时已脱敏的事实投影，且只在 debug/internal 构建可达。
+     */
+    private View buildDebugTracePanel(List<DebugTraceWireEvent> rawEvents, int maxBubbleWidth,
+            float density) {
+        List<DebugTraceTimeline.Node> nodes = DebugTraceTimeline.from(rawEvents);
+        int thinkingCount = 0;
+        int toolCount = 0;
+        for (DebugTraceTimeline.Node node : nodes) {
+            if (node.kind == DebugTraceTimeline.Kind.THINKING) thinkingCount++;
+            if (node.kind == DebugTraceTimeline.Kind.TOOL) toolCount++;
         }
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNKNOWN
-                .equals(state)) {
-            return getString(R.string.conversation_trace_unknown);
+
+        LinearLayout panel = new LinearLayout(requireContext());
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(0, (int) (7 * density + .5f), 0, (int) (4 * density + .5f));
+
+        TextView header = new TextView(requireContext());
+        header.setTextSize(11);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setTextColor(0xFF4B6470);
+        header.setCompoundDrawablePadding((int) (5 * density + .5f));
+        header.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_info_details,
+                0, android.R.drawable.arrow_down_float, 0);
+        String groupText = thinkingCount == 0
+                ? getString(R.string.conversation_debug_trace_group_without_reasoning, toolCount)
+                : getString(R.string.conversation_debug_trace_group, thinkingCount, toolCount);
+        header.setText(groupText);
+        header.setContentDescription(groupText);
+        header.setPadding(0, (int) (3 * density + .5f), 0, (int) (4 * density + .5f));
+        panel.addView(header, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout detail = new LinearLayout(requireContext());
+        detail.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable background = roundedBackground(0xFFF4F7F8, 0xFFD6E0E4, 9 * density);
+        detail.setBackground(background);
+        int inset = (int) (8 * density + .5f);
+        detail.setPadding(inset, inset, inset, inset);
+        // Operit 的静态消息默认收起；进行中的消息才能自动展开。Matrix 只持久化 final，
+        // 因而重进会话保持稳定、可预期的收起状态。
+        detail.setVisibility(View.GONE);
+        for (int i = 0; i < nodes.size(); i++) {
+            detail.addView(buildDebugTraceNode(nodes.get(i), i == nodes.size() - 1,
+                    maxBubbleWidth - inset * 2, density));
         }
-        if (com.matrix.agent.api.conversation.CapabilityTraceEntry.VERIFY_UNAVAILABLE
-                .equals(state)) {
-            return getString(R.string.conversation_trace_unavailable);
+        panel.addView(detail, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        header.setOnClickListener(ignored -> {
+            boolean expanding = detail.getVisibility() != View.VISIBLE;
+            detail.setVisibility(expanding ? View.VISIBLE : View.GONE);
+            header.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_info_details,
+                    0, expanding ? android.R.drawable.arrow_up_float
+                            : android.R.drawable.arrow_down_float, 0);
+        });
+        return panel;
+    }
+
+    private View buildDebugTraceNode(DebugTraceTimeline.Node node, boolean last, int maxWidth,
+            float density) {
+        LinearLayout item = new LinearLayout(requireContext());
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setPadding(0, 0, 0, last ? 0 : (int) (7 * density + .5f));
+
+        LinearLayout rail = new LinearLayout(requireContext());
+        rail.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        rail.setOrientation(LinearLayout.VERTICAL);
+        TextView dot = new TextView(requireContext());
+        dot.setText(node.kind == DebugTraceTimeline.Kind.THINKING ? "✦" : "●");
+        dot.setTextSize(12);
+        dot.setGravity(android.view.Gravity.CENTER);
+        dot.setTextColor(node.kind == DebugTraceTimeline.Kind.TOOL
+                ? node.statusColor() : 0xFF5C7D89);
+        rail.addView(dot, new LinearLayout.LayoutParams((int) (18 * density + .5f),
+                (int) (18 * density + .5f)));
+        if (!last) {
+            View guide = new View(requireContext());
+            guide.setBackgroundColor(0xFFCBD8DD);
+            LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(
+                    Math.max(1, (int) density), 0, 1f);
+            guideParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+            rail.addView(guide, guideParams);
         }
-        return getString(R.string.conversation_trace_verified);
+        item.addView(rail, new LinearLayout.LayoutParams((int) (18 * density + .5f),
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding((int) (6 * density + .5f), 0, 0, 0);
+        TextView title = new TextView(requireContext());
+        title.setTextSize(11);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(0xFF38505B);
+        title.setCompoundDrawablePadding((int) (4 * density + .5f));
+        title.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.arrow_down_float, 0);
+        title.setText(node.title(requireContext()));
+        title.setMaxWidth(maxWidth - (int) (24 * density + .5f));
+        card.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView preview = new TextView(requireContext());
+        preview.setTextSize(10);
+        preview.setTextColor(0xFF657980);
+        preview.setText(node.preview(requireContext()));
+        preview.setMaxLines(2);
+        preview.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        preview.setMaxWidth(maxWidth - (int) (24 * density + .5f));
+        card.addView(preview, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView content = new TextView(requireContext());
+        content.setTextSize(10);
+        content.setTypeface(Typeface.MONOSPACE);
+        content.setTextColor(0xFF455B64);
+        content.setText(node.detail(requireContext()));
+        content.setMaxWidth(maxWidth - (int) (30 * density + .5f));
+        content.setPadding((int) (9 * density + .5f), (int) (5 * density + .5f), 0, 0);
+        content.setBackground(roundedBackground(0xFFEAF0F2, 0x00000000, 5 * density));
+        content.setVisibility(View.GONE);
+        card.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        title.setOnClickListener(ignored -> {
+            boolean expanding = content.getVisibility() != View.VISIBLE;
+            content.setVisibility(expanding ? View.VISIBLE : View.GONE);
+            title.setCompoundDrawablesWithIntrinsicBounds(0, 0,
+                    expanding ? android.R.drawable.arrow_up_float
+                            : android.R.drawable.arrow_down_float, 0);
+        });
+        item.addView(card, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return item;
+    }
+
+    private GradientDrawable roundedBackground(int color, int strokeColor, float radius) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(radius);
+        if (strokeColor != 0x00000000) background.setStroke(1, strokeColor);
+        return background;
     }
 
     private String steerNoteText(int steerDeliveryState, int status) {
@@ -445,41 +611,17 @@ java.util.List<String> options = new java.util.ArrayList<>();
                 .show();
     }
 
-    private void exportCurrentConversation() {
-        viewModel.exportCurrent(uri -> {
-            android.content.Intent share = new android.content.Intent(
-                    android.content.Intent.ACTION_SEND);
-            share.setType("text/markdown");
-            share.putExtra(android.content.Intent.EXTRA_STREAM,
-                    android.net.Uri.parse(uri));
-            share.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(android.content.Intent.createChooser(share,
-                    getString(R.string.conversation_export)));
-        });
-    }
-
     private static String signatureOf(ConversationViewModel.UiMessage message) {
-        return message.sequence() + ":" + message.status() + ":" + message.text().length();
-    }
-
-    private String headingText(ConversationViewModel.UiMessage message) {
-        return switch (message.role()) {
-            case ConversationMessage.ROLE_USER -> getString(R.string.conversation_role_user)
-                    + channelSuffix(message.channel());
-            case ConversationMessage.ROLE_ASSISTANT -> getString(
-                    R.string.conversation_role_assistant);
-            default -> getString(R.string.conversation_role_system);
-        };
-    }
-
-    private String channelSuffix(int channel) {
-        return switch (channel) {
-            case ConversationMessage.CHANNEL_PTT -> " · " + getString(
-                    R.string.conversation_channel_voice);
-            case ConversationMessage.CHANNEL_WAKE -> " · " + getString(
-                    R.string.conversation_channel_wake);
-            default -> "";
-        };
+        StringBuilder traceSignature = new StringBuilder();
+        if (message.debugTraces() != null) {
+            for (DebugTraceWireEvent event : message.debugTraces()) {
+                traceSignature.append(event.traceId).append(':').append(event.partIndex)
+                        .append(':').append(event.payload == null ? 0 : event.payload.hashCode())
+                        .append(';');
+            }
+        }
+        return message.sequence() + ":" + message.status() + ":" + message.text().length()
+                + ":" + message.executionTraces().hashCode() + ":" + traceSignature;
     }
 
     private boolean isTerminalStatus(int status) {

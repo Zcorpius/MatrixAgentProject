@@ -9,6 +9,8 @@ import com.matrix.agent.task.AgentOutcome;
 import com.matrix.agent.task.StopReason;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.task.Trajectory;
+import com.matrix.agent.conversation.CapabilityExecutionTrace;
+import com.matrix.agent.conversation.ConversationExecutionReplyProjector;
 
 import org.junit.Test;
 
@@ -81,6 +83,31 @@ public final class ConversationAssistantProjectorTest {
         AssistantReply reply = ConversationAssistantProjector.project(
                 outcome(TaskState.SUCCEEDED, StopReason.NO_TOOL_CALL, "   "), 2000);
         assertEquals(AssistantReply.Source.SYNTHESIZED_TERMINAL, reply.source());
+    }
+
+    @Test public void genericCompletionIsReplacedByVerifiedHostFacts() {
+        AssistantReply reply = ConversationExecutionReplyProjector.replaceGenericCompletion(
+                ConversationAssistantProjector.project(
+                        outcome(TaskState.SUCCEEDED, StopReason.NO_TOOL_CALL, "任务完成"), 2000),
+                CapabilityExecutionTrace.listOf(new CapabilityExecutionTrace(
+                        "system.media.set_volume", "调整媒体音量",
+                        CapabilityExecutionTrace.OUTCOME_SUCCESS, "percent=35", "percent=33",
+                        CapabilityExecutionTrace.VERIFY_MISMATCH)));
+
+        assertEquals(AssistantReply.Source.HOST_FACTS, reply.source());
+        assertEquals("已将媒体音量设置为35%，设备当前为33%。", reply.text());
+    }
+
+    @Test public void meaningfulModelFinalIsNotOverwrittenByHostFacts() {
+        AssistantReply original = ConversationAssistantProjector.project(
+                outcome(TaskState.SUCCEEDED, StopReason.NO_TOOL_CALL, "已经为你调整好了音量。"),
+                2000);
+        AssistantReply reply = ConversationExecutionReplyProjector.replaceGenericCompletion(original,
+                CapabilityExecutionTrace.listOf(new CapabilityExecutionTrace(
+                        "system.media.set_volume", "调整媒体音量",
+                        CapabilityExecutionTrace.OUTCOME_SUCCESS, "percent=35", "percent=33",
+                        CapabilityExecutionTrace.VERIFY_MISMATCH)));
+        assertEquals(original, reply);
     }
 
     @Test public void replyRejectsBlankText() {

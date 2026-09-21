@@ -1,6 +1,8 @@
 <resources>
     <color name="matrix_primary">#206D78</color>
     <color name="matrix_primary_dark">#102D3A</color>
+    <!-- 全局 chrome：侧边栏、状态栏与工作区顶部必须共用同一实色，不能各自绘制渐变。 -->
+    <color name="matrix_chrome">#123843</color>
     <color name="matrix_accent">#EF6B4A</color>
     <color name="matrix_surface">#F5F8F6</color>
     <color name="matrix_card">#FEFFFC</color>

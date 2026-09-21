@@ -29,7 +29,11 @@ import com.matrix.agent.launcher.presentation.VoiceFragment;
 
 /** Shell navigation only; feature pages keep their own MVVM state and SDK boundary. */
 public final class LauncherActivity extends AppCompatActivity {
+    /** φ⁻¹：导航覆盖屏幕 61.803%，保留 38.197% 的工作区作为空间锚点。 */
+    private static final double DRAWER_GOLDEN_RATIO = 0.61803398875d;
+
     private DrawerLayout drawer;
+    private View drawerContent;
     private TextView status;
     private TextView pageTitle;
     private Button conversation;
@@ -48,6 +52,8 @@ public final class LauncherActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_launcher);
         drawer = findViewById(R.id.drawer_layout);
+        drawerContent = findViewById(R.id.drawer_content);
+        applyGoldenRatioDrawerWidth();
         applySystemBarInsets();
         status = findViewById(R.id.host_status);
         pageTitle = findViewById(R.id.page_title);
@@ -130,12 +136,47 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void updateConnection(int state) {
-        status.setText(state == ConnectionState.CONNECTED ? R.string.launcher_host_online
-                : R.string.launcher_host_connecting);
+        switch (state) {
+            case ConnectionState.CONNECTED:
+                status.setText(R.string.launcher_host_online);
+                break;
+            case ConnectionState.CONNECTING:
+                status.setText(R.string.launcher_host_connecting);
+                break;
+            case ConnectionState.SERVICE_NOT_READY:
+                status.setText(R.string.launcher_host_not_ready);
+                break;
+            case ConnectionState.PERMISSION_DENIED:
+                status.setText(R.string.launcher_host_access_denied);
+                break;
+            case ConnectionState.DISCONNECTED:
+            default:
+                status.setText(R.string.launcher_host_disconnected);
+                break;
+        }
     }
 
     public LauncherViewModelFactory viewModelFactory() { return viewModelFactory; }
     public int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density + .5f); }
+
+    /**
+     * DrawerLayout 的宽度必须基于实际窗口而不是固定 dp：分屏、旋转或显示尺寸变化后，
+     * 仍按同一黄金比例覆盖当前工作区。XML 的 240dp 仅用于首次测量前的安全回退。
+     */
+    private void applyGoldenRatioDrawerWidth() {
+        drawer.addOnLayoutChangeListener((view, left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom) -> {
+            int availableWidth = right - left;
+            if (availableWidth <= 0) return;
+            int goldenWidth = (int) Math.round(availableWidth * DRAWER_GOLDEN_RATIO);
+            DrawerLayout.LayoutParams params =
+                    (DrawerLayout.LayoutParams) drawerContent.getLayoutParams();
+            if (params.width != goldenWidth) {
+                params.width = goldenWidth;
+                drawerContent.setLayoutParams(params);
+            }
+        });
+    }
 
     /**
      * Android 15+ draws app content edge-to-edge by default.  Keep the workspace and drawer
@@ -144,10 +185,15 @@ public final class LauncherActivity extends AppCompatActivity {
      */
     private void applySystemBarInsets() {
         View workspace = findViewById(R.id.workspace_content);
-        View drawerContent = findViewById(R.id.drawer_content);
         ViewCompat.setOnApplyWindowInsetsListener(drawer, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            workspace.setPadding(0, bars.top, 0, bars.bottom);
+            // Android 15 enforces edge-to-edge for this target SDK.  In that mode an
+            // activity-level adjustResize flag alone is not a reliable IME contract:
+            // the keyboard can be drawn over the workspace.  The workspace owns the
+            // page container, so reserve the larger of navigation-bar and IME bottoms
+            // here.  This keeps the conversation composer actionable on every IME.
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            workspace.setPadding(0, bars.top, 0, Math.max(bars.bottom, ime.bottom));
             drawerContent.setPadding(dp(24), dp(28) + bars.top, dp(20), dp(24) + bars.bottom);
             return insets;
         });

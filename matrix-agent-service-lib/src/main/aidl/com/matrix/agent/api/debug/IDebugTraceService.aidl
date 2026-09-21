@@ -12,5 +12,8 @@ interface IDebugTraceService {
     /** 订阅；返回回放快照（可能为空）。UI 关闭或不可用时返回空列表。 */
     List<DebugTraceWireEvent> subscribe(IDebugTraceCallback callback);
 
+    /** 调试构建重进会话时按用户消息锚点恢复；量产/未命中返回空。 */
+    List<DebugTraceWireEvent> getHistory(String hostUserMessageId, int limit);
+
     void unsubscribe(IDebugTraceCallback callback);
 }

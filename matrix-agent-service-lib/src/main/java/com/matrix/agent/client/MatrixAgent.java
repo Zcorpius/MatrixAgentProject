@@ -204,6 +204,11 @@ public final class MatrixAgent {
         return (ConversationManager) getMatrixManager(MatrixServiceConstants.CONVERSATION_SERVICE);
     }
 
+    /** 内部调试轨迹；release Host/Launcher 均由 BuildConfig 门控而不消费此入口。 */
+    public DebugTraceManager getDebugTraceManager() {
+        return (DebugTraceManager) getMatrixManager(MatrixServiceConstants.DEBUG_TRACE_SERVICE);
+    }
+
     /**
      * 按服务名常量取 Manager（扩展入口；常规业务用四个类型安全方法）。
      * Manager 实例跨断线稳定复用：断线后内部 proxy 置失效，重连自动换绑。
@@ -552,6 +557,8 @@ public final class MatrixAgent {
                 return new DownloadManager(this, serviceBinder);
             case MatrixServiceConstants.CONVERSATION_SERVICE:
                 return new ConversationManager(this, serviceBinder);
+            case MatrixServiceConstants.DEBUG_TRACE_SERVICE:
+                return new DebugTraceManager(this, serviceBinder);
             default:
                 Log.w(TAG, "unknown matrix service: " + serviceName);
                 return null;

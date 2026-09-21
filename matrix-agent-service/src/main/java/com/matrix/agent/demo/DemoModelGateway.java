@@ -133,13 +133,13 @@ public final class DemoModelGateway implements ModelGateway {
             steps.add(new ToolCall("vehicle.info.get_tire_pressure", new LinkedHashMap<>()));
         }
 
-        if (containsAny(text, "音量", "声音")) {
-            Integer percent = findNumber(text);
+        if (containsAny(text, "音量", "声音", "volume", "sound")) {
+            Integer percent = resolveControlPercent(text);
             if (percent != null) steps.add(call("system.media.set_volume", "percent", percent));
         }
 
-        if (containsAny(text, "亮度", "屏幕亮")) {
-            Integer percent = findNumber(text);
+        if (containsAny(text, "亮度", "屏幕亮", "brightness", "screen brightness")) {
+            Integer percent = resolveControlPercent(text);
             if (percent != null) steps.add(call("system.display.set_brightness", "percent", percent));
         }
 
@@ -200,6 +200,21 @@ public final class DemoModelGateway implements ModelGateway {
     private static Integer findNumber(String text) {
         Matcher matcher = NUMBER_PATTERN.matcher(text);
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : null;
+    }
+
+    /**
+     * 离线规则的受限百分比解析。数字优先（避免“30 到 60”被语义词覆盖）；没有数字时
+     * 才处理用户明确的端点词。这样“音量调到最低”不会错误降级为 knowledge.answer。
+     * 相对词不在这里臆测当前值——无可靠 readback 时宁可不执行，交给云端模型追问。
+     */
+    private static Integer resolveControlPercent(String text) {
+        Integer explicit = findNumber(text);
+        if (explicit != null) return Math.max(0, Math.min(100, explicit));
+        if (containsAny(text, "静音", "最低", "最小", "关闭声音",
+                "mute", "minimum", "lowest", "zero")) return 0;
+        if (containsAny(text, "最大", "最高", "拉满", "全亮",
+                "maximum", "highest", "full", "max")) return 100;
+        return null;
     }
 
     private static String resolveDestination(String text) {

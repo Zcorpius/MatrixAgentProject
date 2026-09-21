@@ -69,9 +69,6 @@ interface IConversationService {
     /** 子会话的来源说明（可空：非分支会话或父已清除）。 */
     String getLineageSummary(String childConversationId);
 
-    /** 只读导出为 Markdown：返回受授予 content URI（FileProvider）；失败/降级返回 null。 */
-    String exportConversation(String conversationId, String clientOperationId);
-
     /** 朗读一条助手最终回复（评估 v1.0 §4.8）：Host 重读投影文本经既有 TTS/焦点治理播报；
      *  活跃语音会话返回 INVALID_STATE。 */
     ConversationOperationResult speakAssistantMessage(String conversationId,
