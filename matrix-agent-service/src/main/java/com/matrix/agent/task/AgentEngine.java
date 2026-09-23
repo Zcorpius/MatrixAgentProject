@@ -113,6 +113,14 @@ public final class AgentEngine {
      * LLM 摘要 + heuristic 降级双路径。
      */
     private final ConversationCompressor conversationCompressor;
+    /**
+     * TaskProgressSink——受限运行阶段出站端口（输入交互增强 I3）。
+     *
+     * <p>默认 {@link com.matrix.agent.task.port.TaskProgressSink#NOOP}；conversation
+     * 侧桥接器注入后，在“进入模型前/进入能力执行前”两个观测点发布阶段。实现自
+     * fail-open，失败不得影响任务执行。
+     */
+    private final com.matrix.agent.task.port.TaskProgressSink taskProgressSink;
 
     public AgentEngine(ModelGateway modelGateway, ModelCallExecutor modelCallExecutor,
             PolicyEngine policyEngine, CapabilityRegistry registry, CapabilityProvider provider,
@@ -179,6 +187,7 @@ public final class AgentEngine {
         this.auditEventRecorder = safeConfiguration.auditEventRecorder();
         this.tokenizer = safeConfiguration.tokenizer();
         this.conversationCompressor = safeConfiguration.conversationCompressor();
+        this.taskProgressSink = safeConfiguration.taskProgressSink();
         this.modelSanitizer = new ModelSanitizer(budget.getMaxMessageChars());
         // 注入 CapabilityRegistry,AuditRedactor 按 schema 脱敏 memory.preference.value、
         // navigation.destination、contact.phone 等业务敏感字段,不再依赖自由文本凭据正则。
@@ -191,14 +200,30 @@ public final class AgentEngine {
                 + " promptContext=" + promptContextAssembler.getClass().getSimpleName());
     }
 
+    /** 进度发布 fail-open：阶段事件异常绝不影响任务执行（I3 端口契约）。 */
+    private void publishPlanning(String runtimeRequestId) {
+        try {
+            taskProgressSink.onModelPlanning(runtimeRequestId);
+        } catch (RuntimeException progressFailure) {
+            Log.w(TAG, "[Engine] progress publish failed (planning)", progressFailure);
+        }
+    }
+
+    private void publishExecuting(String runtimeRequestId, String capabilityName) {
+        try {
+            taskProgressSink.onCapabilityExecuting(runtimeRequestId, capabilityName);
+        } catch (RuntimeException progressFailure) {
+            Log.w(TAG, "[Engine] progress publish failed (executing)", progressFailure);
+        }
+    }
+
     /** 对外暴露的追加转向指令入口,null mailbox 时直接返回 false。 */
     public boolean offerSteer(String sessionId, Steer steer) {
         if (steerMailbox == null) {
             Log.w(TAG, "[Engine] offerSteer ignored, no SteerMailbox configured");
             return false;
         }
-        steerMailbox.offer(sessionId, steer);
-        return true;
+        steerMailbox.offer(sessionId, steer);        return true;
     }
 
     public AgentOutcome execute(AgentRequest request) {
@@ -337,6 +362,9 @@ public final class AgentEngine {
                 ModelTurnRequest turnRequest = new ModelTurnRequest(request, conversation, tools,
                         systemPrompt, sessionContext);
                 Log.d(TAG, "[Engine] iter " + iteration + " -> ModelGateway.decide()");
+                // 运行阶段（I3）：进入模型前发布 PLANNING。压缩摘要调用在
+                // tryCompressConversation 内部、不经过此处，天然不发布（§6.4）。
+                publishPlanning(request.getRequestId());
                 ModelCallExecutor.Result result = modelCallExecutor.decide(modelGateway, turnRequest);
                 if (!result.isSuccess()) {
                     stopReason = result.getTerminalReason();
@@ -558,6 +586,8 @@ public final class AgentEngine {
                         call.getCapabilityName(), redactedArgsForAudit,
                         redactedArgsForAudit.toString(), request.getEpoch());
                 CapabilityDefinition definition = policyEngine.findDefinition(call.getCapabilityName());
+                // 运行阶段（I3）：进入能力执行前发布 EXECUTING（capability 名，非参数/结果）。
+                publishExecuting(request.getRequestId(), call.getCapabilityName());
                 ToolResult toolResult = toolExecutor.execute(provider, definition, request, call);
                 // ToolResult message 是 Provider 给的诊断文本,可能含目的地 / 联系人
                 // (如"导航到北京市某小区失败"),用 SafeLog 占位符包裹。status / verified / durationMs
@@ -685,7 +715,7 @@ public final class AgentEngine {
      * 按 {@link StopReason} 先判终止性质,再算最终状态:
      * <ul>
      *   <li>{@code DONE} / {@code NO_TOOL_CALL}:正常结束,按 Tool 结果分 SUCCEEDED / PARTIALLY / FAILED。</li>
-     *   <li>{@code CANCELLED} / {@code TIMEOUT}:直接对应 TaskState。</li>
+     *   <li>{@code CANCELLED} / {@code TIMEOUT} / {@code NETWORK_UNAVAILABLE}:直接对应 TaskState。</li>
      *   <li>{@code MAX_ITERATIONS} / {@code MAX_TOOL_CALLS} / {@code BUDGET_EXHAUSTED} / {@code POLICY_HALT}:
      *       异常终止——有部分成功结果最多 PARTIALLY_SUCCEEDED,**永远不能 SUCCEEDED**。
      *       否则失控循环(模型一直调成功查询 Tool 直到耗尽预算)会被错判为成功。</li>
@@ -694,6 +724,7 @@ public final class AgentEngine {
     private static TaskState computeFinalState(Trajectory trajectory, StopReason stopReason) {
         if (stopReason == StopReason.CANCELLED) return TaskState.CANCELLED;
         if (stopReason == StopReason.TIMEOUT) return TaskState.TIMED_OUT;
+        if (stopReason == StopReason.NETWORK_UNAVAILABLE) return TaskState.NETWORK_UNAVAILABLE;
         // 用户推迟语义——不是失败,被推迟的任务可被重新调度。
         if (stopReason == StopReason.DEFERRED) return TaskState.DEFERRED;
 

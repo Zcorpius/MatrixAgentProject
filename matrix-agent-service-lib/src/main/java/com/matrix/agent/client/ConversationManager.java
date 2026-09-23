@@ -4,11 +4,13 @@ import android.os.IBinder;
 import android.os.RemoteException;
 
 import com.matrix.agent.api.common.MatrixErrorCode;
+import com.matrix.agent.api.conversation.ConversationDraft;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationListQuery;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationOperationResult;
 import com.matrix.agent.api.conversation.ConversationPage;
+import com.matrix.agent.api.conversation.ConversationRuntimeStage;
 import com.matrix.agent.api.conversation.ConversationSubmission;
 import com.matrix.agent.api.conversation.CreateConversationRequest;
 import com.matrix.agent.api.conversation.IConversationCallback;
@@ -187,6 +189,56 @@ public final class ConversationManager extends MatrixManagerBase {
         }
     }
 
+    /**
+     * 统一提交（v7）：Host 在会话门控内原子判定 steer 或新主轮次；调用方不预读状态。
+     * attachments 传空列表（Phase 2A 之前 Host 拒绝非空）。
+     */
+    public ConversationSubmission submitTextOrAppend(String conversationId, String text,
+            List<String> contextAttachmentIds, String draftInstanceId, long draftRevision,
+            String clientOperationId) {
+        IConversationService s = service;
+        if (s == null) return unavailableSubmission(conversationId);
+        try {
+            ConversationSubmission result = s.submitTextOrAppend(conversationId, text,
+                    contextAttachmentIds, draftInstanceId, draftRevision, clientOperationId);
+            return result == null ? unavailableSubmission(conversationId) : result;
+        } catch (RemoteException e) {
+            return handleRemoteException(e, unavailableSubmission(conversationId));
+        }
+    }
+
+    /** 会话草稿读取；无草稿或不可用返回 null。 */
+    public ConversationDraft getDraft(String conversationId) {
+        IConversationService s = service;
+        if (s == null) return null;
+        try {
+            return s.getDraft(conversationId);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, null);
+        }
+    }
+
+    /** 保存草稿；返回 MatrixErrorCode（INVALID_STATE = instance 已被提交消费）。 */
+    public int saveDraft(ConversationDraft draft) {
+        IConversationService s = service;
+        if (s == null) return MatrixErrorCode.SERVICE_NOT_READY;
+        try {
+            return s.saveDraft(draft);
+        } catch (RemoteException e) {
+            return handleRemoteException(e, MatrixErrorCode.SERVICE_NOT_READY);
+        }
+    }
+
+    public void discardDraft(String conversationId, String draftInstanceId, long revision) {
+        IConversationService s = service;
+        if (s == null) return;
+        try {
+            s.discardDraft(conversationId, draftInstanceId, revision);
+        } catch (RemoteException e) {
+            handleRemoteException(e);
+        }
+    }
+
     /** 创建一次性 PTT 绑定（§8.1）。返回 bindingOperationId（小写 UUID）。 */
     public String createVoiceBinding(String conversationId, String clientOperationId) {
         IConversationService s = service;
@@ -234,6 +286,10 @@ public final class ConversationManager extends MatrixManagerBase {
                         listener.onTransientTranscript(convId, voiceSessionId, text, isFinal));
             }
 
+            @Override public void onRuntimeStageChanged(ConversationRuntimeStage stage) {
+                eventHandler().post(() -> listener.onRuntimeStageChanged(stage));
+            }
+
             @Override public void onConversationError(String convId, int errorCode) {
                 eventHandler().post(() -> listener.onConversationError(convId, errorCode));
             }
@@ -270,6 +326,7 @@ public final class ConversationManager extends MatrixManagerBase {
         default void onConversationInfoChanged(ConversationInfo info) { }
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
+        default void onRuntimeStageChanged(ConversationRuntimeStage stage) { }
         default void onConversationError(String conversationId, int errorCode) { }
     }
 

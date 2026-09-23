@@ -19,7 +19,8 @@ public final class PublicAbiGoldenTest {
     }
 
     @Test public void errorCodesRemainFrozen() {
-        assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+        assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                16, 17},
                 new int[] {MatrixErrorCode.SUCCESS, MatrixErrorCode.PERMISSION_DENIED,
                         MatrixErrorCode.SERVICE_NOT_READY,
                         MatrixErrorCode.IDEMPOTENCY_CONFLICT, MatrixErrorCode.TIMED_OUT,
@@ -28,7 +29,38 @@ public final class PublicAbiGoldenTest {
                         MatrixErrorCode.INVALID_ARGUMENT, MatrixErrorCode.NOT_FOUND,
                         MatrixErrorCode.UNSUPPORTED_OPERATION, MatrixErrorCode.TASK_FAILED,
                         MatrixErrorCode.CONTRACT_MISMATCH,
-                        MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE});
+                        MatrixErrorCode.VOICE_OUTPUT_UNAVAILABLE,
+                        MatrixErrorCode.PROCESS_INTERRUPTED,
+                        MatrixErrorCode.INVALID_STATE,
+                        MatrixErrorCode.SERVICE_VERSION_UNSUPPORTED});
+    }
+
+    @Test public void conversationInputContractRemainFrozen() {
+        // 输入交互增强 v7：submitTextOrAppend 判定结果与运行阶段 wire 值追加即冻结。
+        assertArrayEquals(new int[] {0, 1, 2, 3, 4}, new int[] {
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_UNSPECIFIED,
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_PRIMARY_ACCEPTED,
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_STEER_ACCEPTED,
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_INVALID_STATE,
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_REJECTED});
+        assertArrayEquals(new int[] {1, 2, 3}, new int[] {
+                com.matrix.agent.api.conversation.ConversationRuntimeStage.STAGE_QUEUED,
+                com.matrix.agent.api.conversation.ConversationRuntimeStage.STAGE_PLANNING,
+                com.matrix.agent.api.conversation.ConversationRuntimeStage.STAGE_EXECUTING});
+    }
+
+    @Test public void attachmentContractRemainsFrozen() {
+        // 输入交互增强 v8：附件 state/error wire 值与发现键/特性位追加即冻结。
+        assertArrayEquals(new int[] {1, 2}, new int[] {
+                com.matrix.agent.api.conversation.ConversationAttachment.STATE_READY,
+                com.matrix.agent.api.conversation.ConversationAttachment.STATE_FAILED});
+        assertArrayEquals(new int[] {20, 21, 22}, new int[] {
+                com.matrix.agent.api.conversation.ConversationAttachment
+                        .ERROR_UNSUPPORTED_MEDIA,
+                com.matrix.agent.api.conversation.ConversationAttachment.ERROR_TOO_LARGE,
+                com.matrix.agent.api.conversation.ConversationAttachment.ERROR_EMPTY_TEXT});
+        assertEquals("matrix.service.ATTACHMENT", MatrixServiceConstants.ATTACHMENT_SERVICE);
+        assertEquals(64, MatrixServiceConstants.FEATURE_ATTACHMENT_DOMAIN);
     }
 
     @Test public void eventsAndFeatureBitsRemainFrozen() {

@@ -24,6 +24,7 @@ final class PublicTaskStateMapper {
             case EXECUTING:
             case VERIFYING: return AgentTaskState.RUNNING;
             case TIMED_OUT:
+            case NETWORK_UNAVAILABLE:
             case FAILED:
             default: return AgentTaskState.FAILED;
         }

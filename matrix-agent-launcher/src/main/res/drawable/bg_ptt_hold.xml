@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 圆形麦克风：默认即主动作；按住加深（“松开发送”），Host 确认采音后转暖橙 accent
+     （“录音中…”）——“手指按着”与“麦克风已在听”是两个不同事实，不能共用同一种加深色。
+     按钮本体仍不承载文字（紧凑布局），文字提示由输入卡内的 PTT 状态条负责。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:left="7dp" android:top="7dp" android:right="7dp" android:bottom="7dp">
+                <shape android:shape="oval"><solid android:color="@color/matrix_accent" /></shape>
+            </item>
+        </layer-list>
+    </item>
+    <item android:state_pressed="true">
+        <layer-list>
+            <item android:left="7dp" android:top="7dp" android:right="7dp" android:bottom="7dp">
+                <shape android:shape="oval"><solid android:color="@color/composer_action_pressed" /></shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item android:left="7dp" android:top="7dp" android:right="7dp" android:bottom="7dp">
+                <shape android:shape="oval"><solid android:color="@color/composer_action" /></shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

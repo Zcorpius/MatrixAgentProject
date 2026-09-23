@@ -137,6 +137,7 @@ public final class AppContainer implements DownloadRuntime {
         modelGatewayRepository = modelGraph.repository();
         ModelApiClient modelClient = modelGraph.client();
         SecureModelConfigStore configStore = modelGraph.configStore();
+        this.modelConfigStore = configStore;
         IntentClassifier appClassifier = modelGraph.intentClassifier();
         AuditRuntimeGraph auditGraph = new AuditRuntimeGraph(appContext, database,
                 executorRegistry.timerScheduler());
@@ -170,6 +171,15 @@ public final class AppContainer implements DownloadRuntime {
         // SteerMailbox epoch gate——clearUserData 后,旧 Steer 在 drain 时
         // drop + audit(STEER_DROPPED_STALE)。staleHandler 在 auditEventRecorder 装配之后注入。
         steerMailbox.setStaleHandler(new SteerMailboxStaleHandler(auditEventRecorder));
+        // 运行阶段追踪（输入交互增强 I3）：registry+bridge 先于 task/conversation 两域创建——
+        // task 域经 TaskProgressSink 发布，conversation 域 bind/unbind 映射并投影。
+        // SQLCipher 降级时 conversation 域不装配，事件自然无处投递（fail-safe）。
+        com.matrix.agent.conversation.ConversationRuntimeStageRegistry progressRegistry =
+                new com.matrix.agent.conversation.ConversationRuntimeStageRegistry();
+        this.conversationProgressRegistry = progressRegistry;
+        this.conversationProgressBridge = new com.matrix.agent.conversation
+                .ConversationTaskProgressBridge(progressRegistry,
+                com.matrix.agent.voice.CapabilitySpeechNames::friendlyName);
         // TaskRuntimeGraph 是 task 域唯一组合根：AppContainer 不再持有 Engine 的构造细节，
         // 只把跨域基础设施组装成依赖对象交给它。
         TaskRuntimeGraph.Dependencies taskDependencies = new TaskRuntimeGraph.Dependencies();
@@ -195,11 +205,13 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.memoryStore = memoryStore;
         taskDependencies.intentClassifier = appClassifier;
         taskDependencies.lifecycleExecutor = executorRegistry.lifecycleExecutor();
+        taskDependencies.taskProgressSink = this.conversationProgressBridge;
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
-        // 调试轨迹发射器：日志汇无条件开启。仅 internal/debug + 显式 Gradle 属性时把
-        // 已净化投影写入 SQLCipher 并允许 UI 订阅；release/false 会主动清掉残留 trace 行。
+        // 调试轨迹日志无条件开启。所有构建变体均只由显式 Gradle 属性
+        // matrix.debugTraceUi 决定是否把已净化投影写入 SQLCipher 并允许 UI 订阅；
+        // false 会主动清掉残留 trace 行，绝不把 buildType 变成隐藏的第二开关。
         boolean debugTraceUi = com.matrix.agent.BuildConfig.MATRIX_DEBUG_TRACE_UI;
         com.matrix.agent.debugtrace.DebugTraceStore debugTraceStore = null;
         if (database != null && debugTraceUi) {
@@ -284,6 +296,24 @@ public final class AppContainer implements DownloadRuntime {
     private com.matrix.agent.contract.LlmClient titleModelClient;
     private java.util.function.Supplier<com.matrix.agent.contract.ModelConfig>
             titleConfigSupplier;
+    /** 模型配置存储（I5：ModelExecutionSnapshot 的 generation/fingerprint 供应源）。 */
+    private com.matrix.agent.model.SecureModelConfigStore modelConfigStore;
+    /** 运行阶段追踪（I3）：先于 task/conversation 两域创建，MatrixServiceGraph 注入对话域。 */
+    private final com.matrix.agent.conversation.ConversationRuntimeStageRegistry
+            conversationProgressRegistry;
+    private final com.matrix.agent.conversation.ConversationTaskProgressBridge
+            conversationProgressBridge;
+
+    /** 对话运行阶段注册表（订阅快照/清理）；SQLCipher 降级时事件无处投递但实例仍安全。 */
+    public com.matrix.agent.conversation.ConversationRuntimeStageRegistry
+            getConversationProgressRegistry() {
+        return conversationProgressRegistry;
+    }
+
+    public com.matrix.agent.conversation.ConversationTaskProgressBridge
+            getConversationProgressBridge() {
+        return conversationProgressBridge;
+    }
 
     public ConversationTaskSubmitter getConversationTaskSubmitter() {
         return conversationTaskSubmitter;
@@ -301,6 +331,11 @@ public final class AppContainer implements DownloadRuntime {
     public java.util.function.Supplier<com.matrix.agent.contract.ModelConfig>
     getTitleConfigSupplier() {
         return titleConfigSupplier;
+    }
+
+    /** 模型配置存储（ConversationGraph 的 ModelExecutionSnapshot 供应方用）。 */
+    public com.matrix.agent.model.SecureModelConfigStore getModelConfigStore() {
+        return modelConfigStore;
     }
 
     /** 全局线程预算登记处；download/voice 等域统一取池，不自建。 */

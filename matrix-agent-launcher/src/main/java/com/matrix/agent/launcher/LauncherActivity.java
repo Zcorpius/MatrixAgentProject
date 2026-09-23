@@ -85,7 +85,11 @@ public final class LauncherActivity extends AppCompatActivity {
         });
 
         viewModelFactory = new LauncherViewModelFactory(
-                ((LauncherApplication) getApplication()).hostGateway());
+                ((LauncherApplication) getApplication()).hostGateway(),
+                new com.matrix.agent.launcher.data.DraftCommandLane(
+                        ((LauncherApplication) getApplication()).hostGateway(),
+                        ((LauncherApplication) getApplication()).executorRegistry()
+                                .draftCommands()));
         new ViewModelProvider(this, viewModelFactory).get(LauncherViewModel.class)
                 .connectionState().observe(this, this::updateConnection);
         if (savedInstanceState == null) showInitialPage(getIntent());
@@ -120,6 +124,11 @@ public final class LauncherActivity extends AppCompatActivity {
                 .replace(R.id.page_container, ModelFragment.forOnDevice(modelId)).commit();
         selectNavigation(models);
         drawer.closeDrawer(GravityCompat.START);
+    }
+
+    /** 模型胶囊入口（I5 §8.1）：跳转只读模型接入页（配置仍由 Host 管理）。 */
+    public void showModelsPage() {
+        show(new ModelFragment(), models, R.string.nav_models);
     }
 
     private void selectNavigation(Button selected) {

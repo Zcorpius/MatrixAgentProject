@@ -180,8 +180,8 @@ public final class ModelCallExecutor {
                         + elapsedMillis(callStarted));
                 return Result.terminal(StopReason.CANCELLED, "模型调用已取消(端侧)");
             }
-            // 网络层 / 超时异常映射为 TIMEOUT 终态(而非 POLICY_HALT):本层是模型决策阶段(调 LLM
-            // 决定下一步,尚未进入工具执行),网络/超时属时间类临时故障,归 TIMEOUT 语义最准确;
+            // 传输层网络异常和真实 deadline / OkHttp 超时必须区分：两者都尚未进入工具执行，
+            // 但前者可立即提示用户恢复网络，后者才是 TIMEOUT。
             // POLICY_HALT 留给协议/模型不可恢复错误(RateLimit/Server 重试耗尽、4xx、JSON 解析错)。
             // (注:写操作 EXECUTION_UNKNOWN 是 AgentRuntimeRepository 在整体 future 超时、且工具
             // 可能已下发时收敛的,与本层模型决策超时无关。)
@@ -192,9 +192,14 @@ public final class ModelCallExecutor {
             if (networkOrTimeout != null) {
                 Log.w(TAG, "[ModelCall] gateway network/timeout " + networkOrTimeout.getClass().getSimpleName()
                         + " (unwrapped from " + cause.getClass().getSimpleName() + ")"
-                        + " -> terminal=TIMEOUT costMs=" + elapsedMillis(callStarted), execution);
-                return Result.terminal(StopReason.TIMEOUT,
-                        "模型调用网络异常或超时:" + safeMessage(networkOrTimeout));
+                        + " -> terminal="
+                        + (networkOrTimeout instanceof ModelApiException.NetworkException
+                                ? "NETWORK_UNAVAILABLE" : "TIMEOUT")
+                        + " costMs=" + elapsedMillis(callStarted), execution);
+                return Result.terminal(networkOrTimeout instanceof ModelApiException.NetworkException
+                                ? StopReason.NETWORK_UNAVAILABLE : StopReason.TIMEOUT,
+                        "模型调用" + (networkOrTimeout instanceof ModelApiException.NetworkException
+                                ? "网络不可达:" : "超时:") + safeMessage(networkOrTimeout));
             }
             Log.e(TAG, "[ModelCall] gateway threw " + cause.getClass().getSimpleName()
                     + ": " + safeMessage(cause) + " -> terminal=POLICY_HALT costMs="

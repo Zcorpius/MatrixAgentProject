@@ -57,6 +57,22 @@ public final class LauncherHostGateway {
         return current != null && current.getState() == ConnectionState.CONNECTED;
     }
 
+    /**
+     * 在当前线程同步执行一次 SDK 调用（已连接检查同 execute）。
+     * 仅供自有 lane（如 {@link DraftCommandLane}）在其工作线程上使用；禁止主线程调用。
+     */
+    public <T> Result<T> callOnCurrentThread(@NonNull SdkCall<T> call) {
+        MatrixAgent current = agent;
+        if (current == null || current.getState() != ConnectionState.CONNECTED) {
+            return Result.failure(new HostUnavailableException());
+        }
+        try {
+            return Result.success(call.run(current));
+        } catch (RuntimeException failure) {
+            return Result.failure(failure);
+        }
+    }
+
     /** Idempotently starts (or retries) SDK discovery off the UI thread. */
     public void connect() {
         if (!connecting.compareAndSet(false, true)) return;
@@ -96,8 +112,17 @@ public final class LauncherHostGateway {
 
     /** Executes a short SDK call and delivers its value or exception on the main thread. */
     public <T> void execute(@NonNull SdkCall<T> call, @NonNull Consumer<Result<T>> receiver) {
+        executeVia(calls, call, receiver);
+    }
+
+    /**
+     * 专用 lane 变体（草稿命令串行等）：SDK 调用跑在调用方给定的执行器上，结果仍
+     * 归一回主线程。lane 自行保证顺序，本方法不做额外排队。
+     */
+    public <T> void executeVia(@NonNull ExecutorService executor,
+            @NonNull SdkCall<T> call, @NonNull Consumer<Result<T>> receiver) {
         try {
-            calls.execute(() -> {
+            executor.execute(() -> {
                 Result<T> result;
                 MatrixAgent current = agent;
                 if (current == null || current.getState() != ConnectionState.CONNECTED) {

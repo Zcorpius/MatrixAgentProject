@@ -1,6 +1,7 @@
 package com.matrix.agent.api.conversation;
 
 import com.matrix.agent.api.conversation.ConversationInfo;
+import com.matrix.agent.api.conversation.ConversationDraft;
 import com.matrix.agent.api.conversation.ConversationListQuery;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationOperationResult;
@@ -47,6 +48,33 @@ interface IConversationService {
      *  与 sendText（新任务）语义互斥。 */
     ConversationOperationResult appendMessage(String conversationId, String text,
             String clientOperationId);
+
+    /**
+     * 统一提交（输入交互增强 §3.2，v7）：在 ConversationCoordinator 的同一会话门控内
+     * 原子判定——存在可接收的 RUNNING 宿主任务且文本未超追加上限时并入为 steer，
+     * 否则建立新的主轮次。返回 ConversationSubmission.outcome 携带判定结果；
+     * clientOperationId 重放按 text:/steer: 两个幂等键命中既有行，不重复执行。
+     * draftInstanceId/revision 是 Launcher 在点击瞬间冻结的草稿快照；Host 在同一受理
+     * 事务中只 tombstone 该 instance，绝不猜测或删除“当前”草稿。无草稿的调用传 null/0。
+     * Phase 1 的 contextAttachmentIds 只接受空列表；非空返回 INVALID_ARGUMENT。
+     */
+    ConversationSubmission submitTextOrAppend(String conversationId, String text,
+            in List<String> contextAttachmentIds, String draftInstanceId,
+            long draftRevision, String clientOperationId);
+
+    /** 会话草稿读取（I4）；无草稿返回 null。owner/zone 由 Host 从调用方推导。 */
+    ConversationDraft getDraft(String conversationId);
+
+    /**
+     * 草稿保存（I4）：同一 draftInstanceId 内按 revision 单调递增的 last-write-wins。
+     * 返回 MatrixErrorCode：SUCCESS（已写或乱序迟到的幂等 no-op）/ INVALID_STATE
+     * （instance 已被提交消费——客户端必须换新 instance，不得原样重试）/
+     * INVALID_ARGUMENT（正文超 12KiB 或 selection 非法）。
+     */
+    int saveDraft(in ConversationDraft draft);
+
+    /** 显式丢弃草稿；仅当行仍为该 instance 时删除（并发新草稿不被误删）。 */
+    void discardDraft(String conversationId, String draftInstanceId, long revision);
 
     ConversationOperationResult cancelMessage(String conversationId, String messageId,
             String clientOperationId);

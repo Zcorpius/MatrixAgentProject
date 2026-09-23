@@ -121,18 +121,83 @@ public final class SherpaModelDownloaderTest {
         File archive = folder.newFile("complete.tar.bz2");
         byte[] body = "ready".getBytes(StandardCharsets.UTF_8);
         Files.write(archive.toPath(), body);
-        SherpaModelSpec spec = new SherpaModelSpec(SherpaModelSpec.Kind.TTS,
-                SherpaModelSpec.Format.TAR_BZ2, "fixture", "https://example.invalid/model",
-                folder.newFolder("model"), "model.onnx", "fixture", "1", body.length,
-                body.length,
-                "b24d6d33736ecd5604a4b17bc9c6481039fac362bb7df044ef1c10a2bfd21db6",
-                new String[]{"model.onnx"});
+        SherpaModelSpec spec = digestPinnedSpec(body);
 
         assertTrue(SherpaModelDownloader.isCompleteVerifiedArchive(spec, archive));
         assertTrue(archive.exists());
     }
 
+    @Test
+    public void presetFileNameMapsFormatSuffixes() {
+        File root = folder.getRoot();
+        assertEquals("sherpa-asr-zh-en.tar.bz2",
+                SherpaModelDownloader.presetFileName(SherpaModelSpec.streamingBilingual(root)));
+        assertEquals("sherpa-vad-silero.onnx",
+                SherpaModelDownloader.presetFileName(SherpaModelSpec.sileroVad(root)));
+        assertEquals("sherpa-kws-zh-en.tar.bz2",
+                SherpaModelDownloader.presetFileName(SherpaModelSpec.kwsZhEn(root)));
+        assertEquals("sherpa-tts-zh-xiaoya.tar.bz2",
+                SherpaModelDownloader.presetFileName(SherpaModelSpec.piperZhCn(root)));
+    }
+
+    @Test
+    public void resolveArchiveSourcePrefersVerifiedPreset() throws IOException {
+        byte[] body = "ready".getBytes(StandardCharsets.UTF_8);
+        SherpaModelSpec spec = digestPinnedSpec(body);
+        File presetRoot = folder.newFolder("preset");
+        File preset = new File(presetRoot, SherpaModelDownloader.presetFileName(spec));
+        Files.write(preset.toPath(), body);
+        File tmp = new File(folder.getRoot(), "net.tmp");
+
+        SherpaModelDownloader.ArchiveSource source =
+                SherpaModelDownloader.resolveArchiveSource(spec, presetRoot, tmp);
+
+        assertTrue(source.fromPreset());
+        assertEquals(preset, source.archive());
+    }
+
+    @Test
+    public void resolveArchiveSourceKeepsCorruptPresetAndFallsBackToNetwork()
+            throws IOException {
+        byte[] body = "ready".getBytes(StandardCharsets.UTF_8);
+        SherpaModelSpec spec = digestPinnedSpec(body);
+        File presetRoot = folder.newFolder("preset");
+        File preset = new File(presetRoot, SherpaModelDownloader.presetFileName(spec));
+        // 等长替换：过长度检查、挂 SHA-256，命中预埋路径的 no-delete 分支
+        Files.write(preset.toPath(), "corrupt".substring(0, body.length)
+                .getBytes(StandardCharsets.UTF_8));
+        File tmp = new File(folder.getRoot(), "net.tmp");
+
+        SherpaModelDownloader.ArchiveSource source =
+                SherpaModelDownloader.resolveArchiveSource(spec, presetRoot, tmp);
+
+        // /system 只读：损坏预埋保留在原地，安装落回网络路径
+        assertFalse(source.fromPreset());
+        assertEquals(tmp, source.archive());
+        assertTrue(preset.exists());
+    }
+
+    @Test
+    public void resolveArchiveSourceWithoutPresetFallsBackToNetwork() throws IOException {
+        SherpaModelSpec spec = digestPinnedSpec("ready".getBytes(StandardCharsets.UTF_8));
+        File tmp = new File(folder.getRoot(), "net.tmp");
+
+        assertEquals(tmp, SherpaModelDownloader.resolveArchiveSource(spec, null, tmp).archive());
+        assertEquals(tmp, SherpaModelDownloader.resolveArchiveSource(spec,
+                folder.newFolder("empty-preset"), tmp).archive());
+    }
+
     // ---------------------------------------------------------------- 夹具
+
+    /** 归档内容与钉死摘要自洽的 spec（"ready" 的 SHA-256）。 */
+    private SherpaModelSpec digestPinnedSpec(byte[] body) throws IOException {
+        return new SherpaModelSpec(SherpaModelSpec.Kind.TTS,
+                SherpaModelSpec.Format.TAR_BZ2, "fixture", "https://example.invalid/model",
+                folder.newFolder("model"), "model.onnx", "fixture", "1", body.length,
+                body.length,
+                "b24d6d33736ecd5604a4b17bc9c6481039fac362bb7df044ef1c10a2bfd21db6",
+                new String[]{"model.onnx"});
+    }
 
     private static Entry entry(String name, String content) {
         return new Entry(name, content);

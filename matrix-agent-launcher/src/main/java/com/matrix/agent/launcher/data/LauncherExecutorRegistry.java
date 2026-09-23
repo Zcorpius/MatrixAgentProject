@@ -2,6 +2,7 @@ package com.matrix.agent.launcher.data;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -23,6 +24,14 @@ public final class LauncherExecutorRegistry {
             new ThreadPoolExecutor.AbortPolicy());
     private final ScheduledThreadPoolExecutor polling = new ScheduledThreadPoolExecutor(1,
             daemonFactory("matrix-launcher-poll"), new ThreadPoolExecutor.AbortPolicy());
+    /**
+     * 草稿命令后端（输入交互增强 §7.2）：DraftCommandLane 在此之上按 conversation
+     * 实现 FIFO，不同 conversation 可并行。使用无界队列避免“用户输入保存”被一个很小
+     * 的全局容量静默丢弃；背压由每会话 350ms debounce 与 Host 12KiB 上限提供。
+     */
+    private final ExecutorService draftCommands = new ThreadPoolExecutor(2, 2, 0L,
+            TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(),
+            daemonFactory("matrix-launcher-draft"), new ThreadPoolExecutor.AbortPolicy());
 
     public LauncherExecutorRegistry() {
         // Cancelled fragment polling must leave no delayed work behind after navigation.
@@ -33,10 +42,12 @@ public final class LauncherExecutorRegistry {
 
     public ExecutorService sdkCalls() { return sdkCalls; }
     public ScheduledExecutorService polling() { return polling; }
+    public ExecutorService draftCommands() { return draftCommands; }
 
     public void shutdown() {
         sdkCalls.shutdownNow();
         polling.shutdownNow();
+        draftCommands.shutdownNow();
     }
 
     private static ThreadFactory daemonFactory(String prefix) {

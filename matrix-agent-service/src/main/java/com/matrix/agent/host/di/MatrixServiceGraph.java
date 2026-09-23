@@ -35,10 +35,16 @@ public final class MatrixServiceGraph {
                 container.getSharedBudget(),
                 container.getExecutorRegistry().conversationExecutor(),
                 container.getExecutorRegistry().dbExecutor(), persistence, callers,
-                container.getTitleModelClient(), container.getTitleConfigSupplier());
+                container.getTitleModelClient(), container.getTitleConfigSupplier(),
+                container.getConversationProgressRegistry(),
+                container.getConversationProgressBridge(), container.getHttpClient().provider(),
+                container.getExecutorRegistry().networkExecutor(),
+                container.getModelConfigStore(),
+                container.getExecutorRegistry().networkExecutor());
         if (conversation.isAvailable()) {
             voice.setBindingStore(conversation.bindingStore());
             voice.addControllerConfigurer(conversation.controllerConfigurer());
+            voice.setTtsOutputRouteChangedListener(conversation::refreshReadbackOutputRoute);
         }
     }
 
@@ -50,6 +56,7 @@ public final class MatrixServiceGraph {
     public IBinder downloadBinder() { return download.binder(); }
     public IBinder voiceBinder() { return voice.binder(); }
     public IBinder conversationBinder() { return conversation.binder(); }
+    public IBinder attachmentBinder() { return conversation.attachmentBinder(); }
     public IBinder debugTraceBinder() { return debugTraceStub; }
 
     private final com.matrix.agent.host.rpc.DebugTraceServiceStub debugTraceStub =
@@ -64,6 +71,9 @@ public final class MatrixServiceGraph {
         if (voice.isAvailable()) flags |= MatrixServiceConstants.FEATURE_VOICE_DOMAIN;
         if (conversation.isAvailable()) {
             flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN;
+            // 附件 staging 与对话域同库（SQLCipher 可用才装配 ConversationGraph）；
+            // 客户端按位隐藏 `+` 入口，而不是调用后吃异常。
+            flags |= MatrixServiceConstants.FEATURE_ATTACHMENT_DOMAIN;
         }
         return flags;
     }

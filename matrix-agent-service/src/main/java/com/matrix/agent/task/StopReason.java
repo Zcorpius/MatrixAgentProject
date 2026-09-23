@@ -18,6 +18,8 @@ public enum StopReason {
     MAX_TOOL_CALLS,
     /** 请求 deadline 到。 */
     TIMEOUT,
+    /** 模型请求未能建立网络连接；与真正达到请求 deadline 的 {@link #TIMEOUT} 不同。 */
+    NETWORK_UNAVAILABLE,
     /** 用户取消。 */
     CANCELLED,
     /**

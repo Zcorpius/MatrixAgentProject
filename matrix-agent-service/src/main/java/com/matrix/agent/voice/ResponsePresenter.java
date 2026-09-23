@@ -75,6 +75,8 @@ public final class ResponsePresenter {
             }
             case FAILED:
                 return "为安全起见,我现在不能执行这项操作。";
+            case NETWORK_UNAVAILABLE:
+                return "无法连接云端模型,请检查网络后重试。";
             case REJECTED:
                 return "系统繁忙,请稍后重试。";
             case EXECUTION_UNKNOWN:

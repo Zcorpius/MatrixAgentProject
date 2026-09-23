@@ -12,6 +12,8 @@ public enum TaskState {
     SUCCEEDED,
     PARTIALLY_SUCCEEDED,
     FAILED,
+    /** 云端模型不可达；任务没有进入工具执行，可在恢复网络后安全重试。 */
+    NETWORK_UNAVAILABLE,
     CANCELLED,
     TIMED_OUT,
     /** 用户通过 {@link Steer}(Type=DEFER)推迟当前任务。 */

@@ -59,6 +59,13 @@ public final class ConversationAssistantProjectorTest {
         assertEquals("该请求因安全策略未执行。", reply.text());
     }
 
+    @Test public void networkUnavailableDoesNotClaimTimeout() {
+        AssistantReply reply = ConversationAssistantProjector.project(
+                outcome(TaskState.NETWORK_UNAVAILABLE, StopReason.NETWORK_UNAVAILABLE, null),
+                2000);
+        assertEquals("无法连接云端模型，请检查网络后重试。", reply.text());
+    }
+
     @Test public void executionUnknownDoesNotClaimFailureOrCancel() {
         AssistantReply reply = ConversationAssistantProjector.project(
                 outcome(TaskState.EXECUTION_UNKNOWN, StopReason.EXECUTION_UNKNOWN, null), 2000);

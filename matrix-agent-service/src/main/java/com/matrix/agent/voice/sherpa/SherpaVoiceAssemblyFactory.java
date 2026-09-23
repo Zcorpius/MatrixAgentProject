@@ -71,7 +71,8 @@ public final class SherpaVoiceAssemblyFactory implements VoiceAssemblyFactory {
         this.asrSpec = SherpaModelSpec.streamingBilingual(sherpaRoot);
         this.vadSpec = SherpaModelSpec.sileroVad(sherpaRoot);
         this.kwsSpec = SherpaModelSpec.kwsZhEn(sherpaRoot);
-        this.downloader = new SherpaModelDownloader(app, dao, downloadClient);
+        this.downloader = new SherpaModelDownloader(app, dao, downloadClient,
+                SherpaModelDownloader.systemPresetRoot());
         this.ttsFactory = new VoiceTtsFactory(app, dao, downloadClient, cloudClient);
         this.captureThreadFactory = captureThreadFactory;
     }

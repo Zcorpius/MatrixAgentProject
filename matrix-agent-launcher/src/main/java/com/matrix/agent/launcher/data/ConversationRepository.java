@@ -3,9 +3,11 @@ package com.matrix.agent.launcher.data;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.matrix.agent.api.conversation.ConversationDraft;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationOperationResult;
 import com.matrix.agent.api.conversation.ConversationListQuery;
+import com.matrix.agent.api.conversation.ConversationRuntimeStage;
 import com.matrix.agent.client.ConversationManager;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationPage;
@@ -37,19 +39,44 @@ public final class ConversationRepository {
         default void onConversationInfoChanged(ConversationInfo info) { }
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
+        default void onRuntimeStageChanged(ConversationRuntimeStage stage) { }
         default void onConversationError(String conversationId, int errorCode) { }
     }
 
-    /** debug/internal 专用旁路；正常会话订阅完全不依赖它。 */
+    /** matrix.debugTraceUi=true 时启用的旁路；正常会话订阅完全不依赖它。 */
     @FunctionalInterface
     public interface DebugTraceListener {
         void onDebugTrace(DebugTraceWireEvent event);
     }
 
     private final LauncherHostGateway gateway;
+    private final DraftCommandLane draftLane;
 
+    /**
+     * 兼容构造（JVM 测试）：草稿命令同步执行——调用线程天然串行，可测但不可用于
+     * 生产主线程。生产装配必须用
+     * {@link #ConversationRepository(LauncherHostGateway, DraftCommandLane)}
+     * 注入 registry 的单线程 draftCommands。
+     */
     public ConversationRepository(LauncherHostGateway gateway) {
+        this(gateway, new DraftCommandLane(gateway, directExecutor()));
+    }
+
+    public ConversationRepository(LauncherHostGateway gateway, DraftCommandLane draftLane) {
         this.gateway = gateway;
+        this.draftLane = draftLane;
+    }
+
+    private static java.util.concurrent.ExecutorService directExecutor() {
+        return new java.util.concurrent.AbstractExecutorService() {
+            @Override public void execute(Runnable command) { command.run(); }
+            @Override public void shutdown() { }
+            @Override public java.util.List<Runnable> shutdownNow() { return List.of(); }
+            @Override public boolean isShutdown() { return false; }
+            @Override public boolean isTerminated() { return false; }
+            @Override public boolean awaitTermination(long timeout, java.util.concurrent.TimeUnit unit) {
+                return true; }
+        };
     }
 
     public boolean isHostConnected() {
@@ -90,6 +117,117 @@ public final class ConversationRepository {
             ConversationManager manager = agent.getConversationManager();
             return manager == null ? null : manager.sendText(
                     new SendTextRequest(conversationId, text, null), clientOperationId);
+        }, receiver);
+    }
+
+    /**
+     * 统一提交（输入交互增强 §3.2）：Host 在会话门控内原子判定 steer 或新主轮次。
+     * 走草稿 lane——与 saveDraft 串行，杜绝“提交后迟到保存复活草稿”的客户端窗口。
+     */
+    public void submitTextOrAppend(@NonNull String conversationId, @NonNull String text,
+            @NonNull List<String> contextAttachmentIds,
+            @Nullable ConversationDraft submittedDraft, @NonNull String clientOperationId,
+            @NonNull Consumer<Result<ConversationSubmission>> receiver) {
+        final List<String> attachments = contextAttachmentIds == null
+                ? List.<String>of() : contextAttachmentIds;
+        draftLane.execute(conversationId, () -> {
+            Result<ConversationSubmission> result = gateway.callOnCurrentThread(agent -> {
+                ConversationManager manager = agent.getConversationManager();
+                return manager == null ? null : manager.submitTextOrAppend(conversationId,
+                        text, attachments,
+                        submittedDraft == null ? null : submittedDraft.draftInstanceId,
+                        submittedDraft == null ? 0L : submittedDraft.revision,
+                        clientOperationId);
+            });
+            draftLane.deliver(result, receiver);
+        });
+    }
+
+    // ---------------------------------------------------------------- 草稿（I4）
+
+    /** 会话草稿读取；无草稿返回 null。走草稿 lane 保持与保存的全序。 */
+    public void getDraft(@NonNull String conversationId,
+            @NonNull Consumer<Result<ConversationDraft>> receiver) {
+        draftLane.execute(conversationId, () -> {
+            Result<ConversationDraft> result = gateway.callOnCurrentThread(agent -> {
+                ConversationManager manager = agent.getConversationManager();
+                return manager == null ? null : manager.getDraft(conversationId);
+            });
+            draftLane.deliver(result, receiver);
+        });
+    }
+
+    /**
+     * 草稿保存。返回码经 Result.value 交付（null = 传输失败）：
+     * SUCCESS / INVALID_STATE（instance 已消费，调用方换新 instance）/ INVALID_ARGUMENT。
+     */
+    public void saveDraft(@NonNull ConversationDraft draft,
+            @NonNull Consumer<Result<Integer>> receiver) {
+        String conversationId = draft.conversationId;
+        draftLane.execute(conversationId, () -> {
+            Result<Integer> result = gateway.callOnCurrentThread(agent -> {
+                ConversationManager manager = agent.getConversationManager();
+                if (manager == null) return null;
+                return manager.saveDraft(draft);
+            });
+            draftLane.deliver(result, receiver);
+        });
+    }
+
+    public void discardDraft(@NonNull String conversationId, @NonNull String draftInstanceId,
+            long revision, @NonNull Consumer<Result<Boolean>> receiver) {
+        draftLane.execute(conversationId, () -> {
+            Result<Boolean> result = gateway.callOnCurrentThread(agent -> {
+                ConversationManager manager = agent.getConversationManager();
+                if (manager == null) return null;
+                manager.discardDraft(conversationId, draftInstanceId, revision);
+                return Boolean.TRUE;
+            });
+            draftLane.deliver(result, receiver);
+        });
+    }
+
+    // ---------------------------------------------------------------- 受控附件（I6）
+
+    /** Host 摄取附件（PFD staging）→ 返回 chip 元数据（正文不跨 Binder）。 */
+    public void stageAttachment(@NonNull String conversationId,
+            @NonNull android.os.ParcelFileDescriptor fd, @NonNull String declaredMime,
+            @NonNull String displayName, @NonNull String clientOperationId,
+            @NonNull Consumer<Result<com.matrix.agent.api.conversation.ConversationAttachment>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.AttachmentManager manager = agent.getAttachmentManager();
+            return manager == null ? null : manager.stage(conversationId, fd,
+                    declaredMime, displayName, clientOperationId);
+        }, receiver);
+    }
+
+    /** 当前会话的草稿附件（重进页面恢复 chips）。 */
+    public void listDraftAttachments(@NonNull String conversationId,
+            @NonNull Consumer<Result<List<com.matrix.agent.api.conversation.ConversationAttachment>>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.AttachmentManager manager = agent.getAttachmentManager();
+            return manager == null ? java.util.Collections
+                    .<com.matrix.agent.api.conversation.ConversationAttachment>emptyList()
+                    : manager.listDraftAttachments(conversationId);
+        }, receiver);
+    }
+
+    public void deleteAttachment(@NonNull String attachmentId,
+            @NonNull Consumer<Result<Integer>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.AttachmentManager manager = agent.getAttachmentManager();
+            return manager == null ? null
+                    : manager.deleteAttachment(attachmentId,
+                            java.util.UUID.randomUUID().toString());
+        }, receiver);
+    }
+
+    /** 模型胶囊（I5）：当前 Host 运行时状态（provider/model/backend/ready）。 */
+    public void modelRuntimeStatus(
+            @NonNull Consumer<Result<com.matrix.agent.api.model.ModelRuntimeStatus>> receiver) {
+        gateway.execute(agent -> {
+            com.matrix.agent.client.ModelManager manager = agent.getModelManager();
+            return manager == null ? null : manager.getRuntimeStatus();
         }, receiver);
     }
 
@@ -219,6 +357,10 @@ public final class ConversationRepository {
                             listener.onTransientTranscript(conversationId, voiceSessionId, text,
                                     isFinal);
                         }
+                        @Override public void onRuntimeStageChanged(
+                                ConversationRuntimeStage stage) {
+                            listener.onRuntimeStageChanged(stage);
+                        }
                         @Override public void onConversationError(String conversationId,
                                 int errorCode) {
                             listener.onConversationError(conversationId, errorCode);
@@ -271,7 +413,7 @@ public final class ConversationRepository {
         };
     }
 
-    /** 重进会话后的历史恢复；只有 debug/internal 才实际触发 IPC。 */
+    /** 重进会话后的历史恢复；只有 matrix.debugTraceUi=true 才实际触发 IPC。 */
     public void loadDebugHistory(@NonNull String hostUserMessageId,
             @NonNull Consumer<Result<List<DebugTraceWireEvent>>> receiver) {
         if (!BuildConfig.MATRIX_DEBUG_TRACE_UI) {
@@ -340,6 +482,17 @@ public final class ConversationRepository {
             var manager = agent.getVoiceManager();
             if (manager == null) return null;
             return manager.finishSession(sessionId, clientOperationId);
+        }, receiver);
+    }
+
+    /** PTT 取消（ACTION_CANCEL）：丢弃 pendingFinal，本轮不产生任何消息。 */
+    public void cancelRecording(@NonNull String sessionId,
+            @NonNull String clientOperationId,
+            @NonNull Consumer<Result<com.matrix.agent.api.voice.VoiceOperationResult>> receiver) {
+        gateway.execute(agent -> {
+            var manager = agent.getVoiceManager();
+            if (manager == null) return null;
+            return manager.stopSession(sessionId, clientOperationId);
         }, receiver);
     }
 }

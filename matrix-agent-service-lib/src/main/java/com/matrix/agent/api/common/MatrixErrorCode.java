@@ -41,6 +41,14 @@ public final class MatrixErrorCode {
     public static final int PROCESS_INTERRUPTED = 15;
     /** Operation is valid but the target state does not allow it right now (e.g. no running task to append to). */
     public static final int INVALID_STATE = 16;
+    /**
+     * Subscriber does not declare the protocol revision a callback transaction requires.
+     * Defense-in-depth only: strict contract-hash negotiation normally rejects mixed builds
+     * before any callback registration, so this branch is unreachable in disciplined
+     * deployments; it exists so relaxing negotiation later cannot misread an unknown
+     * onTransact as client death and drop the whole subscription.
+     */
+    public static final int SERVICE_VERSION_UNSUPPORTED = 17;
 
     private MatrixErrorCode() {
     }

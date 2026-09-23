@@ -11,6 +11,13 @@
     <color name="matrix_border">#D5E0DC</color>
     <color name="matrix_badge">#E6F1ED</color>
 
+    <!-- Matrix 输入卡：偏暖的雾白，刻意区别于顶部的浅绿会话信息带。 -->
+    <color name="composer_surface">#FBFCF7</color>
+    <color name="composer_border">#DCE4D8</color>
+    <color name="composer_action">#007E88</color>
+    <color name="composer_action_pressed">#005F68</color>
+    <color name="composer_icon">#30464C</color>
+
     <!-- 对话气泡（微信式三角色）：用户/助手/系统，含描边与头像底色。 -->
     <color name="matrix_chat_user_bubble">#D4EDDA</color>
     <color name="matrix_chat_user_bubble_stroke">#B8DCC5</color>

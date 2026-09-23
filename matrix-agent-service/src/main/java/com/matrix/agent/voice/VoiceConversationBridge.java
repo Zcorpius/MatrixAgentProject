@@ -108,7 +108,9 @@ public final class VoiceConversationBridge {
                     ? ConversationIds.pttIdempotencyKey(token.voiceSessionId(), 1)
                     : "wake:" + token.voiceSessionId() + ":" + token.requestNonce();
 
-            ConversationCoordinator.TextAccepted accepted = coordinator.submitText(
+            // 统一提交（输入交互增强 §5.4）：PTT/WAKE final 与文字同走 Host 原子判定——
+            // 运行中宿主可接收时并入 steer（token 回执宿主任务 id），否则建立主轮次。
+            ConversationCoordinator.UnifiedTextOutcome outcome = coordinator.submitTextOrAppend(
                     new ConversationCoordinator.TextCommand(
                             conversationId,
                             request.text(),
@@ -121,9 +123,9 @@ public final class VoiceConversationBridge {
                                     idempotencyKey, request.asrConfidence(),
                                     request.confidenceAvailable()),
                             receipt -> tokensByTaskId.put(receipt.conversationTaskId(), token)));
-            // submitText 是同步事务；成功即 receipt
+            // submitTextOrAppend 是同步事务；成功即 receipt
             Log.i(TAG, "[Bridge] 提交成功 conv=" + conversationId
-                    + " replay=" + accepted.replay());
+                    + " outcome=" + outcome.outcome() + " replay=" + outcome.replay());
             receiptListener.onSubmissionAccepted(token);
         } catch (Exception failure) {
             Log.e(TAG, "[Bridge] 提交失败 cause=" + failure.getClass().getSimpleName(),

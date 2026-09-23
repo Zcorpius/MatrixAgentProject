@@ -25,6 +25,8 @@ final class VoiceGraph {
             ModelServiceStub.CallerResolver callers) {
         bootstrapRuntime(application);
         service = new VoiceServiceStub(application, downloads, modelDownloads, persistence, callers);
+        // ROM 预埋归档存在时启动即本地安装（幂等；无预埋则不触发）
+        service.schedulePresetAutoInstall();
     }
 
     IBinder binder() { return service.asBinder(); }
@@ -37,6 +39,9 @@ final class VoiceGraph {
         service.setControllerConfigurer(configurer);
         VoiceRuntime runtime = VoiceRuntimeHolder.get();
         if (runtime != null) runtime.addControllerConfigurer(configurer);
+    }
+    void setTtsOutputRouteChangedListener(Runnable listener) {
+        service.setTtsOutputRouteChangedListener(listener);
     }
 
     /**

@@ -64,6 +64,8 @@ final class TaskRuntimeGraph {
                     .promptContextAssembler(promptAssembler)
                     .conversationCompressor(new ConversationCompressor(summaryProvider))
                     .taskMemoryWriter(new EpisodicMemorySink(values.memoryWriter))
+                    // 运行阶段出站端口（I3）：Engine 级一次性装配，事件携带 runtimeRequestId。
+                    .taskProgressSink(values.taskProgressSink)
                     .build();
             return new AgentEngine(gateway, values.modelCallExecutor, values.policyEngine,
                     values.registry, values.provider, values.sessionManager,
@@ -107,6 +109,7 @@ final class TaskRuntimeGraph {
         MemoryStore memoryStore;
         IntentClassifier intentClassifier;
         java.util.concurrent.ExecutorService lifecycleExecutor;
+        com.matrix.agent.task.port.TaskProgressSink taskProgressSink;
 
         private void requireComplete() {
             if (modelClient == null || configStore == null || modelCallExecutor == null
@@ -116,7 +119,7 @@ final class TaskRuntimeGraph {
                     || auditDigest == null || tokenizer == null || auditEventRecorder == null
                     || memoryRecaller == null || memoryWriter == null || scheduler == null
                     || vehicleStateSource == null || memoryStore == null || intentClassifier == null
-                    || lifecycleExecutor == null) {
+                    || lifecycleExecutor == null || taskProgressSink == null) {
                 throw new IllegalArgumentException("TaskRuntimeGraph dependencies must be complete");
             }
         }

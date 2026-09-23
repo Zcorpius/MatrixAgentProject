@@ -22,6 +22,8 @@ public final class FakeConversationStore implements ConversationStore {
     public final Map<String, String> idempotencyIndex = new HashMap<>();
     public final Map<String, LinkRow> links = new LinkedHashMap<>();
     public final List<String> systemNotes = new ArrayList<>();
+    /** 最近一次 UserSubmission 携带的附件 id（Coordinator 集成测试断言用）。 */
+    public volatile List<String> lastSubmittedAttachmentIds = List.of();
     public int clearCalls;
 
     public static final class LinkRow {
@@ -127,6 +129,8 @@ public final class FakeConversationStore implements ConversationStore {
 
     @Override
     public synchronized SubmittedUserMessage submitUserMessage(UserSubmission command) {
+        lastSubmittedAttachmentIds = command.contextAttachmentIds() == null
+                ? List.of() : List.copyOf(command.contextAttachmentIds());
         if (command.idempotencyKey() != null
                 && idempotencyIndex.containsKey(command.idempotencyKey())) {
             return new SubmittedUserMessage(
@@ -153,6 +157,14 @@ public final class FakeConversationStore implements ConversationStore {
                 PersistedMessageStatus.ACCEPTED.wire(), command.channelWire(), command.text(),
                 command.languageTag(), command.conversationTaskId(), 0, now, now,
                 MessageRow.INPUT_PRIMARY_WIRE, null, MessageRow.STEER_DELIVERY_NONE_WIRE));
+        if (command.quotedMessageId() != null) {
+            MessageRow quoted = messages.get(command.quotedMessageId());
+            if (quoted == null || !command.conversationId().equals(quoted.conversationId())) {
+                throw new IllegalArgumentException("被引消息不存在或不属于该会话");
+            }
+            quotes.put(command.messageId(), new QuoteRow(command.messageId(),
+                    command.quotedMessageId(), command.quoteSnapshot()));
+        }
         if (command.idempotencyKey() != null) {
             idempotencyIndex.put(command.idempotencyKey(), command.messageId());
         }
@@ -220,7 +232,8 @@ public final class FakeConversationStore implements ConversationStore {
     }
 
     @Override
-    public void updateSteerDelivery(String messageId, boolean offered) {
+    public void updateSteerDelivery(String messageId, boolean offered,
+            String submittedDraftInstanceId) {
         MessageRow row = messages.get(messageId);
         if (row == null || row.inputKindWire() != MessageRow.INPUT_STEER_WIRE
                 || row.steerDeliveryWire()
@@ -239,25 +252,29 @@ public final class FakeConversationStore implements ConversationStore {
     }
 
     @Override
-    public boolean writeTerminal(TerminalWrite command) {
+    public TerminalOutcome writeTerminal(TerminalWrite command) {
         LinkRow link = links.get(command.conversationTaskId());
         if (link == null) {
-            return false;
+            return TerminalOutcome.dropped();
         }
         if (!conversations.containsKey(link.conversationId)) {
-            return false; // 清库后丢弃
+            return TerminalOutcome.dropped(); // 清库后丢弃
         }
         long now = System.currentTimeMillis();
         MessageRow user = messages.get(link.userMessageId);
         messages.put(link.userMessageId,
                 withStatus(user, command.userStatusWire(), command.failureCode()));
-        // 附属 steer 镜像收敛（与 Room 实现同契约）：仅 RUNNING 行，投递态保留
+        // 附属 steer 镜像收敛（与 Room 实现同契约）：仅 RUNNING 行，投递态保留；
+        // 收集收敛行返回给调用方补发事件（宿主终态后 UI 不得停留在“正在并入”）。
+        List<ConvergedSteer> converged = new ArrayList<>();
         for (java.util.Map.Entry<String, MessageRow> entry : messages.entrySet()) {
             MessageRow row = entry.getValue();
             if (row.inputKindWire() == MessageRow.INPUT_STEER_WIRE
                     && link.userMessageId.equals(row.steerHostUserMessageId())
                     && row.statusWire() == PersistedMessageStatus.RUNNING.wire()) {
                 entry.setValue(withStatus(row, command.userStatusWire(),
+                        command.failureCode()));
+                converged.add(new ConvergedSteer(row.messageId(), command.userStatusWire(),
                         command.failureCode()));
             }
         }
@@ -280,7 +297,7 @@ public final class FakeConversationStore implements ConversationStore {
             links.get(command.conversationTaskId()).traceJson = command.traceJson();
         }
         link.terminalStatus = command.userStatusWire();
-        return true;
+        return TerminalOutcome.writtenWith(java.util.Collections.unmodifiableList(converged));
     }
 
     @Override
@@ -453,16 +470,6 @@ public final class FakeConversationStore implements ConversationStore {
     @Override
     public AnnotationRow findAnnotation(String messageId, String ownerUserId) {
         return annotations.get(messageId + ":" + ownerUserId);
-    }
-
-    @Override
-    public void recordQuote(QuoteRecord command) {
-        if (!messages.containsKey(command.quotedMessageId())) {
-            throw new IllegalArgumentException("被引消息不存在: " + command.quotedMessageId());
-        }
-        quotes.put(command.messageId(),
-                new QuoteRow(command.messageId(), command.quotedMessageId(),
-                        command.snapshot()));
     }
 
     @Override

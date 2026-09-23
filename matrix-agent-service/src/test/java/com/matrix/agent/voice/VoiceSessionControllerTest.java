@@ -120,6 +120,62 @@ public final class VoiceSessionControllerTest {
     }
 
     @Test
+    public void pttFlush_emptyFinalEndsSessionInsteadOfReprompting() {
+        VoiceSessionController controller = newController(req -> succeededOutcome(), direct(), direct());
+        wake.fireWake();
+        asr.enqueueFinishResult("");
+
+        controller.flushFinalForPtt();
+
+        assertTrue("PTT 松开必须强制请求 recognizer final", asr.finishCalled);
+        assertEquals("空转写不能保留 LISTENING 占用下一次 PTT", VoiceSessionState.State.IDLE,
+                controller.currentState());
+    }
+
+    @Test
+    public void pttSession_bypassesSpeechStartTimeout_silenceEndsOnlyAtMaxSpeech() {
+        // Binder PTT：按住手势即开口承诺——SPEECH_START 静音超时不得排程（真机回归：
+        // 慢引擎首条 partial 晚于 3s，旧逻辑把按住中的会话静默杀掉，松开后一无所获）。
+        VoiceSessionController c = newController(req -> succeededOutcome(), direct(), direct());
+        c.manualWake(VoiceSessionController.WAKE_SOURCE_BINDER_PTT);
+        assertEquals(VoiceSessionState.State.LISTENING, c.currentState());
+        assertEquals("PTT 只应排 maxSpeech 硬上限", 1, timeoutScheduler.pendingCount());
+        asr.enqueueFinishResult("");
+        timeoutScheduler.fireAll(); // maxSpeech → 强制 finish(空) → endpoint → REJECT → 收尾
+        assertTrue(asr.finishCalled);
+        assertEquals("PTT 静音到硬上限应收尾而非复述", VoiceSessionState.State.IDLE,
+                c.currentState());
+    }
+
+    @Test
+    public void pttSession_rejectedFinalClosesWithoutReprompt() {
+        // PTT 会话自唤醒起即持有 closeAfterRejectedFinal：免手持的"复述重听"在按住语义下不存在。
+        VoiceSessionController c = newController(
+                req -> { throw new AssertionError("被拒绝的 final 不应送 Agent"); }, direct(), direct());
+        c.manualWake(VoiceSessionController.WAKE_SOURCE_BINDER_PTT);
+        asr.fireFinal(new FinalTranscript("模糊", "zh-CN", 0f, false)); // 未知置信度 → REJECT
+        vad.fireEndpoint(asr.currentSid);
+        assertEquals("PTT 会话拒绝的 final 应直接收尾", VoiceSessionState.State.IDLE,
+                c.currentState());
+    }
+
+    @Test
+    public void pttFlushDuringEndpointing_closesInsteadOfReopeningMic() {
+        // 松开落在静音端点窗口（finalWait 已排队）：flush 只补收尾标记、不重复 finish；
+        // finalWait 超时产出空 final 后按 PTT 语义收尾，绝不重开麦克风追问。
+        VoiceSessionController c = newController(req -> succeededOutcome(), direct(), direct());
+        wake.fireWake();
+        vad.fireEndpoint(asr.currentSid); // 无 pendingFinal → ENDPOINTING + finalWait 排队
+        assertEquals(VoiceSessionState.State.ENDPOINTING, c.currentState());
+        c.flushFinalForPtt();
+        assertFalse("ENDPOINTING 已有 finalWait 在途，不应重复 finish", asr.finishCalled);
+        timeoutScheduler.fireAll(); // finalWait → 空 final → REJECT → 收尾
+        assertEquals("松开后的空 final 应收尾而非复述回 LISTENING",
+                VoiceSessionState.State.IDLE, c.currentState());
+    }
+
+
+    @Test
     public void wakeFlow_singleCapability_usesFriendlyName() {
         AgentRunner runner = req -> outcome(TaskState.SUCCEEDED, StopReason.DONE,
                 successObs("vehicle.climate.set_temperature"));

@@ -93,7 +93,22 @@ public final class ConversationCoordinator {
     public interface SteerSink {
         boolean offerSteer(String sessionId, Steer steer);
     }
+    private final SteerSink steerSink;
+    /**
+     * 受控附件端口（输入交互增强 I6）。null = 未装配（附件域降级），提交带附件 id
+     * 直接 IllegalArgumentException（stub 映射 INVALID_ARGUMENT）；装配后负责：
+     * 提交前验证（READY/归属/数量）+ 受限文本投影并入 AgentRequest。
+     */
+    public interface AttachmentPort {
+        /** 验证提交附件集合：任一不存在/FAILED/越权/超量即抛 IllegalArgumentException。 */
+        void validateForSubmission(String ownerUserId, String vehicleZone,
+                String conversationId, List<String> attachmentIds);
 
+        /** READY 附件的受限文本投影（经 ModelSanitizer）；无可用附件返回空串。 */
+        String projectContext(String ownerUserId, String vehicleZone,
+                String conversationId, List<String> attachmentIds);
+    }
+    private volatile AttachmentPort attachmentPort;
     /**
      * 终态轮次通知（评估 v1.0 §4.1 自动标题触发）。lane 线程回调，实现方自行异步；
      * 默认 no-op（未装配即不生成标题，不影响任何执行路径）。
@@ -101,8 +116,13 @@ public final class ConversationCoordinator {
     public interface TerminalRoundSink {
         void onTerminalRound(String conversationId, String userMessageId, int statusWire);
     }
-    private final SteerSink steerSink;
     private volatile TerminalRoundSink terminalRoundSink = (conv, msg, status) -> { };
+    /**
+     * 运行阶段追踪（输入交互增强 I3）。null = 未装配（JVM 测试/降级），行为与
+     * 端口引入前一致。装配后：受理事务成功 → bind + 发布 QUEUED；终态清理 → clear。
+     */
+    private volatile ConversationRuntimeStageRegistry stageRegistry;
+    private volatile ConversationTaskProgressBridge progressBridge;
     private final ConcurrentHashMap<String, CancellationToken> activeTokens =
             new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<TerminalListener> terminalListeners =
@@ -123,6 +143,11 @@ public final class ConversationCoordinator {
         this.steerSink = Objects.requireNonNull(steerSink, "steerSink");
     }
 
+    /** 附件端口装配（I6）；未装配时提交附件 id 会被显式拒绝。 */
+    public void setAttachmentPort(AttachmentPort port) {
+        this.attachmentPort = port;
+    }
+
     public void setListener(Listener value) {
         this.listener = (value == null) ? new Listener() { } : value;
     }
@@ -130,6 +155,13 @@ public final class ConversationCoordinator {
     /** 自动标题等终态观察者装配（评估 v1.0 §4.1）；未装配为 no-op。 */
     public void setTerminalRoundSink(TerminalRoundSink sink) {
         this.terminalRoundSink = sink == null ? (conv, msg, status) -> { } : sink;
+    }
+
+    /** 运行阶段追踪装配（I3）；null 或未调用 = 不发布任何阶段。 */
+    public void setProgressTracking(ConversationRuntimeStageRegistry registry,
+            ConversationTaskProgressBridge bridge) {
+        this.stageRegistry = registry;
+        this.progressBridge = bridge;
     }
 
     public ConversationStore store() {
@@ -173,7 +205,9 @@ public final class ConversationCoordinator {
         Objects.requireNonNull(command, "command");
         ConversationIds.requireLowerUuid(command.conversationId(), "conversationId");
         ConversationIds.requireLowerUuid(command.clientOperationId(), "clientOperationId");
-        String text = normalizeText(command.text(), TEXT_MAX_CHARS);
+        List<String> attachmentIds = normalizedAttachmentIds(command);
+        String text = normalizeSubmissionText(command.text(), TEXT_MAX_CHARS,
+                !attachmentIds.isEmpty());
         String languageTag = normalizeLanguage(command.languageTag());
 
         String conversationTaskId = ConversationIds.newConversationTaskId();
@@ -184,21 +218,46 @@ public final class ConversationCoordinator {
                 : command.metadata();
         String idempotencyKey = metadata.idempotencyKey();
 
+        // 引用是提交的结构化元数据，不得在用户消息已入库后才发现跨会话/不存在。
+        // 否则 Binder 得到 INVALID_ARGUMENT 时会遗留一条永远不入队的 ACCEPTED 行。
+        ConversationStore.MessageRow quoted = null;
+        if (command.quotedMessageId() != null) {
+            quoted = store.findMessage(command.quotedMessageId());
+            if (quoted == null || !quoted.conversationId().equals(command.conversationId())) {
+                throw new IllegalArgumentException(
+                        "被引消息不存在或不属于该会话: " + command.quotedMessageId());
+            }
+        }
+
+        // 附件（I6 §9.2）：任何持久化动作之前完成验证——不存在/FAILED/越权/超量
+        // 都必须在创建任务前拒绝（§3.2：整次提交在创建任务前拒绝，不留半写）。
+        // 验证通过后立即物化受限文本投影：此后模型看到的上下文即固定，附件删除
+        // （被并发抢占）不影响已受理轮次。
+        String attachmentContext = projectAttachments(command, attachmentIds);
+
+        // AgentRequest 文本 = 用户原文 + 附件投影（展示层/持久层仍是原文——
+        // conversation_message.text 不被附件内容污染）。
+        String agentText = attachmentContext.isEmpty()
+                ? text : text + attachmentContext;
+
         // 1) 纯准备：只固化分类快照。历史种子必须在 keyed lane 真正出队时装配，
         // 才能看到同一 conversation 的前一条终态，且不会把排队时间烧进 Agent budget。
+        // 注意：分类快照仍基于用户原文——附件资料不参与意图分类与抢占判定。
         ConversationTaskSubmitter.PreparedTask prepared = submitter.prepare(
                 new ConversationTaskSubmitter.SubmitInput(
-                        conversationTaskId, runtimeRequestId, command.conversationId(), text,
+                        conversationTaskId, runtimeRequestId, command.conversationId(), agentText,
                         command.actor(), command.agentSessionId(), command.arbitrationKey(),
                         metadata.inputSource(), languageTag, metadata.asrConfidence(),
                         metadata.confidenceAvailable()));
 
-        // 2) 原子事务：幂等判重 + sequence + 用户消息(ACCEPTED) + task link。
+        // 2) 原子事务：幂等判重 + sequence + 用户消息(ACCEPTED) + task link + 附件冻结。
         SubmittedUserMessage submitted = store.submitUserMessage(new UserSubmission(
                 command.conversationId(), userMessageId,
                 channelWire(metadata.channel()), text, languageTag,
                 conversationTaskId, runtimeRequestId,
-                prepared.classification().readOnlyHint(), idempotencyKey));
+                prepared.classification().readOnlyHint(), idempotencyKey,
+                command.submittedDraftInstanceId(), command.quotedMessageId(),
+                quoted == null ? null : quoted.text(), attachmentIds));
         if (submitted.replay()) {
             // 幂等命中：返回既有消息的事实（messageId 以库中行为准，而非本次新生成的 id）。
             Log.i(TAG, "[Conversation] TEXT 幂等命中 conv=" + command.conversationId());
@@ -209,18 +268,8 @@ public final class ConversationCoordinator {
                     existing == null ? conversationTaskId : existing.conversationTaskId(),
                     submitted.sequenceNo(), true);
         }
-        // 引用回复（评估 v1.0 §4.4）：同会话校验 + 可见快照落库；引用不是拼 prompt——
-        if (command.quotedMessageId() != null) {
-            ConversationStore.MessageRow quoted =
-                    store.findMessage(command.quotedMessageId());
-            if (quoted == null
-                    || !quoted.conversationId().equals(command.conversationId())) {
-                throw new IllegalArgumentException(
-                        "被引消息不存在或不属于该会话: " + command.quotedMessageId());
-            }
-            store.recordQuote(new ConversationStore.QuoteRecord(
-                    userMessageId, command.quotedMessageId(), quoted.text()));
-        }
+        // 引用快照已作为 UserSubmission 一部分在受理事务内写入；绝不在消息提交后另开
+        // 一次写入，否则任意存储失败都会让“已接受”消息与引用事实发生半写分裂。
         // 用户消息先 upsert（客户端首次看到该行），再发状态事件
         ConversationStore.MessageRow persistedUserRow = store.findMessage(userMessageId);
         if (persistedUserRow != null) {
@@ -232,6 +281,9 @@ public final class ConversationCoordinator {
         // 3) keyed lane 预约；拒绝即 OVERLOADED 终态（消息保留、不悬挂、不谎报）。
         CancellationToken token = new CancellationToken();
         activeTokens.put(conversationTaskId, token);
+        // 运行阶段（I3）：受理事务已原子持久化 → 发布 QUEUED 并绑定 Engine 事件映射。
+        // 在 lane 预约前发布：订阅者先看到“等待执行”，再看到 RUNNING 消息事件。
+        beginStageTracking(command.conversationId(), conversationTaskId, runtimeRequestId);
         // 必须先回执再预约 lane：极快的本地执行也不能在 VoiceBridge 建立 token→task 映射前
         // 回来，从而丢失唯一一次 TTS 回注。
         notifyAccepted(command.acceptedListener(), new TextAccepted(userMessageId,
@@ -243,6 +295,7 @@ public final class ConversationCoordinator {
             Log.w(TAG, "[Conversation] 派发拒绝 conv=" + command.conversationId()
                     + " cause=" + rejected.getMessage());
             activeTokens.remove(conversationTaskId);
+            endStageTracking(command.conversationId(), conversationTaskId, runtimeRequestId);
             convergeTerminal(command.conversationId(), userMessageId, conversationTaskId,
                     PersistedMessageStatus.FAILED, MatrixErrorCode.OVERLOADED,
                     AssistantReply.synthesized("系统繁忙，任务未执行，请稍后重试。"));
@@ -276,26 +329,142 @@ public final class ConversationCoordinator {
     public record TextCommand(String conversationId, String text, String languageTag,
             String clientOperationId, Actor actor, String agentSessionId,
             String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener,
-            String quotedMessageId) {
+            String quotedMessageId, String submittedDraftInstanceId,
+            List<String> contextAttachmentIds) {
         /** 保持现有 Binder/测试调用的源码兼容。 */
         public TextCommand(String conversationId, String text, String languageTag,
                 String clientOperationId, Actor actor, String agentSessionId,
                 String arbitrationKey) {
             this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
-                    arbitrationKey, null, null, null);
+                    arbitrationKey, null, null, null, null, null);
         }
 
         public TextCommand(String conversationId, String text, String languageTag,
                 String clientOperationId, Actor actor, String agentSessionId,
                 String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener) {
             this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
-                    arbitrationKey, metadata, acceptedListener, null);
+                    arbitrationKey, metadata, acceptedListener, null, null, null);
+        }
+
+        /** Compatibility overload for callers that supply quote metadata but no draft snapshot. */
+        public TextCommand(String conversationId, String text, String languageTag,
+                String clientOperationId, Actor actor, String agentSessionId,
+                String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener,
+                String quotedMessageId) {
+            this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
+                    arbitrationKey, metadata, acceptedListener, quotedMessageId, null, null);
+        }
+
+        /** Draft-aware overload without attachments（stub/桥的常用形态）。 */
+        public TextCommand(String conversationId, String text, String languageTag,
+                String clientOperationId, Actor actor, String agentSessionId,
+                String arbitrationKey, InputMetadata metadata, AcceptedListener acceptedListener,
+                String quotedMessageId, String submittedDraftInstanceId) {
+            this(conversationId, text, languageTag, clientOperationId, actor, agentSessionId,
+                    arbitrationKey, metadata, acceptedListener, quotedMessageId,
+                    submittedDraftInstanceId, null);
         }
     }
 
     /** 受理结果：messageId/sequence 是持久化事实；replay=true 表示幂等命中。 */
     public record TextAccepted(String userMessageId, String conversationTaskId,
             long sequenceNo, boolean replay) { }
+
+    // ---------------------------------------------------------------- 统一提交（输入交互增强 §3.2）
+
+    /**
+     * 统一提交入口：在 Host 侧原子判定“并入运行中宿主任务（steer）”还是“建立新主轮次”，
+     * Launcher 不预读状态自行决定。steer 分支的线性化由 appendSteerMessage 事务保证
+     * （宿主终态写互斥）；判定不到可接收宿主时自然落到主轮次（排队语义仍然正确）。
+     *
+     * <p>幂等：先按 text:/steer: 两个键查既有行——Binder 重试无论首次落在哪个分支都
+     * 返回既有事实，不会出现“首次主轮次、重试变 steer”的重复提交。文本超过追加限额
+     * （512）时 steer 不可行，直接走主轮次。acceptedListener 在两个分支都会同步回执
+     * （steer 分支回执宿主任务 id），VoiceBridge 的 token 映射因此对两分支同时成立。</p>
+     */
+    public UnifiedTextOutcome submitTextOrAppend(TextCommand command) {
+        Objects.requireNonNull(command, "command");
+        ConversationIds.requireLowerUuid(command.conversationId(), "conversationId");
+        ConversationIds.requireLowerUuid(command.clientOperationId(), "clientOperationId");
+        List<String> attachmentIds = normalizedAttachmentIds(command);
+        String normalized = normalizeSubmissionText(command.text(), TEXT_MAX_CHARS,
+                !attachmentIds.isEmpty());
+
+        // 幂等前置（§3.2）：Binder/桥重试无论首次落在哪个分支都返回既有事实——
+        // 先查命令自带的幂等键（PTT/WAKE metadata），再查 text:/steer: 派生键。
+        if (command.metadata() != null) {
+            MessageRow existing = store.findMessageByIdempotencyKey(
+                    command.metadata().idempotencyKey());
+            if (existing != null) {
+                return replayOf(existing);
+            }
+        }
+        MessageRow primaryExisting = store.findMessageByIdempotencyKey(
+                ConversationIds.textIdempotencyKey(command.conversationId(),
+                        command.clientOperationId()));
+        if (primaryExisting != null) {
+            return replayOf(primaryExisting);
+        }
+        MessageRow steerExisting = store.findMessageByIdempotencyKey(
+                ConversationIds.steerIdempotencyKey(command.conversationId(),
+                        command.clientOperationId()));
+        if (steerExisting != null) {
+            return replayOf(steerExisting);
+        }
+
+        if (normalized.length() <= APPEND_MAX_CHARS) {
+            String steerKey = command.metadata() == null
+                    ? ConversationIds.steerIdempotencyKey(command.conversationId(),
+                            command.clientOperationId())
+                    : command.metadata().idempotencyKey();
+            SteerAccepted steer = appendSteerWithKey(command, normalized, steerKey,
+                    attachmentIds);
+            if (steer != null) {
+                notifyAccepted(command.acceptedListener(),
+                        new TextAccepted(steer.steerMessageId(), steer.hostConversationTaskId(),
+                                steer.sequenceNo(), steer.replay()));
+                return new UnifiedTextOutcome(steer.offered()
+                        ? com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_STEER_ACCEPTED
+                        : com.matrix.agent.api.conversation.ConversationSubmission
+                                .OUTCOME_STEER_DELIVERY_FAILED,
+                        steer.steerMessageId(), steer.hostConversationTaskId(), steer.sequenceNo(),
+                        steer.replay());
+            }
+        }
+        TextAccepted accepted = submitText(command);
+        return new UnifiedTextOutcome(
+                com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_PRIMARY_ACCEPTED,
+                accepted.userMessageId(), accepted.conversationTaskId(),
+                accepted.sequenceNo(), accepted.replay());
+    }
+
+    /** 既有行的统一回放：inputKind 区分分支，steer 行反查宿主任务。 */
+    private UnifiedTextOutcome replayOf(MessageRow existing) {
+        boolean steer = existing.inputKindWire() == MessageRow.INPUT_STEER_WIRE;
+        int outcome = !steer
+                ? com.matrix.agent.api.conversation.ConversationSubmission.OUTCOME_PRIMARY_ACCEPTED
+                : existing.steerDeliveryWire()
+                        == ConversationMessage.STEER_DELIVERY_FAILED
+                        ? com.matrix.agent.api.conversation.ConversationSubmission
+                                .OUTCOME_STEER_DELIVERY_FAILED
+                        : com.matrix.agent.api.conversation.ConversationSubmission
+                                .OUTCOME_STEER_ACCEPTED;
+        return new UnifiedTextOutcome(outcome,
+                existing.messageId(),
+                steer ? hostTaskOf(existing) : existing.conversationTaskId(),
+                existing.sequenceNo(), true);
+    }
+
+    /** steer 行没有独立 task link；其宿主任务经 steerHostUserMessageId 反查（可空）。 */
+    private String hostTaskOf(MessageRow steerRow) {
+        if (steerRow.steerHostUserMessageId() == null) return null;
+        MessageRow host = store.findMessage(steerRow.steerHostUserMessageId());
+        return host == null ? null : host.conversationTaskId();
+    }
+
+    /** 统一提交结果；outcome 取 SDK ConversationSubmission.OUTCOME_*。 */
+    public record UnifiedTextOutcome(int outcome, String userMessageId,
+            String conversationTaskId, long sequenceNo, boolean replay) { }
 
     // ---------------------------------------------------------------- 追加与取消
 
@@ -309,10 +478,26 @@ public final class ConversationCoordinator {
             String clientOperationId) {
         ConversationIds.requireLowerUuid(conversationId, "conversationId");
         ConversationIds.requireLowerUuid(clientOperationId, "clientOperationId");
+        return appendSteerWithKey(new TextCommand(conversationId, text, null,
+                        clientOperationId, Actor.DRIVER, sessionForConversation.apply(conversationId),
+                        "legacy", null, null), text,
+                ConversationIds.steerIdempotencyKey(conversationId, clientOperationId), List.of());
+    }
+
+    /** 显式幂等键变体（统一提交路径：PTT/WAKE metadata 键直达，重试命中同一行）。 */
+    SteerAccepted appendSteerWithKey(TextCommand command, String text, String idempotencyKey,
+            List<String> attachmentIds) {
+        String conversationId = command.conversationId();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("idempotencyKey 不能为空");
+        }
         String steerText = normalizeText(text, APPEND_MAX_CHARS);
+        // 附件的验证、净化投影发生在任何 steer 持久化前；Steer 只得到脱敏文本，
+        // 用户消息正文仍保持原话，附件事实由同一事务冻结到 INPUT_STEER 行。
+        String attachmentContext = projectAttachments(command, attachmentIds);
+        String agentSteerText = attachmentContext.isEmpty() ? steerText : steerText + attachmentContext;
         String messageId = ConversationIds.newMessageId();
-        String idempotencyKey =
-                ConversationIds.steerIdempotencyKey(conversationId, clientOperationId);
 
         // 预检只挑挂载点；真正的线性化在 appendSteerMessage 事务内（宿主终态互斥）
         String hostUserMessageId = store.findRunningUserMessageId(conversationId);
@@ -321,13 +506,17 @@ public final class ConversationCoordinator {
         }
         SubmittedSteerMessage submitted = store.appendSteerMessage(new SteerSubmission(
                 conversationId, messageId, ConversationMessage.CHANNEL_TEXT, steerText,
-                null, hostUserMessageId, idempotencyKey));
+                null, hostUserMessageId, idempotencyKey, command.submittedDraftInstanceId(),
+                attachmentIds));
         if (submitted.replay()) {
             Log.i(TAG, "[Conversation] STEER 幂等命中 conv=" + conversationId);
             MessageRow existing = store.findMessageByIdempotencyKey(idempotencyKey);
             return new SteerAccepted(
                     existing == null ? messageId : existing.messageId(),
-                    submitted.sequenceNo(), true);
+                    existing == null ? hostTaskForUserMessage(hostUserMessageId)
+                            : hostTaskOf(existing), submitted.sequenceNo(), true,
+                    existing == null || existing.steerDeliveryWire()
+                            == ConversationMessage.STEER_DELIVERY_OFFERED);
         }
         MessageRow persisted = store.findMessage(messageId);
         if (persisted != null) {
@@ -335,8 +524,8 @@ public final class ConversationCoordinator {
         }
 
         boolean accepted = steerSink.offerSteer(sessionForConversation.apply(conversationId),
-                Steer.reprompt(steerText, messageId));
-        store.updateSteerDelivery(messageId, accepted);
+                Steer.reprompt(agentSteerText, messageId));
+        store.updateSteerDelivery(messageId, accepted, command.submittedDraftInstanceId());
         if (!accepted) {
             Log.w(TAG, "[Conversation] STEER 投递被拒绝，附属输入收敛 FAILED msg="
                     + messageId);
@@ -347,11 +536,18 @@ public final class ConversationCoordinator {
                         PersistedMessageStatus.FAILED.wire(), 0);
             }
         }
-        return new SteerAccepted(messageId, submitted.sequenceNo(), false);
+        return new SteerAccepted(messageId, hostTaskForUserMessage(hostUserMessageId),
+                submitted.sequenceNo(), false, accepted);
     }
 
     /** 附属输入受理结果；replay=true 表示幂等命中既有行。 */
-    public record SteerAccepted(String steerMessageId, long sequenceNo, boolean replay) { }
+    public record SteerAccepted(String steerMessageId, String hostConversationTaskId,
+            long sequenceNo, boolean replay, boolean offered) { }
+
+    private String hostTaskForUserMessage(String hostUserMessageId) {
+        MessageRow host = hostUserMessageId == null ? null : store.findMessage(hostUserMessageId);
+        return host == null ? null : host.conversationTaskId();
+    }
 
     // ---------------------------------------------------------------- 用户组织（评估 v1.0 阶段 3）
 
@@ -530,6 +726,31 @@ public final class ConversationCoordinator {
             notifyTerminal(conversationTaskId, outcome);
         } finally {
             activeTokens.remove(conversationTaskId);
+            // 终态清理（I3 §6.2 顺序契约）：convergeTerminal 已先推 message upsert，
+            // 此处再清运行阶段——输入栏不会短暂显示“正在执行”而消息已“已完成”。
+            endStageTracking(conversationId, conversationTaskId,
+                    prepared.runtimeRequestId());
+        }
+    }
+
+    private void beginStageTracking(String conversationId, String conversationTaskId,
+            String runtimeRequestId) {
+        if (progressBridge != null) {
+            progressBridge.bind(runtimeRequestId, conversationId, conversationTaskId);
+        }
+        if (stageRegistry != null) {
+            stageRegistry.publish(conversationId, conversationTaskId,
+                    ConversationRuntimeStageRegistry.stageQueued(), "");
+        }
+    }
+
+    private void endStageTracking(String conversationId, String conversationTaskId,
+            String runtimeRequestId) {
+        if (stageRegistry != null) {
+            stageRegistry.clear(conversationId, conversationTaskId);
+        }
+        if (progressBridge != null) {
+            progressBridge.unbind(runtimeRequestId);
         }
     }
 
@@ -545,8 +766,10 @@ public final class ConversationCoordinator {
             String conversationTaskId, PersistedMessageStatus status, int failureCode,
             AssistantReply reply, String traceJson) {
         String assistantMessageId = ConversationIds.newMessageId();
-        if (!store.writeTerminal(new TerminalWrite(conversationTaskId, status.wire(),
-                failureCode, assistantMessageId, reply.text(), traceJson))) {
+        ConversationStore.TerminalOutcome terminal = store.writeTerminal(new TerminalWrite(
+                conversationTaskId, status.wire(), failureCode, assistantMessageId,
+                reply.text(), traceJson));
+        if (!terminal.written()) {
             Log.w(TAG, "[Conversation] 终态丢弃（conversation 已清除）task="
                     + conversationTaskId);
             return;
@@ -562,6 +785,17 @@ public final class ConversationCoordinator {
             notifyUpsert(finalUserRow);
         }
         notifyStatus(conversationId, userMessageId, status.wire(), failureCode);
+        // 附属 steer 的镜像收敛事件（评审 P1）：宿主终态同事务收敛的 steer 行必须
+        // 逐行补发 upsert + status——否则客户端缓存停留在 RUNNING，气泡挂“正在并入”、
+        // 取消入口残留，直到重进会话。事实来自事务返回值，不回查、不推断。
+        for (ConversationStore.ConvergedSteer converged : terminal.convergedSteers()) {
+            MessageRow steerRow = store.findMessage(converged.messageId());
+            if (steerRow != null) {
+                notifyUpsert(steerRow);
+            }
+            notifyStatus(conversationId, converged.messageId(), converged.statusWire(),
+                    converged.failureCode());
+        }
         // 自动标题触发点（评估 v1.0 §4.1）：第一条到达终态的用户轮次；sink 自行异步
         // 且比较交换——多次触发至多一次写入，REJECTED/CANCELLED 由 sink 过滤。
         terminalRoundSink.onTerminalRound(conversationId, userMessageId, status.wire());
@@ -596,6 +830,46 @@ public final class ConversationCoordinator {
         };
     }
 
+    // ---------------------------------------------------------------- 附件（I6 §9.2）
+
+    /** 规范化提交附件集合：null/空 → 空列表；去重保序。 */
+    private static List<String> normalizedAttachmentIds(TextCommand command) {
+        if (command.contextAttachmentIds() == null || command.contextAttachmentIds().isEmpty()) {
+            return List.of();
+        }
+        return command.contextAttachmentIds().stream().distinct()
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * 提交前验证 + 物化投影。空集合为 no-op（空串）；带附件但端口未装配抛
+     * IllegalArgumentException（附件域降级时显式拒绝，不静默丢附件）；
+     * 任一附件无效同样在所有持久化动作之前抛出（§3.2 整次拒绝，不留半写）。
+     * owner/zone 从会话行推导（与草稿消费同源），Launcher 不可指定。
+     */
+    private String projectAttachments(TextCommand command, List<String> attachmentIds) {
+        if (attachmentIds.isEmpty()) return "";
+        AttachmentPort port = attachmentPort;
+        if (port == null) {
+            throw new IllegalArgumentException("附件能力不可用（Host 未装配附件域）");
+        }
+        ConversationStore.ConversationRow conversation =
+                store.findConversation(command.conversationId());
+        if (conversation == null) {
+            throw new IllegalArgumentException("conversation 不存在: "
+                    + command.conversationId());
+        }
+        port.validateForSubmission(conversation.ownerUserId(), conversation.vehicleZone(),
+                command.conversationId(), attachmentIds);
+        return port.projectContext(conversation.ownerUserId(),
+                conversation.vehicleZone(), command.conversationId(), attachmentIds);
+    }
+
+    /** 附件端口只读暴露（Stub 的消息 DTO 投影用）。 */
+    public AttachmentPort attachmentPort() {
+        return attachmentPort;
+    }
+
     private static String normalizeText(String text, int maxChars) {
         if (text == null) throw new IllegalArgumentException("text 不能为空");
         String trimmed = text.strip();
@@ -604,6 +878,20 @@ public final class ConversationCoordinator {
             throw new IllegalArgumentException("text 超过上限 " + maxChars + " 字符");
         }
         return trimmed;
+    }
+
+    /**
+     * 附件本身是明确、可见的输入。用户只选附件不写说明时，生成一条透明的最小意图，
+     * 既满足 task 端口的非空文本契约，也不会把附件静默丢弃或要求用户凑字数。
+     */
+    private static String normalizeSubmissionText(String text, int maxChars,
+            boolean hasAttachments) {
+        if (text == null) text = "";
+        String normalized = text.strip();
+        if (normalized.isEmpty() && hasAttachments) {
+            return "请根据我选择的附件提供帮助。";
+        }
+        return normalizeText(normalized, maxChars);
     }
 
     private static String normalizeLanguage(String languageTag) {

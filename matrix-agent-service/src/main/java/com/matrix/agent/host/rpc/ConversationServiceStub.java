@@ -5,11 +5,13 @@ import android.os.RemoteException;
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.common.ParcelSchema;
 import com.matrix.agent.api.conversation.CapabilityTraceEntry;
+import com.matrix.agent.api.conversation.ConversationDraft;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationListQuery;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationOperationResult;
 import com.matrix.agent.api.conversation.ConversationPage;
+import com.matrix.agent.api.conversation.ConversationRuntimeStage;
 import com.matrix.agent.api.conversation.ConversationSubmission;
 import com.matrix.agent.api.conversation.CreateConversationRequest;
 import com.matrix.agent.api.conversation.IConversationCallback;
@@ -17,11 +19,13 @@ import com.matrix.agent.api.conversation.IConversationService;
 import com.matrix.agent.api.conversation.SendTextRequest;
 import com.matrix.agent.conversation.CapabilityTraceCodec;
 import com.matrix.agent.conversation.ConversationCoordinator;
-import com.matrix.agent.conversation.ConversationReadbackService;
-import com.matrix.agent.conversation.ConversationVoiceBindingStore;
+import com.matrix.agent.conversation.ConversationDraftStore;
 import com.matrix.agent.conversation.ConversationIds;
+import com.matrix.agent.conversation.ConversationReadbackService;
+import com.matrix.agent.conversation.ConversationRuntimeStageRegistry;
 import com.matrix.agent.conversation.ConversationServiceGate;
 import com.matrix.agent.conversation.ConversationStore;
+import com.matrix.agent.conversation.ConversationVoiceBindingStore;
 import com.matrix.agent.identity.Actor;
 import com.matrix.agent.identity.ActorUsers;
 import com.matrix.agent.task.durable.PersistenceGate;
@@ -61,6 +65,12 @@ public final class ConversationServiceStub extends IConversationService.Stub
 
     private final ConversationReadbackService readback;
     private final com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker;
+    /** 草稿端口（I4）；null = 降级（草稿方法 fail-closed）。 */
+    private final ConversationDraftStore draftStore;
+    /** 运行阶段注册表（I3）；null = 不推送阶段。 */
+    private final ConversationRuntimeStageRegistry stageRegistry;
+    /** 附件 staging（I6）；null = 降级（消息 DTO 不投影 chips）。 */
+    private final com.matrix.agent.attachment.RoomAttachmentStagingStore attachmentStore;
 
     public ConversationServiceStub(ConversationCoordinator coordinator,
             ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
@@ -75,6 +85,27 @@ public final class ConversationServiceStub extends IConversationService.Stub
             ModelServiceStub.CallerResolver callerResolver,
             ConversationVoiceBindingStore bindingStore, ConversationReadbackService readback,
             com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker) {
+        this(coordinator, recoveryGate, persistenceGate, callerResolver, bindingStore,
+                readback, summaryMarker, null, null);
+    }
+
+    public ConversationServiceStub(ConversationCoordinator coordinator,
+            ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
+            ModelServiceStub.CallerResolver callerResolver,
+            ConversationVoiceBindingStore bindingStore, ConversationReadbackService readback,
+            com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker,
+            ConversationDraftStore draftStore, ConversationRuntimeStageRegistry stageRegistry) {
+        this(coordinator, recoveryGate, persistenceGate, callerResolver, bindingStore,
+                readback, summaryMarker, draftStore, stageRegistry, null);
+    }
+
+    public ConversationServiceStub(ConversationCoordinator coordinator,
+            ConversationServiceGate recoveryGate, PersistenceGate persistenceGate,
+            ModelServiceStub.CallerResolver callerResolver,
+            ConversationVoiceBindingStore bindingStore, ConversationReadbackService readback,
+            com.matrix.agent.conversation.ConversationSummaryMarker summaryMarker,
+            ConversationDraftStore draftStore, ConversationRuntimeStageRegistry stageRegistry,
+            com.matrix.agent.attachment.RoomAttachmentStagingStore attachmentStore) {
         this.coordinator = coordinator;
         this.recoveryGate = recoveryGate;
         this.persistenceGate = persistenceGate;
@@ -82,7 +113,22 @@ public final class ConversationServiceStub extends IConversationService.Stub
         this.bindingStore = bindingStore;
         this.readback = readback;
         this.summaryMarker = summaryMarker;
+        this.draftStore = draftStore;
+        this.stageRegistry = stageRegistry;
+        this.attachmentStore = attachmentStore;
         coordinator.setListener(this);
+        // 阶段事件 → Binder 分发（I3）。cleared 不出 wire：终态消息 upsert 替代运行状态。
+        if (stageRegistry != null) {
+            stageRegistry.setListener(new ConversationRuntimeStageRegistry.Listener() {
+                @Override
+                public void onRuntimeStage(
+                        ConversationRuntimeStageRegistry.StageEvent event) {
+                    ConversationRuntimeStage dto = toStageDto(event);
+                    registryOf(event.conversationId(), registry -> registry.dispatch(
+                            callback -> callback.onRuntimeStageChanged(dto)));
+                }
+            });
+        }
     }
 
     // ---------------------------------------------------------------- 域事件 → Binder 分发
@@ -176,6 +222,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
             return new ConversationPage(ParcelSchema.CURRENT, Collections.emptyList(), false, false,
                     false, false);
         }
+        requireOwnedConversation(conversationId);
         int boundedLimit = Math.max(1, Math.min(limit, 100));
         ConversationStore.MessageWindow window = coordinator.windowAfter(conversationId,
                 afterSequenceExclusive, boundedLimit);
@@ -191,6 +238,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
             return new ConversationPage(ParcelSchema.CURRENT, Collections.emptyList(), false, false,
                     false, false);
         }
+        requireOwnedConversation(conversationId);
         int boundedLimit = Math.max(1, Math.min(limit, 100));
         // 不可定位（越权/被清理/不存在）统一空页 + anchorExists=false，不泄漏存在性
         ConversationStore.MessageWindow window = coordinator.windowAround(conversationId,
@@ -281,6 +329,111 @@ public final class ConversationServiceStub extends IConversationService.Stub
         }
         return new ConversationOperationResult(MatrixErrorCode.SUCCESS,
                 safeOperation, conversationId, accepted.steerMessageId());
+    }
+
+    @Override
+    public ConversationSubmission submitTextOrAppend(String conversationId, String text,
+            List<String> contextAttachmentIds, String draftInstanceId, long draftRevision,
+            String clientOperationId) {
+        callerResolver.caller();
+        String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (draftInstanceId != null && !ConversationIds.isLowerUuid(draftInstanceId)) {
+            return new ConversationSubmission(MatrixErrorCode.INVALID_ARGUMENT, conversationId,
+                    null, null, 0L, false, ConversationSubmission.OUTCOME_REJECTED);
+        }
+        if (draftRevision < 0L) {
+            return new ConversationSubmission(MatrixErrorCode.INVALID_ARGUMENT, conversationId,
+                    null, null, 0L, false, ConversationSubmission.OUTCOME_REJECTED);
+        }
+        int availability = availabilityError();
+        if (availability != MatrixErrorCode.SUCCESS) {
+            return new ConversationSubmission(availability, conversationId, null, null, 0L,
+                    false);
+        }
+        requireOwnedConversation(conversationId);
+        try {
+            // 附件（I6 §3.2/§9.2）：Phase 2A 起非空列表放行——owner/zone/READY/超量
+            // 校验与受限文本投影全部在 Coordinator 的 AttachmentPort 内完成，且必须在
+            // 任何持久化动作之前（整次拒绝，不留半写）；FAILED 附件在此以
+            // INVALID_ARGUMENT + OUTCOME_REJECTED 返回。
+            ConversationCoordinator.UnifiedTextOutcome outcome = coordinator.submitTextOrAppend(
+                    new ConversationCoordinator.TextCommand(
+                            conversationId, text, null, safeOperation, Actor.DRIVER,
+                            ConversationIds.agentSessionId(conversationId,
+                                    Actor.DRIVER.name(), CALLER_ZONE),
+                            ARBITRATION_KEY, null, null, null, draftInstanceId,
+                            contextAttachmentIds));
+            int code = outcome.outcome()
+                    == ConversationSubmission.OUTCOME_STEER_DELIVERY_FAILED
+                    ? MatrixErrorCode.INVALID_STATE : MatrixErrorCode.SUCCESS;
+            return new ConversationSubmission(code, conversationId,
+                    outcome.userMessageId(), outcome.conversationTaskId(),
+                    outcome.sequenceNo(), outcome.replay(), outcome.outcome());
+        } catch (IllegalArgumentException invalid) {
+            return new ConversationSubmission(MatrixErrorCode.INVALID_ARGUMENT, conversationId,
+                    null, null, 0L, false, ConversationSubmission.OUTCOME_REJECTED);
+        }
+    }
+
+    // ---------------------------------------------------------------- 草稿（I4）
+
+    @Override
+    public ConversationDraft getDraft(String conversationId) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (draftStore == null || availabilityError() != MatrixErrorCode.SUCCESS) {
+            return null;
+        }
+        ConversationStore.ConversationRow conversation = requireOwnedConversation(conversationId);
+        ConversationDraftStore.DraftRow row = draftStore.get(conversation.ownerUserId(),
+                conversation.vehicleZone(), conversationId);
+        return row == null ? null : new ConversationDraft(conversationId,
+                row.draftInstanceId(), row.revision(), row.text(), row.selectionStart(),
+                row.selectionEnd(), row.updatedAtMs());
+    }
+
+    @Override
+    public int saveDraft(ConversationDraft draft) {
+        callerResolver.caller();
+        if (draft == null || draft.conversationId == null) {
+            throw new IllegalArgumentException("invalid draft");
+        }
+        ConversationIds.requireLowerUuid(draft.conversationId, "conversationId");
+        if (draftStore == null) {
+            return availabilityError() == MatrixErrorCode.SUCCESS
+                    ? MatrixErrorCode.INVALID_STATE : availabilityError();
+        }
+        requireAvailableForMutation();
+        ConversationStore.ConversationRow conversation =
+                requireOwnedConversation(draft.conversationId);
+        ConversationDraftStore.SaveResult result = draftStore.save(
+                new ConversationDraftStore.SaveCommand(
+                        conversation.ownerUserId(), conversation.vehicleZone(),
+                        draft.conversationId, draft.draftInstanceId, draft.revision,
+                        draft.text, draft.selectionStart, draft.selectionEnd,
+                        System.currentTimeMillis()));
+        return switch (result) {
+            case SAVED, IDEMPOTENT_STALE_REVISION -> MatrixErrorCode.SUCCESS;
+            // 已消费 instance：客户端必须生成新 instance 再存，不得原样重试。
+            case REJECTED_CONSUMED_INSTANCE -> MatrixErrorCode.INVALID_STATE;
+            case REJECTED_PAYLOAD -> MatrixErrorCode.INVALID_ARGUMENT;
+        };
+    }
+
+    @Override
+    public void discardDraft(String conversationId, String draftInstanceId, long revision) {
+        callerResolver.caller();
+        ConversationIds.requireLowerUuid(conversationId, "conversationId");
+        if (draftStore == null) {
+            return;
+        }
+        if (availabilityError() != MatrixErrorCode.SUCCESS) {
+            return;
+        }
+        ConversationStore.ConversationRow conversation = requireOwnedConversation(conversationId);
+        draftStore.discard(conversation.ownerUserId(), conversation.vehicleZone(),
+                conversationId, draftInstanceId);
     }
 
     @Override
@@ -450,6 +603,20 @@ public final class ConversationServiceStub extends IConversationService.Stub
                 throw dead;
             }
         }
+        // 运行阶段当前快照（I3 §6.2）：订阅受理后立即重发一次（snapshot=true），
+        // 不补历史——重连方拿到的就是“此刻正在做什么”。无活跃任务不发送。
+        if (stageRegistry != null) {
+            ConversationRuntimeStageRegistry.StageEvent stage =
+                    stageRegistry.snapshotOf(conversationId);
+            if (stage != null) {
+                try {
+                    callback.onRuntimeStageChanged(toStageDto(stage));
+                } catch (RemoteException dead) {
+                    unsubscribeConversation(callback);
+                    throw dead;
+                }
+            }
+        }
     }
 
     @Override
@@ -530,6 +697,13 @@ public final class ConversationServiceStub extends IConversationService.Stub
                 window.anchorExists());
     }
 
+    private static ConversationRuntimeStage toStageDto(
+            ConversationRuntimeStageRegistry.StageEvent event) {
+        return new ConversationRuntimeStage(event.conversationId(),
+                event.conversationTaskId(), event.generation(), event.stage(),
+                event.safeLabel(), event.occurredAtMs(), event.snapshot());
+    }
+
     private static ConversationInfo toInfoDto(ConversationStore.ConversationRow row) {
         return new ConversationInfo(ParcelSchema.CURRENT, row.conversationId(), row.title(),
                 row.ownerUserId(), row.vehicleZone(), row.archived(), row.createdAtMs(),
@@ -558,11 +732,21 @@ public final class ConversationServiceStub extends IConversationService.Stub
                 }
             }
         }
+        // 附件 chips（I6 v8）：只挂 INPUT_PRIMARY 用户消息（steer 无附件）；
+        // 投影只含 chip 元数据，正文（extractedText）不跨 Binder（§9.2）。
+        java.util.List<com.matrix.agent.api.conversation.ConversationAttachment>
+                attachments = java.util.Collections.emptyList();
+        if (row.roleWire() == ConversationMessage.ROLE_USER
+                && row.inputKindWire() == ConversationMessage.INPUT_PRIMARY
+                && attachmentStore != null) {
+            attachments = com.matrix.agent.attachment.RoomAttachmentStagingStore
+                    .toDtoList(attachmentStore.listByMessage(row.messageId()));
+        }
         return new ConversationMessage(ParcelSchema.CURRENT, row.conversationId(),
                 row.messageId(), row.sequenceNo(), row.roleWire(), row.statusWire(),
                 row.channelWire(), row.text(), row.languageTag(), row.conversationTaskId(),
                 row.failureCode(), row.createdAtMs(), row.updatedAtMs(),
                 row.inputKindWire(), row.steerHostUserMessageId(), row.steerDeliveryWire(),
-                traces);
+                traces, attachments);
     }
 }

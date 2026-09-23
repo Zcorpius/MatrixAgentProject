@@ -22,7 +22,7 @@ Matrix 的对话页已经拥有比普通聊天应用更严格的底座：文字�
 | I4 | 多行、回车发送、加密草稿 | Phase 1 | 长输入与切换会话不会丢失草稿 |
 | I5 | 只读模型胶囊 | Phase 2 | 会话所用模型状态清楚可见，配置仍由 Host 管理 |
 | I6 | 受控 `+` 上下文附件 | Phase 2 | 用户明确选择的资料可成为可审计模型上下文 |
-| I7 | `@` / `/` 结构化引用 | Phase 3 | 引用联系人、地点、车辆状态等对象，而不是把信息悄悄拼进 Prompt |
+| I7 | `@` / `/` 结构化引用 | Phase 3 | 引用车辆状态、导航目的地和历史消息，而不是把信息悄悄拼进 Prompt |
 
 本任务明确**不做**：
 
@@ -62,7 +62,7 @@ Operit 的 UI 值得参考，但其输入层可以直接修改应用内模型、
 | `IVoiceService` 与一次性 voice binding | PTT final 可以自然复用同一条提交入口；Launcher 不接触 PCM |
 | `ConversationStore` / SQLCipher / `clearUserData` | 草稿、附件元数据和引用应进入同一用户作用域、epoch 与清理规则 |
 | `ModelRuntimeStatus`、`ModelManager`、`SecureModelConfigStore` | 模型胶囊应读取 Host 真相，不从 Launcher 表单猜当前模型 |
-| `ConversationTransientUpdate` / 对话订阅模式 | 可以受限、节流地发布运行阶段，避免把 token 流或原始 reasoning 打到 Binder |
+| 对话订阅模式与 `CallbackRegistry` | 可复用 oneway 回调、节流、生命周期退订与 `RemoteException` 摘除纪律；正式运行阶段协议仍是本任务首次新增 |
 
 ### 2.3 不变的架构原则
 
@@ -85,14 +85,14 @@ Operit 的 UI 值得参考，但其输入层可以直接修改应用内模型、
 │ 输入消息…                                             [全屏] │
 │ 可显示已选上下文 chip，长文本自动向上扩展，最多 6 行          │
 ├──────────────────────────────────────────────────────────────┤
-│ [GLM-5.2 · 已连接]       [运行状态]        [+] [发送 / PTT] │
+│ [GLM-5.2 · 已连接]       [运行状态]        [+] [PTT] [发送] │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 - **文本区**：普通状态下最多六行，超过后内部滚动；内容不为空时右侧始终保留全屏编辑入口。
 - **底栏左侧**：Phase 1 没有模型时显示“Host 已连接”或简短状态；Phase 2 替换为只读模型胶囊。
 - **底栏中部**：只在任务存在真实运行阶段时出现一句有限状态；没有状态时不占据视觉空间。
-- **底栏右侧**：`+`、主动作；取消不是主按钮，见 §5.3。
+- **底栏右侧**：`+`、始终可见的 PTT 次级按钮和文字主动作。即使已有草稿，PTT 仍可按住说话，且绝不清空草稿；主动作在有内容时为“发送”或“追加”。取消不是主按钮，见 §5.3。
 - **附件/引用 chips**：在文本区与底栏间一行横向滚动；每个 chip 均有来源图标、摘要、删除按钮和可访问性描述。
 
 布局参考 Operit 的“上方输入、下方模型/设置/附件/主动作”层级，但 Matrix 不放置工具权限或模型编辑入口。车机触控目标最小 48dp，文字对比度满足 Material 可读性要求；键盘弹起时输入区与状态区整体上移，不遮挡最后一条消息。
@@ -103,8 +103,8 @@ Operit 的 UI 值得参考，但其输入层可以直接修改应用内模型、
 
 | UI 意图 | Host 命令 | 可能结果 |
 | --- | --- | --- |
-| 提交主消息 | `sendText` / 后续 `submitInput` | 创建 `INPUT_PRIMARY` 用户消息和新任务 |
-| 追加到执行中请求 | `appendMessage` / 后续 `submitInput` | 创建 `INPUT_STEER` 消息，尝试 `Steer.REPROMPT` |
+| 提交主消息 | `sendText` / 后续 `submitTextOrAppend` | 创建 `INPUT_PRIMARY` 用户消息和新任务 |
+| 追加到执行中请求 | `appendMessage` / 后续 `submitTextOrAppend` | 创建 `INPUT_STEER` 消息，尝试 `Steer.REPROMPT` |
 | 取消当前任务 | `cancelMessage` | 请求取消；最终显示由 Host 收敛，不能预先写“已取消” |
 | 开始 PTT | `createVoiceBinding` → `IVoiceService` | ASR final 回到同一个 Coordinator；partial 只临时显示 |
 
@@ -117,10 +117,14 @@ ConversationSubmission submitTextOrAppend(
         String conversationId,
         String text,
         List<String> contextAttachmentIds,
+        String draftInstanceId,
+        long draftRevision,
         String clientOperationId);
 ```
 
 它在 `ConversationCoordinator` 的同一会话门控内原子判定：若存在可接收的 RUNNING 宿主任务，走持久化 steer；否则建立主轮次。对外 AIDL 可保留旧 `sendText` / `appendMessage` 的兼容语义，并在 SDK 的较高版本增加 `submitTextOrAppend`；Launcher 新版本只调用新方法。返回值必须明确 `PRIMARY_ACCEPTED`、`STEER_ACCEPTED`、`INVALID_STATE`、`REJECTED` 等结果，禁止让 UI 通过异常文字猜测。
+
+`contextAttachmentIds` 是为 Phase 2A 预留的 append-only 参数，但 **Phase 1 只接受空列表**。Host 对非空列表返回 `INVALID_ARGUMENT`，Launcher Phase 1 固定传 `Collections.emptyList()`，不得静默忽略或自行删除参数。Phase 2A 才允许同 owner/zone 下、状态为 `READY` 的 staged attachment ID；任一 ID 不存在、未 ready、越权或已过期，整次提交必须在创建任务前拒绝。
 
 ---
 
@@ -131,7 +135,7 @@ ConversationSubmission submitTextOrAppend(
 点击输入框末尾的“展开”图标，仅打开一个全屏编辑器：
 
 - 初始值、光标、选区、已选附件和结构化引用与底部草稿完全一致。
-- 关闭、系统返回、点击“完成”均写回草稿；**不会提交 Agent 请求**。
+- 只有点击“完成”才把全屏编辑结果写回草稿；关闭、系统返回或“取消”保留打开编辑器前的草稿。三种离开方式都**不会提交 Agent 请求**。
 - 发送仍由底部输入区的统一提交路径完成；全屏编辑器可有“完成”但不可偷放第二个 `sendText` 实现。
 - 在编辑期间收到任务终态、PTT partial 或其他订阅事件，不覆盖用户正在修改的草稿。
 - 旋转、进程重建、切换会话后恢复的是同一条草稿记录，见 §7。
@@ -146,7 +150,7 @@ ConversationFragment
               └─ updateDraft(TextFieldValue)      ← 不发送
 
 ConversationDraftRepository (Launcher SDK adapter)
-  └─ IConversationService.saveDraft/loadDraft      ← Host 加密持久化
+  └─ IConversationService.saveDraft/getDraft       ← Host 加密持久化
 ```
 
 `FullscreenInputDialog` 应是无业务副作用的 Launcher 组件。它只接受 `DraftState`、`onDraftChanged` 与 `onDismiss`，不得 import Host 内部类，更不得持有语音或任务对象。
@@ -170,13 +174,19 @@ Operit 运行中可把文字加入 pending queue。Matrix 的运行中补充文�
 
 | 当前草稿 | 宿主任务状态 | 主动作 | 次级动作 | 真实提交结果 |
 | --- | --- | --- | --- | --- |
-| 空且无附件 | 无运行任务 | 按住说话 | 无 | 创建 PTT binding，final 再由 Host 判定主轮次 |
-| 非空或有附件 | 无运行任务 | 发送 | 无 | `PRIMARY_ACCEPTED` |
-| 空且无附件 | 有可接收任务 | 按住说话 | “取消当前执行” | PTT final 由 Host 原子判定为 steer 或新轮次 |
-| 非空或有附件 | 有可接收任务 | 追加 | “取消当前执行” | `STEER_ACCEPTED`；不新建独立任务 |
+| 空且无附件 | 无运行任务 | 无文字主动作 | 按住说话 | 创建 PTT binding，final 再由 Host 判定主轮次 |
+| 非空或有附件 | 无运行任务 | 发送 | 按住说话 | `PRIMARY_ACCEPTED` |
+| 空且无附件 | 有可接收任务 | 无文字主动作 | 按住说话、“取消当前执行” | PTT final 由 Host 原子判定为 steer 或新轮次 |
+| 非空或有附件 | 有可接收任务 | 追加 | 按住说话、“取消当前执行” | `STEER_ACCEPTED`；不新建独立任务 |
 | 任意 | 取消/终态竞争中 | 禁用一次点击并显示短暂处理中 | 保留状态订阅 | 以 Host receipt 为准；不可乐观标记成功 |
 
-取消是有副作用、且可能落 `EXECUTION_UNKNOWN` 的操作，不能和“发送/追加”复用同一个容易误触的圆形主按钮。它应作为运行状态旁的文字次级操作，点击后显示“正在请求取消”，直到 Host 的用户消息状态真正变为 `CANCELLED`、`FAILED` 或 `EXECUTION_UNKNOWN`。
+PTT 是固定可见的 48dp 次级圆钮，不与文字主动作互斥。用户已经输入草稿后按住 PTT，原草稿保持不变；语音 final 会按 Host 原子判定追加或建立主轮次。这样“打了一半字想改用说的”不需要先清空内容，也符合 Matrix 的语音优先定位。
+
+PTT 的按压反馈是正式契约：`ACTION_DOWN` 立即进入视觉 pressed 态（强调色、缩放/波纹），但只有 Host 确认 capture started 后才显示“录音中”和动态进度环；`ACTION_UP` 请求现有的正常 finish/flush 路径，`ACTION_CANCEL` 才请求取消。按钮须有“按住说话/松开完成”的无障碍描述和触觉反馈，避免用户把它误解为点击开关。任何启动失败、焦点丢失或权限拒绝都要清除 pressed 态并给出受限错误说明。
+
+上述可视化由 Launcher 的 `PttPhase` 阶段机统一投影（`IDLE → ARMING → LISTENING → PROCESSING → IDLE`）：按下即进入 `ARMING`，输入卡内同时出现状态条（“正在开启麦克风…”——冷启动装配期不再只有无解释的底色变化）；Host 首次 `SESSION_LISTENING` 或首条 partial 到达即确认采音（`LISTENING`：按钮圆形底转暖橙 accent、状态条显示“录音中…”与实时转写；转写只上屏、不落库）；松开进入 `PROCESSING`（“已松开，识别中…”），CHANNEL_PTT 用户消息落库或会话终结后收敛回 `IDLE`。阶段转移是纯函数（`nextPhase`，全组合单测覆盖）；语音回调按按压代次（attempt）门卫，旧按压的迟到回调与上一轮迟到的消息回流都不得污染新一轮的进行中状态。“手指按着”（pressed 加深）与“麦克风已在听”（selected 转色）是两个不同事实，按钮配色必须可区分。
+
+取消是有副作用、且可能落 `EXECUTION_UNKNOWN` 的操作，不能和“发送/追加”复用同一个容易误触的圆形主按钮。它应作为运行状态旁的文字次级操作，点击后显示“正在请求取消”，直到 Host 的用户消息状态真正变为 `CANCELLED`、`FAILED` 或 `EXECUTION_UNKNOWN`。取消目标固定为最新未终态的 `INPUT_PRIMARY` 消息；`INPUT_STEER` 没有独立 task link，只能随宿主任务一并收敛，绝不可被当作单独可取消任务。
 
 ### 5.3 Steer 的完整语义
 
@@ -217,22 +227,36 @@ PTT 不创建另一套“语音版追加”逻辑。Launcher 依旧：
 
 ## 6. I3：Host 驱动的轻量运行状态
 
-### 6.1 目标与非目标
+### 6.1 目标、观测边界与第一版阶段集
 
-输入区需要告诉用户“系统正在做什么”，但不是展示模型原始思维链或工具 XML。量产模式可见的是有限、脱敏、由 Host 事实生成的阶段：
+输入区需要告诉用户“系统正在做什么”，但不是展示模型原始思维链或工具 XML。阶段必须由真实 Engine 事件产生；不能把一次原生 tool-calling 模型请求凭空拆成“理解”和“规划”，也不能把 Provider 内部同步执行的 readback 假装成可独立观测的“核验中”。
 
-| 阶段 wire 值 | 用户文案 | 触发源 |
-| --- | --- | --- |
-| `QUEUED` | 等待执行 | Coordinator 已持久化，尚未出队 |
-| `UNDERSTANDING` | 正在理解请求 | Agent 进入首个模型规划回合 |
-| `PLANNING` | 正在规划操作 | 模型回合产生候选或继续规划 |
-| `EXECUTING` | 正在执行“调整媒体音量” | 已进入 Host 能力执行，名称由 `CapabilitySpeechNames` 投影 |
-| `VERIFYING` | 正在核验结果 | readback / verifier 运行中 |
-| `RESPONDING` | 正在生成回复 | Agent 已收敛执行事实，正在生成 final assistant text |
+因此第一版只使用三个**严格可观测**的阶段：
+
+| 阶段 wire 值 | 用户文案 | 精确观测点 | 不声称什么 |
+| --- | --- | --- | --- |
+| `QUEUED` | 等待执行 | Coordinator 已原子持久化 receipt，尚未从 keyed serial lane 出队 | 不承诺模型已收到输入 |
+| `PLANNING` | 正在理解和规划 | `AgentEngine` 每次进入 `LlmPlanner` / `ModelGateway` 前 | 不把同一次模型调用拆成两个虚假阶段 |
+| `EXECUTING` | 正在执行“调整媒体音量” | Engine 在每个 `ToolExecutor.execute(...)` 前发布，返回后结束 | 不声称 readback 已完成或成功 |
+
+终态 assistant 消息一旦写入即直接替代运行状态；第一版**不发布 `RESPONDING`**。在原生 tool-calling 路径中，只有模型返回无 tool call 后才能知道这是一轮收尾，而此时终态投影几乎同步发生，预先显示“正在生成回复”只能是启发式。`UNDERSTANDING`、`VERIFYING` 同理延后：只有在模型层出现明确的解析/规划边界，或 `VerifyStrategy`/Provider 暴露 begin/end verify port 后，才可作为 append-only 新 stage 加入。
 
 这些仅是阶段投影，不能包含原始 prompt、reasoning、密钥、未脱敏参数、路径、通知正文或工具原始返回。详细执行结果继续由用户消息下的终态能力事实轨迹承载。
 
-### 6.2 传输与生命周期
+### 6.2 Task 事件端口、传输与生命周期
+
+现有 task 域没有向 conversation 域发布进度的正式端口；debug trace 是调试旁路，明确不能充当量产 UI 数据源。Phase 1 新增 task 窄端口 `TaskProgressSink`（形式参考 `TaskAuditSink` / `TaskMemoryWriter`，但职责仅为受限运行阶段），作为 `AgentEngineConfiguration` 的一次性基础设施装配，而**不是**塞入每个 `PreparedTask` / `AgentRequest` 的 conversation 领域对象。Engine 发布事件时携带既有 `runtimeRequestId`；Coordinator 维护受限映射 `runtimeRequestId → conversationTaskId/conversationId`，在 Host 边界投影成对话阶段：
+
+```text
+ConversationCoordinator
+  → TaskProgressSink.publish(QUEUED)
+  → keyed lane 出队
+  → AgentEngine 在每次模型调用前 publish(PLANNING)
+  → AgentEngine 在每次 ToolExecutor 前 publish(EXECUTING, capabilityId)
+  → terminal projector 写最终消息并 clear(taskId)
+```
+
+Provider 内部命令—readback 的同步过程仍归 `EXECUTING` 覆盖；本阶段不要求改造 `VerifyStrategy`。未来若要加入 `VERIFYING`，必须先把 verifier 的开始/结束做成显式、可测试的端口事件，而不是在 UI 侧用时间猜测。
 
 新增 SDK Parcelable `ConversationRuntimeStage`，并以 AIDL append-only 方式给 `IConversationCallback` 新增 `oneway onRuntimeStageChanged(...)`。字段至少包含：
 
@@ -243,17 +267,20 @@ long generation;
 int stage;
 String safeLabel;       // Host 已脱敏、长度受限
 long occurredAtMs;
+boolean snapshot;       // subscribe 受理后发送的当前快照
 ```
 
 - Host 在实际状态转换时发布，Launcher 不从 `RUNNING` 自行推断“正在调用工具”。
 - 同一 `conversationTaskId` 以 generation 单调递增；Launcher 丢弃旧 generation 和未知 task 的迟到事件。
-- Host 合并高频进度，最短 200 ms 推送一次；执行/核验阶段有变化时可立即推送。Binder 失败的 callback 沿用 `CallbackRegistry` 摘除模式。
-- 运行阶段只存内存，不进入 `conversation_message`；订阅重连只取当前快照而非补历史。进程死亡后的恢复直接走既有终态对账，不尝试伪造过去的阶段。
+- Host 合并高频进度，最短 200 ms 推送一次；`QUEUED`、`PLANNING`、`EXECUTING` 的真实转换可立即推送。Binder 失败的 callback 沿用 `CallbackRegistry` 摘除模式。
+- `subscribeConversation(...)` 完成兼容性校验并登记 callback 后，Host 从内存 `RuntimeStageRegistry` 读取该会话的当前活跃 task；若存在，立即以 `snapshot=true` 发送一次 `onRuntimeStageChanged`，不存在则不发送。Launcher 在新订阅建立前先清除本地运行阶段，因此不会把旧会话残影留在输入栏。重连只得到这个当前快照，不补历史。
+- 运行阶段只存内存，不进入 `conversation_message`；进程死亡后的恢复直接走既有终态对账，不尝试伪造过去的阶段。
+- 新增 callback transaction 依赖**强制 contract-hash 锁步协商**：Host 只接受声明支持本协议版本的订阅者；协商失败时在注册 callback 前返回 `SERVICE_VERSION_UNSUPPORTED`，既不调用未知 transaction，也不把旧 callback 放入 `CallbackRegistry`。`SERVICE_VERSION_UNSUPPORTED` 必须 append-only 登记进 `MatrixErrorCode` 并补黄金测试。严格 hash 相等的正常协商路径理论上不会到达此分支；保留它仅作纵深防御，防止未来有人放松协商纪律后把未知 onTransact 误判为客户端死亡并摘掉整个订阅。
 - 终态上报后，Host 先推 message upsert，再清空该 task 的 runtime stage，避免输入区短暂显示“正在执行”而消息已经“已完成”。
 
 ### 6.3 UI 规则
 
-- 输入底栏只显示当前会话最近的一个活跃 task；多会话互不污染。
+- 输入底栏同一会话存在多个活跃 task 时，优先显示 keyed lane **当前执行中**的 task；只有没有执行中 task 时，才显示最近入队的 `QUEUED` task。多会话互不污染。
 - `EXECUTING` 显示一个 capability 友好名，超长截断；不显示参数。
 - 状态文案可点击进入对应用户消息位置，但不跳转到调试 trace 面板。
 - 无活跃任务时整块隐藏，不留灰色占位。
@@ -262,7 +289,8 @@ long occurredAtMs;
 ### 6.4 验收
 
 - 断开 Host、版本协商失败、订阅重连时，UI 显示明确连接/不可用状态，不把所有问题笼统写成“处理中”。
-- 真机调整亮度/音量可依次看到执行和核验；断网模型失败只显示真实终态，阶段自动消失。
+- 真机调整亮度/音量可依次看到排队、规划、执行；断网模型失败只显示真实终态，阶段自动消失。readback 的最终事实在能力轨迹中展示，而不是假称“核验中”。
+- `ConversationCompressor` 的功能型 LLM 摘要调用不发布本轮任务的 `PLANNING` 阶段。它不是用户请求的 Agent 规划回合，且若在工具执行后显示会造成 `EXECUTING → PLANNING` 的误导性倒退；压缩失败/启用事实通过既有摘要续聊标记与终态诊断表达。
 - 日志中不出现原始 reasoning、API key、文件路径或附件正文。
 
 ---
@@ -286,21 +314,32 @@ long occurredAtMs;
 conversation_draft (
   owner_user_id       TEXT NOT NULL,
   vehicle_zone        TEXT NOT NULL,
-  privacy_epoch       INTEGER NOT NULL,
   conversation_id     TEXT NOT NULL,
+  draft_instance_id   TEXT NOT NULL,
+  revision            INTEGER NOT NULL,
   text                TEXT NOT NULL,
   selection_start     INTEGER NOT NULL,
   selection_end       INTEGER NOT NULL,
   updated_at_ms       INTEGER NOT NULL,
-  PRIMARY KEY (owner_user_id, vehicle_zone, privacy_epoch, conversation_id)
+  PRIMARY KEY (owner_user_id, vehicle_zone, conversation_id)
+)
+
+conversation_consumed_draft (
+  owner_user_id       TEXT NOT NULL,
+  vehicle_zone        TEXT NOT NULL,
+  conversation_id     TEXT NOT NULL,
+  draft_instance_id   TEXT NOT NULL,
+  consumed_at_ms      INTEGER NOT NULL,
+  PRIMARY KEY (owner_user_id, vehicle_zone, conversation_id, draft_instance_id)
 )
 ```
 
 - 数据库仍由现有 SQLCipher 管理；草稿不进模型上下文、不进审计、不参与自动标题、也不是 `ConversationMessage`。
-- `ConversationDraftStore` 只允许当前 caller 的 owner/zone/epoch 读写；Host 根据 Binder 调用方推导作用域，Launcher 不得指定 owner。
-- `clearUserData`、会话删除、epoch 变化均级联删除草稿和附件草稿引用；这一点必须有集成测试。
+- `privacy_epoch` 不进入草稿主键。它由 Host 清数据时整体推进，而草稿只由当前 Binder caller 的 owner/zone 作用域读写；在 epoch 变化时 `clearUserData` 会删除整张草稿表及附件草稿关联。Launcher 不得指定 owner 或 zone。
+- 每次开始一份新草稿生成高熵 `draftInstanceId`；同一草稿内每次编辑使 `revision` 单调递增。`ConversationDraftStore.save` 只接受相同 instance 的更大 revision，或替换为新的 instance；它同时拒绝存在于 `conversation_consumed_draft` 的 instance。
+- **草稿复活防线必须双层成立。** Launcher 的 `DraftCommandLane` 按 `conversationId` 建立 FIFO 串行器（不同会话可并行），串行 `saveDraft`、`submitTextOrAppend` 与 discard，不能把它们直接交给 `LauncherHostGateway.sdkCalls` 的两线程池并发执行。点击发送时 Launcher 冻结 `(draftInstanceId, revision)`，立刻轮换本地编辑到新 instance；Host 在 submit receipt 的同一事务中只删除**这个冻结 instance**（若当前行已是新 instance 则绝不删除），并无论旧行是否已到达都写入 `conversation_consumed_draft` tombstone。即使一个旧的 debounce save 已在 Binder 路上或未来有人绕过 Launcher lane，它带着旧 `draftInstanceId` 到达时也会被拒绝，不能把已发送文本复活。tombstone 随会话删除/`clearUserData` 级联删除；清理任务对每会话同时施加两个硬上界：最多 **128** 条、最长 **7 天**。正常 Lane 已保证不存在需要跨越该保守窗口的合法旧 save。
 - 输入变化以 350 ms debounce 保存，失焦、切换会话、全屏关闭与 `onStop` 立即 flush；每条草稿上限 12 KiB，超过时拒绝后续保存并保留内存编辑值/提示用户缩短。
-- 成功创建 `INPUT_PRIMARY` 或成功 `STEER_ACCEPTED` 后只在 Host receipt 确认后删除对应草稿；失败、超时或 `REJECTED` 不删除，以便用户修订重试。
+- 成功创建 `INPUT_PRIMARY` 或成功 `STEER_ACCEPTED` 后由 Host receipt 消费冻结的 `draftInstanceId`；Launcher 在**发起 Binder 调用前**已清空 UI 并创建后续编辑的新 instance，因此 receipt 永远不能误清新输入。失败、超时或 `REJECTED` 不消费草稿，以便用户修订重试。
 - 旧版本没有草稿表，迁移只建新表，无历史回填。
 
 ### 7.3 AIDL 与数据对象
@@ -309,11 +348,13 @@ conversation_draft (
 
 ```aidl
 ConversationDraft getDraft(String conversationId);
-void saveDraft(in ConversationDraft draft, String clientOperationId);
-void clearDraft(String conversationId, String clientOperationId);
+void saveDraft(in ConversationDraft draft);
+void discardDraft(String conversationId, String draftInstanceId, long revision);
 ```
 
-`ConversationDraft` 只包含 version、conversationId、text、selection 与 updatedAtMs；不携带 owner、密钥、语音 partial 或任意附件字节。SDK 中每个新 Parcelable 字段仍遵循 schemaVersion 容错读取；旧客户端完全不调用新方法。
+`ConversationDraft` 包含 version、conversationId、draftInstanceId、revision、text、selection 与 updatedAtMs；不携带 owner、密钥、语音 partial 或任意附件字节。草稿是同一 instance 内按 revision 的 last-write-wins，而不是业务提交，故不使用 `clientOperationId` 伪装幂等。SDK 中每个新 Parcelable 字段仍遵循 schemaVersion 容错读取；旧客户端完全不调用新方法。
+
+“回车发送”是纯 Launcher UI 偏好，存入 `matrix-agent-launcher` 的私有 SharedPreferences（例如 `conversation_input_preferences.enter_to_send`）。它不是敏感数据、不影响 Host 任务语义、不进入 AIDL、审计或 SQLCipher；用户清除 Launcher 应用数据时自然恢复默认关闭。
 
 ### 7.4 验收
 
@@ -342,8 +383,10 @@ void clearDraft(String conversationId, String clientOperationId);
 
 胶囊展示的是“**下一次提交将使用的当前 Host 模型**”。它不追溯地修改历史：
 
-- 每一个新 `ConversationTaskLink` 在 Host 接受时写入受限的 `modelSnapshot`（provider ID、模型 ID、backend、配置版本/指纹；不含凭据）。
-- 历史消息的调试或审计查看以 task snapshot 为准，不以当前胶囊为准。
+- `SecureModelConfigStore` 当前没有配置版本或指纹；Phase 2 新增其受控的 `configurationGeneration`（每次成功持久化模型配置/激活选择时单调递增）以及 `configFingerprint`。fingerprint 是 Host 对**规范化、非秘密**字段（provider ID、model ID、backend、端点策略类别与配置 generation）的 UTF-8 canonical form 计算 SHA-256；不保存 API key，不把原始 endpoint 放入 fingerprint 的明文输入或 SDK 投影。
+- 每一个新 `ConversationTaskLink` 在 Host 接受时写入内部 `ModelExecutionSnapshot`：provider ID、model ID、backend、configurationGeneration、configFingerprint。它是 task link / 审计事实，不是当前配置的可变引用。
+- Phase 2 不把 `ModelExecutionSnapshot` 追加到 `ConversationMessage` 或 `ConversationInfo`，也不为聊天页新增“历史模型详情” RPC；聊天页的胶囊只表示当前模型。未来如需展示历史执行环境，必须新增一条独立、脱敏（redacted）的 `TaskDetails` SDK 契约，而不是临时把内部 snapshot 混入消息正文。
+- 历史任务的内部审计以 task snapshot 为准，不以当前胶囊为准。
 - Phase 1 不支持对话内模型覆写。未来如需覆写，必须新增显式 `ConversationModelOverride`，并在主用户消息、任务 link、审计与 UI 均可见地记录原因和有效范围；不得静默改变正在运行任务。
 
 ### 8.3 验收
@@ -362,7 +405,7 @@ Operit 的 `+` 可访问屏幕、通知、位置、记忆目录和包信息。Ma
 
 | 阶段 | 允许项 | 不允许项 |
 | --- | --- | --- |
-| 2A | 图片、普通文件、用户粘贴的文本片段 | 自动扫描文件、隐式读取剪贴板、通知、屏幕、位置 |
+| 2A | 可安全提取文本的普通文件、用户主动粘贴的文本片段、**可 OCR 出文本的图片** | 多模态视觉理解、自动扫描文件、隐式读取剪贴板、通知、屏幕、位置 |
 | 2B | 用户明确选择的“当前位置”或“当前导航目的地”快照 | 位置持续跟踪、后台刷新、未经确认的联系人检索 |
 | 后续独立评审 | 屏幕内容、通知、联系人、车辆诊断 | 一键全量系统数据导出 |
 
@@ -384,10 +427,12 @@ Operit 的 `+` 可访问屏幕、通知、位置、记忆目录和包信息。Ma
 这避免 Host 依赖 Launcher 的临时 URI grant，也避免把任意文件路径经 Binder 传给系统服务。Host 必须：
 
 - 限制单文件、总附件、图像像素、文本提取字符数和解析时间；达到上限返回稳定错误码。
-- 对图片生成受限预览；对普通文件提取可用文本时记录提取器版本与截断状态。
+- 当前 `ModelApiClient`、云端协议适配器、`LlmPlanner` 与 on-device codec 均是纯文本 content 栈，**Phase 2A 不向模型传图像字节或视觉 message part**。图片的唯一模型投影是 Host OCR 得到的受限文本，连同“来自图片 OCR、提取器版本、是否截断”的元数据；预览仅供 Launcher 本地展示。
+- 因此 Phase 2A 选择图片时，Host 必须先完成 OCR staging：OCR 有可用文本才返回 `READY` chip；无法提取、图片损坏、或文字为空时返回 `UNSUPPORTED_MEDIA_FOR_TEXT_MODEL`，不得以文件名、EXIF 或模糊描述伪装为“图片已理解”。真正的视觉输入需要另立多模态协议演进任务，覆盖 `ModelApiClient`、三种协议 adapter、planner、on-device codec、预算、sanitizer、审计和 UI，不能夹带在附件功能中。
+- 对普通文件只提取白名单格式的可用文本，并记录提取器版本与截断状态。
 - 不把源文件名、原始路径、附件原文写入 logcat；审计仅记录 attachment ID、类型、大小等级、用户确认和模型使用结果。
 - 存储按 owner/zone/epoch 隔离，引用计数与会话/草稿关系明确；清除会话或 `clearUserData` 时回收孤儿二进制。
-- 在模型调用前由 `AttachmentContextProjector` 生成有限文本/视觉输入，再经 `ModelSanitizer` 处理；模型绝不直接读取 Host 文件系统。
+- 在模型调用前由 `AttachmentContextProjector` 仅生成有限**文本**投影，再经 `ModelSanitizer` 处理；模型绝不直接读取 Host 文件系统。视觉输入不属于本任务的模型协议能力。
 
 建议新增领域对象：
 
@@ -416,7 +461,18 @@ Phase 2B 不把“位置”实现为通用 API。用户点击后应看见确认 
 
 确认后 Host 从受控位置/导航端口读取**一次性快照**，生成 `sourceKind=LOCATION_SNAPSHOT` / `NAVIGATION_DESTINATION` 的结构化附件。需要记录精度、时间、可用性、来源和是否已降精度；不能让模型要求后自动继续定位。若未来能力需要更多精度或进入系统权限流程，必须再确认并审计。
 
-### 9.4 验收
+### 9.4 Phase 2A 的 OCR 前置决策
+
+图片在纯文本模型栈中是否有价值，完全取决于 Host 是否有可用的 OCR；当前 Host 没有 OCR 引擎，不能把“选择图片”写成已可交付能力。Phase 2A 开始前必须完成一项独立的 `OnDeviceOcrPort` 选型与真机验证，候选仅限：系统可用 OCR API、可离线部署的 ML Kit 方案、或独立纳管的 MNN OCR 模型。选型评审至少比较：
+
+- 中文（印刷体、车机截图、小字号）的字符错误率与混合中英文表现；
+- 端侧冷启动/热启动延迟、内存峰值、APK/模型体积和 ARM 设备兼容性；
+- 是否完全离线、模型许可、更新和删除机制；
+- 图像解码与 OCR 超时、取消、异常隔离，以及输出文本的长度/隐私净化边界。
+
+在一个方案被选定并通过中文真机语料验收前，`+` 菜单不展示图片入口，或明确显示“当前模型仅支持文本附件”；不得让用户选择后才让绝大多数图片落为 `UNSUPPORTED_MEDIA_FOR_TEXT_MODEL`。OCR 本身只是一项附件预处理能力，不授予模型视觉理解能力。
+
+### 9.5 验收
 
 - 图片、文件和文本从选择到 chip、提交、历史查看均可追溯；删除 chip 后绝不进入模型投影。
 - 假 MIME、超大文件、损坏图片、文件描述符中断、Host 重启均被安全拒绝或收敛，不泄漏路径。
@@ -433,10 +489,10 @@ Phase 2B 不把“位置”实现为通用 API。用户点击后应看见确认 
 
 | 触发 | 初始候选 | 生成的对象 |
 | --- | --- | --- |
-| `@` | 已授权联系人、已保存地点、当前会话历史条目 | `ContextReference` chip |
+| `@` | 当前会话的已定稿消息 | `ContextReference` chip |
 | `/` | 车辆状态快照、导航目的地、可解释的能力/动作模板 | `ContextReference` 或待确认 action 草稿 |
 
-用户选择后，输入区显示类似 `[@家]`、`[当前导航目的地]`、`[车辆状态快照]` 的 chip，文本光标继续在 chip 后。删除 chip 必须是原子操作：通过删除按钮或退格到边界时删除整个引用，而不是留下一个模型无法识别的半截 token。
+用户选择后，输入区显示类似 `[@上一条回复]`、`[当前导航目的地]`、`[车辆状态快照]` 的 chip，文本光标继续在 chip 后。删除 chip 必须是原子操作：通过删除按钮或退格到边界时删除整个引用，而不是留下一个模型无法识别的半截 token。
 
 ### 10.2 数据模型
 
@@ -445,7 +501,7 @@ Phase 2B 不把“位置”实现为通用 API。用户点击后应看见确认 
 ```java
 record ContextReference(
         String referenceId,
-        int kind,                 // CONTACT, PLACE, VEHICLE_SNAPSHOT, NAV_DESTINATION, HISTORY
+        int kind,                 // VEHICLE_SNAPSHOT, NAV_DESTINATION, HISTORY
         String safeLabel,
         String sourceId,          // Host 可解析的受限 ID，非原始正文
         long createdAtMs,
@@ -456,18 +512,19 @@ record ContextReference(
 
 - `safeLabel` 仅用于 UI；真正送模型的内容由 Host 在提交时解析并投影。
 - 动态信息必须快照化。比如“当前车辆状态”提交时记录状态版本、时间与字段白名单；下一轮不能因为车辆状态变化而重新解释旧消息。
-- 联系人、地点、历史内容先执行 owner/zone/权限校验；查不到或已被清除时显示“引用已不可用”，不泄漏其存在性。
-- 历史消息引用只取已定稿、可见、同一 owner scope 的安全摘要，绝不把 debug trace、原始工具返回或隐藏记忆带入新 Prompt。
+- 历史内容先执行 owner/zone/权限校验；查不到或已被清除时显示“引用已不可用”，不泄漏其存在性。当前 Matrix 没有“已保存地点目录”：导航目的地只是 capability 参数而非可枚举实体，因此地点引用不在本任务 Phase 3 范围内。未来如要加入，必须先单独定义地点实体的存储、owner scope、生命周期、导入来源与 `place.*` / preference 命名约定。联系人同样待通讯录数据权限、搜索范围和副驾/主驾身份语义单独评审后再加入。
+- `NAV_DESTINATION` 当前同样没有现成数据源：demo Provider 的 commandedState 是进程内内存，导航目的地并未作为可查询状态暴露。Phase 3 新增内部窄端口 `NavigationDestinationPort`（形式对齐 `VehicleStateSource`）：首版实现从最近一次**成功核验**的导航 set_destination 命令的 commandedState 派生（Host 内存持有，进程重启后不可用）；真实导航应用集成后替换为实时读取。端口无可用目的地时，`/` 面板将该引用置灰并说明原因，不创建空快照冒充已添加。
+- `HISTORY` 的“安全摘要”不是新开一次 LLM 调用：只允许引用当前会话、同一 owner/zone 下**已定稿且可见**的 `ROLE_USER` 或 `ROLE_ASSISTANT` 消息。`HistoryReferenceProjector` 取其 `text`，规范化空白、长度上限 512 Unicode code points，再经既有 `ModelSanitizer` 投影；不携带 execution trace、debug trace、附件正文、系统消息、隐藏记忆或未完成/STEER 消息。引用对象同时保存原 messageId、sequenceNo 和投影 digest，确保之后能解释“引用的是哪条历史”，而不是把 UI 当前内容重新读取进模型。
 
 ### 10.3 模型上下文与能力边界
 
 引用只是上下文，不等于命令授权：
 
 ```text
-用户输入：把 [@家] 设为导航目的地
-  → Host 解析地点引用并构建受限 ContextAttachment
-  → 模型提议 navigation capability
-  → PolicyEngine / 车辆状态 / 用户确认 / readback
+用户输入：根据 [/车辆状态快照] 现在能把空调调到 24 度吗
+  → Host 冻结车辆状态快照并构建受限 ContextAttachment
+  → 模型基于快照提议 climate capability
+  → PolicyEngine / 实时车辆状态 / 用户确认 / readback
   → 能力事实轨迹写入该用户消息
 ```
 
@@ -496,8 +553,9 @@ record ContextReference(
 | 附件 staging | 新窄接口 `IConversationAttachmentService`，不污染原始文本 RPC |
 | 消息附件投影 | `ConversationMessage` 追加 `contextAttachments`，由 schemaVersion 容错读取 |
 | 引用 | `ContextReference` 只嵌入草稿/附件投影；不让 Launcher 传任意 Provider 对象 |
+| 模型执行快照 | 本批只存 `ConversationTaskLink` / 审计内部表，不经 SDK 暴露；未来另设脱敏（redacted）`TaskDetails` 契约 |
 
-每次 DTO 升级必须：先读取 schemaVersion，再决定是否读取尾字段；写端只写当前 schema；旧客户端获得安全默认值；新客户端面对旧 Host 则禁用对应入口并显示“Host 版本暂不支持”。
+当前 `ParcelSchema` 已到 v6；本任务第一批公开 DTO/AIDL 演进统一目标为 **v7**，避免同一发布内零散跳版本。每次 DTO 升级必须：先读取 schemaVersion，再决定是否读取尾字段；写端只写当前 schema；旧客户端获得安全默认值；新客户端面对旧 Host 则禁用对应入口并显示“Host 版本暂不支持”。callback 新 transaction 不采用“未知方法失败后继续”的宽松兼容，而严格依赖 §6.2 的 contract-hash 锁步协商。
 
 ### 11.2 包归属
 
@@ -536,23 +594,23 @@ matrix-agent-launcher
 
 - 全屏编辑、多行、回车发送设置、Host 加密草稿。
 - `submitTextOrAppend` 统一入口与 steer 可见化。
-- PTT 继续绑定既有 VoiceRuntime，最终文本接入统一入口。
-- Host 运行阶段订阅与轻量输入状态。
+- PTT 继续绑定既有 VoiceRuntime，固定次级入口与按压反馈，最终文本接入统一入口。
+- `TaskProgressSink`、Host 运行阶段订阅与轻量输入状态。
 
-**退出标准**：真机完成“输入草稿 → 切换会话 → 全屏编辑 → 发送/追加 → 取消 → 重启恢复”的闭环；无重复执行、无悬挂状态、无 PCM 跨 Binder。
+**退出标准**：真机完成“输入草稿 → 切换会话 → 全屏编辑 → 发送/追加 → 取消 → 重启恢复”的闭环；以故意延迟 `saveDraft` 验证已发送文本绝不复活；无重复执行、无悬挂状态、无 PCM 跨 Binder。
 
 ### Phase 2：模型状态与安全附件
 
-- 只读模型胶囊、准确连接/模型 ready 状态。
+- 只读模型胶囊、准确连接/模型 ready 状态、内部 `ModelExecutionSnapshot`。
 - 文件、图片、粘贴文本附件 staging、chip、提交冻结、加密回收。
 - 位置/导航快照仅在显式确认 UI 与 Host policy 完备后进入 2B。
 
-**退出标准**：真机验证 PFD 中断、文件过大、Host 重启、清除用户数据、模型切换和无网络状态；没有明文附件或路径泄漏。
+**退出标准**：在图片入口开放前，已选定并集成一项离线 `OnDeviceOcrPort` 实现（系统 API、ML Kit 或 MNN OCR 模型之一），并通过中文/中英混合真机识别质量、冷/热启动、内存、超时和许可验收；随后真机验证 PFD 中断、文件过大、Host 重启、清除用户数据、模型切换和无网络状态；没有明文附件或路径泄漏。
 
 ### Phase 3：结构化引用
 
 - `@` / `/` 建议面板、chip 原子删除、Host 解析与提交冻结。
-- 先接可控的地点、导航目的地、车辆状态快照和历史摘要；联系人等敏感目录另行评审。
+- 首版只接车辆状态快照、受限历史引用，以及由 `NavigationDestinationPort`（§10.2，从最近一次成功核验的导航命令派生）提供的目的地快照；地点目录与联系人等数据源另行评审。
 
 **退出标准**：引用过期、越权、车辆状态变化、重试/重放均有确定且不越权的表现。
 
@@ -565,23 +623,26 @@ matrix-agent-launcher
 - [ ] 文字、Emoji、多行、中文输入法、物理键盘 Enter/Shift+Enter 行为正确。
 - [ ] 全屏编辑不触发发送；返回、旋转、切换会话、强杀恢复均不丢草稿。
 - [ ] 一条草稿成功发送后只删除自己，不影响另一会话草稿。
+- [ ] 人为让旧 `saveDraft` 晚于 `submitTextOrAppend` 到达 Host，tombstone 必须拒绝旧 instance；已发送内容不得复活为草稿。
 
 ### 任务、steer 与语音
 
-- [ ] 空输入按住说话；有文本发送；运行中输入显示追加。
+- [ ] 空输入按住说话；有文本时 PTT 仍保持可用且不清草稿；运行中输入显示追加。
+- [ ] PTT 仅在 Host capture started 后进入“录音中”视觉态；`ACTION_UP` flush、`ACTION_CANCEL` cancel 的语义可在真机日志验证。
 - [ ] 文本追加和 PTT final 均只在 Host 中原子选择主任务或 steer。
 - [ ] 取消后只以真实终态显示，写操作未知时明确为结果未知。
 - [ ] 语音唤醒、PTT、TTS、音频焦点与打断没有第二套控制器。
 
 ### 状态与模型
 
-- [ ] `QUEUED → UNDERSTANDING → EXECUTING → VERIFYING → RESPONDING` 仅由 Host 真实事件驱动。
+- [ ] `QUEUED → PLANNING → EXECUTING` 仅由 `TaskProgressSink` 的真实事件驱动；不展示启发式“理解中/核验中/回复中”。
 - [ ] 无 Host、协商失败、未 ready 模型和断连呈现不同状态。
 - [ ] 量产模式不显示 reasoning / 原始工具参数；调试 trace 仍遵循 `matrix.debugTraceUi`。
 
 ### 附件与引用
 
 - [ ] 每项附件/引用在发送前可见、可删、可解释；发送后模型只收到 Host 净化投影。
+- [ ] 图片仅在 OCR 文本可用时成为 `READY` 上下文；纯文本模型绝不收到视觉字节。
 - [ ] 文件、图片、位置和引用的权限拒绝、超限、失效、Host 重启均安全收敛。
 - [ ] `clearUserData` 后草稿、附件、引用、索引和加密二进制无残留。
 

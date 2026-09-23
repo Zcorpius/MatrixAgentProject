@@ -65,9 +65,12 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationMessageAnnotationEntity.class,
                 com.matrix.agent.data.conversation.ConversationQuoteEntity.class,
                 com.matrix.agent.data.conversation.ConversationLineageEntity.class,
+                com.matrix.agent.data.conversation.ConversationDraftEntity.class,
+                com.matrix.agent.data.conversation.ConversationConsumedDraftEntity.class,
+                com.matrix.agent.data.conversation.ConversationAttachmentEntity.class,
                 com.matrix.agent.data.debugtrace.DebugTraceEventEntity.class
         },
-        version = 10,
+        version = 13,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -87,6 +90,8 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract com.matrix.agent.data.conversation.ConversationMessageAnnotationDao conversationMessageAnnotationDao();
     public abstract com.matrix.agent.data.conversation.ConversationQuoteDao conversationQuoteDao();
     public abstract com.matrix.agent.data.conversation.ConversationLineageDao conversationLineageDao();
+    public abstract com.matrix.agent.data.conversation.ConversationDraftDao conversationDraftDao();
+    public abstract com.matrix.agent.data.conversation.ConversationAttachmentDao conversationAttachmentDao();
     public abstract com.matrix.agent.data.debugtrace.DebugTraceEventDao debugTraceEventDao();
 
     /**
@@ -339,7 +344,7 @@ public abstract class MatrixDatabase extends RoomDatabase {
     };
 
     /**
-     * v9 → v10：仅供 internal/debug 构建恢复内嵌调试轨迹的加密投影表。
+     * v9 → v10：为 matrix.debugTraceUi=true 时恢复内嵌调试轨迹提供的加密投影表。
      *
      * <p>表在所有构建中随 schema 存在，以保证升级路径确定；release 从不写入，且 Host
      * 启动时会清理任何历史 internal 行。没有外键是有意的：对话清理先以 owner scope
@@ -362,6 +367,105 @@ public abstract class MatrixDatabase extends RoomDatabase {
                     + "ON `debug_trace_event` (`conversation_id`, `host_user_message_id`)");
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_debug_trace_runtime_request` "
                     + "ON `debug_trace_event` (`runtime_request_id`)");
+        }
+    };
+
+    /**
+     * v10 → v11（输入交互增强 I4）：会话草稿与已消费草稿 tombstone 两表。
+     *
+     * <p>草稿是产品数据（加密、随 clearUserData 删除、不入模型上下文）；tombstone
+     * 保证提交受理后携带旧 instance 的迟到保存被拒绝——已发送内容不得复活为草稿。
+     * 旧版本无草稿数据，迁移只建新表，无历史回填。</p>
+     */
+    public static final Migration MIGRATION_10_11 = new Migration(10, 11) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_draft` ("
+                    + "`owner_user_id` TEXT NOT NULL, "
+                    + "`vehicle_zone` TEXT NOT NULL, "
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`draft_instance_id` TEXT NOT NULL, "
+                    + "`revision` INTEGER NOT NULL, "
+                    + "`text` TEXT NOT NULL, "
+                    + "`selection_start` INTEGER NOT NULL, "
+                    + "`selection_end` INTEGER NOT NULL, "
+                    + "`updated_at_ms` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`owner_user_id`, `vehicle_zone`, `conversation_id`))");
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_consumed_draft` ("
+                    + "`owner_user_id` TEXT NOT NULL, "
+                    + "`vehicle_zone` TEXT NOT NULL, "
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`draft_instance_id` TEXT NOT NULL, "
+                    + "`consumed_at_ms` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`owner_user_id`, `vehicle_zone`, `conversation_id`, "
+                    + "`draft_instance_id`))");
+        }
+    };
+
+    /**
+     * v11 → v12（输入交互增强 Phase 2）：
+     * <ul>
+     *   <li>conversation_attachment——受控上下文附件（受限文本 + 元数据全驻 SQLCipher，
+     *       无文件系统 blob；草稿态/消息冻结态经 linked_message_id 区分）；</li>
+     *   <li>conversation_task_link 追加 5 个 ModelExecutionSnapshot 列
+     *       （provider/model/backend/generation/fingerprint）——提交受理时写入的
+     *       非秘密模型配置代际快照，历史行回填 null（读侧规约为“未知”，不倒填）。</li>
+     * </ul>
+     */
+    public static final Migration MIGRATION_11_12 = new Migration(11, 12) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `conversation_attachment` ("
+                    + "`attachment_id` TEXT NOT NULL, "
+                    + "`owner_user_id` TEXT NOT NULL, "
+                    + "`vehicle_zone` TEXT NOT NULL, "
+                    + "`conversation_id` TEXT NOT NULL, "
+                    + "`source_kind` INTEGER NOT NULL DEFAULT 0, "
+                    + "`mime_type` TEXT NOT NULL, "
+                    + "`safe_display_name` TEXT NOT NULL, "
+                    + "`byte_size` INTEGER NOT NULL DEFAULT 0, "
+                    + "`state` INTEGER NOT NULL DEFAULT 1, "
+                    + "`error_code` INTEGER NOT NULL DEFAULT 0, "
+                    + "`extracted_text` TEXT, "
+                    + "`extracted_chars` INTEGER NOT NULL DEFAULT 0, "
+                    + "`linked_message_id` TEXT, "
+                    + "`ordinal` INTEGER NOT NULL DEFAULT 0, "
+                    + "`created_at_ms` INTEGER NOT NULL DEFAULT 0, "
+                    + "`client_operation_id` TEXT NOT NULL, "
+                    + "PRIMARY KEY(`attachment_id`))");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_attachment_owner_zone` "
+                    + "ON `conversation_attachment` (`owner_user_id`, `vehicle_zone`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_attachment_conversation_time` "
+                    + "ON `conversation_attachment` (`conversation_id`, `created_at_ms`)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_attachment_linked_message` "
+                    + "ON `conversation_attachment` (`linked_message_id`)");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `uq_attachment_operation` "
+                    + "ON `conversation_attachment` (`client_operation_id`)");
+
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `model_provider_id` TEXT");
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `model_id` TEXT");
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `model_backend` INTEGER");
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `config_generation` INTEGER");
+            db.execSQL("ALTER TABLE `conversation_task_link` "
+                    + "ADD COLUMN `config_fingerprint` TEXT");
+        }
+    };
+
+    /**
+     * v12 → v13：附件 staging 的 clientOperationId 幂等范围收敛到 owner/zone。
+     *
+     * <p>operation id 是客户端提供的 UUID，不能把其全局偶然碰撞解释为“同一个用户的
+     * 重放”；旧全局 unique 索引配合 REPLACE 会跨用户覆盖附件正文。迁移只变索引，
+     * 不改变既有附件行。</p>
+     */
+    public static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("DROP INDEX IF EXISTS `uq_attachment_operation`");
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `uq_attachment_owner_zone_operation` "
+                    + "ON `conversation_attachment` (`owner_user_id`, `vehicle_zone`, "
+                    + "`client_operation_id`)");
         }
     };
 
@@ -407,12 +511,12 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10);
+                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=10 entities=15 journalMode=WAL");
+                    + " version=13 entities=18 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

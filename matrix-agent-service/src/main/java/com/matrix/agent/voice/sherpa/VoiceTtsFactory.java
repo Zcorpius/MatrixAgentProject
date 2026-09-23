@@ -7,10 +7,7 @@ import com.matrix.agent.data.db.ModelDownloadDao;
 import com.matrix.agent.voice.ModelPathResolver;
 import com.matrix.agent.voice.platform.AndroidTtsAdapter;
 import com.matrix.agent.voice.port.ManagedTtsPort;
-import com.matrix.agent.voice.tencent.FallbackTtsAdapter;
-import com.matrix.agent.voice.tencent.SecureTencentTtsConfigStore;
-import com.matrix.agent.voice.tencent.TencentCloudTtsAdapter;
-import com.matrix.agent.api.voice.TencentTtsConfig;
+import com.matrix.agent.voice.tencent.TencentCloudTtsRouteFactory;
 
 import java.io.File;
 import java.util.concurrent.Executor;
@@ -31,8 +28,7 @@ public final class VoiceTtsFactory {
     private final Application app;
     private final SherpaModelDownloader downloader;
     private final SherpaModelSpec piperSpec;
-    private final SecureTencentTtsConfigStore tencentConfig;
-    private final OkHttpClient cloudHttpClient;
+    private final TencentCloudTtsRouteFactory cloudRoute;
 
     public VoiceTtsFactory(Application app, ModelDownloadDao dao, OkHttpClient httpClient) {
         this(app, dao, httpClient, httpClient);
@@ -43,30 +39,15 @@ public final class VoiceTtsFactory {
             OkHttpClient cloudHttpClient) {
         this.app = app;
         File root = new File(app.getFilesDir(), "sherpa-model");
-        downloader = new SherpaModelDownloader(app, dao, downloadClient);
+        downloader = new SherpaModelDownloader(app, dao, downloadClient,
+                SherpaModelDownloader.systemPresetRoot());
         piperSpec = SherpaModelSpec.piperZhCn(root);
-        tencentConfig = new SecureTencentTtsConfigStore(app);
-        this.cloudHttpClient = cloudHttpClient;
+        cloudRoute = new TencentCloudTtsRouteFactory(app, cloudHttpClient);
     }
 
     public ManagedTtsPort create(Executor executionLane) {
         ManagedTtsPort local = createLocalFallback(executionLane);
-        TencentTtsConfig cloud = tencentConfig.projection();
-        if (cloud.configured) {
-            try {
-                // Validate/decrypt before selecting cloud. A key invalidated by factory reset or
-                // Keystore rotation cannot masquerade as a configured primary route.
-                if (tencentConfig.loadCredentials() != null) {
-                    Log.i(TAG, "[Voice] TTS 路由=tencent_cloud，失败自动回退本地引擎");
-                    return new FallbackTtsAdapter(new TencentCloudTtsAdapter(tencentConfig, cloud,
-                            cloudHttpClient, executionLane), local);
-                }
-            } catch (Exception unavailable) {
-                Log.w(TAG, "[Voice] 腾讯云凭证不可读，使用本地播报 type="
-                        + unavailable.getClass().getSimpleName());
-            }
-        }
-        return local;
+        return cloudRoute.create(() -> local, executionLane);
     }
 
     private ManagedTtsPort createLocalFallback(Executor executionLane) {

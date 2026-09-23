@@ -6,12 +6,12 @@ import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
 /**
- * 调试构建才会写入的、已脱敏轨迹投影。
+ * matrix.debugTraceUi=true 时才会写入的、已脱敏轨迹投影。
  *
  * <p>这不是审计表的镜像：它只保存供内部调试 UI 复现一个对话轮次所需的安全投影，
  * 与 {@code conversation_task_link} 的 {@code runtime_request_id} 解析结果一起固化。
- * 量产构建绝不写入此表；表仍在 SQLCipher 中，以保证 internal/debug 重新进入会话时的
- * 轨迹也受与对话正文相同的静态加密保护。</p>
+ * 标志关闭时绝不写入此表；表仍在 SQLCipher 中，以保证显式开启调试轨迹后重新进入会话
+ * 时的轨迹也受与对话正文相同的静态加密保护。可见性不从 buildType 推断。</p>
  */
 @Entity(tableName = "debug_trace_event", indices = {
         @Index(value = {"host_user_message_id", "timestamp_ms", "event_sequence", "part_index"},

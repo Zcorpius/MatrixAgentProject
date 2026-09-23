@@ -3,6 +3,8 @@
 > **状态**：设计稿，尚未开始本功能的实现。
 > **依据**：当前 MatrixAgent 的 Host / SDK / Launcher 源码，以及 Operit 的实际语音实现源码；不依赖历史设计文档。
 > **目标**：新增独立的“对话交互”侧边栏页面，使文字输入、按键录音和唤醒后的语音遵循同一条对话与 Agent 执行链路，同时不削弱现有 Host 权限边界、任务仲裁、审计、车控安全策略和语音生命周期治理。
+>
+> **后续语义更新**：本文 §6.2 中 PTT final “自动提交为主轮次”的旧表述，已由《Matrix 对话输入交互增强任务设计》取代。PTT final 仍经同一 `ConversationCoordinator`，但必须在 Host 会话门控内原子判定为新的 `INPUT_PRIMARY` 或对当前运行任务的 `INPUT_STEER` / `Steer.REPROMPT`；不得由 Launcher 预判。同理，本文 §10 阶段 A 中“运行中任务的后续普通发送进入 keyed FIFO 排队为新任务、并在 UI 区分‘追加到当前任务 / 排队发送下一条’两个入口”的语义，也被该文档的 `submitTextOrAppend` 统一入口取代：普通提交在 Host 会话门控内原子判定为 steer 或新主轮次，Launcher 不再维护双入口。
 
 ---
 

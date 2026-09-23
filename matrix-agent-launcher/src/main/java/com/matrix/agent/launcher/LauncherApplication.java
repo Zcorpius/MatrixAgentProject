@@ -17,6 +17,7 @@ public final class LauncherApplication extends Application {
     }
 
     public LauncherHostGateway hostGateway() { return hostGateway; }
+    public LauncherExecutorRegistry executorRegistry() { return executors; }
 
     @Override public void onTerminate() {
         // Android production process death is abrupt, but this matters for instrumentation and

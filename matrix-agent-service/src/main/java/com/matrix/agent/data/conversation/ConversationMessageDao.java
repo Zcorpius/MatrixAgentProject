@@ -83,6 +83,15 @@ public interface ConversationMessageDao {
             + " AND input_kind = 1 AND status = 1")
     int convergeSteersByHost(String hostMessageId, int status, int failureCode, long updatedAtMs);
 
+    /**
+     * 与 {@link #convergeSteersByHost} 同 WHERE 条件的 SELECT：终态事务先读出待收敛
+     * 行、再逐行 {@link #updateStatus}——事务内原子等价，且调用方拿到确切行集用于
+     * 补发事件（SQLite RETURNING 在 minSdk 28 的旧版本上不可用，故取先读后写）。
+     */
+    @Query("SELECT * FROM conversation_message WHERE steer_host_user_message_id"
+            + " = :hostMessageId AND input_kind = 1 AND status = 1")
+    List<ConversationMessageEntity> findRunningSteersByHost(String hostMessageId);
+
     /** COMPLETED 的 user/assistant 文本（种子装配输入）；升序返回。 */
     @Query("SELECT * FROM conversation_message WHERE conversation_id = :conversationId"
             + " AND status = :completedStatus AND role IN (:userRole, :assistantRole)"

@@ -9,7 +9,7 @@ import java.util.List;
  * <p>四态显式区分（契约 6）：MODEL_PROPOSED（模型建议）/ MODEL_REASONING（供应商
  * 实际返回的思考，绝不推导）/ POLICY_DECIDED（策略判定）/ REQUEST_DELIVERED
  * （请求已送达）/ DEVICE_VERIFIED（设备已核验）——日志与调试页自身都不传播
- * "请求即事实"的错觉。量产构建的事件只在 logcat；internal/debug 构建则会在
+ * "请求即事实"的错觉。事件始终进入 logcat；matrix.debugTraceUi=true 时才会在
  * SQLCipher 内保存已净化投影，以便重新进入同一对话时复现。无论哪种模式，事件均不进入
  * 导出、剪贴板、模型上下文或 TTS。</p>
  */

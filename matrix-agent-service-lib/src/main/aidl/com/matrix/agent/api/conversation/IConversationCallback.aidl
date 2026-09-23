@@ -2,6 +2,7 @@ package com.matrix.agent.api.conversation;
 
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationInfo;
+import com.matrix.agent.api.conversation.ConversationRuntimeStage;
 
 /**
  * 对话事件回调。注册后 Host 先回放一个有界快照（最近 N 条 onMessageUpsert），
@@ -21,6 +22,13 @@ oneway interface IConversationCallback {
     /** 语音会话的临时转写（partial/flush）；只在语音绑定生效时出现，final 后清除。 */
     void onTransientTranscript(String conversationId, String voiceSessionId, String text,
             boolean isFinal);
+
+    /**
+     * 运行阶段事件（I3，v7 append-only）：仅由 Host 真实 Engine 事件驱动
+     * （QUEUED/PLANNING/EXECUTING）；snapshot=true 为订阅受理时的当前快照重放。
+     * 依赖 contract-hash 锁步协商保证新旧 callback 不混连。
+     */
+    void onRuntimeStageChanged(in ConversationRuntimeStage stage);
 
     void onConversationError(String conversationId, int errorCode);
 }

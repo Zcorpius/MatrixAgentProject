@@ -44,19 +44,50 @@ public final class RoomConversationStore implements ConversationStore {
     private final ConversationMessageDao messages;
     private final ConversationTaskLinkDao links;
     private final ConversationStoreTransactionRunner transaction;
+    private final DraftConsumer draftConsumer;
+    /** 受控附件（I6）：提交冻结与读取投影；null = 附件能力未装配（无附件提交）。 */
+    private final com.matrix.agent.data.conversation.ConversationAttachmentDao attachments;
+    /** 模型执行快照供应方（I5 §8.2）：受理事务内取当前配置投影写入 link；null = 不写快照。 */
+    private final java.util.function.Supplier<com.matrix.agent.model.ModelExecutionSnapshot>
+            modelSnapshotSupplier;
 
     /** 生产注入 database::runInTransaction；JVM 测试注入 Runnable::run。 */
     public interface ConversationStoreTransactionRunner {
         void runInTransaction(Runnable body);
     }
 
+    /**
+     * 提交事务内的草稿消费钩子（输入交互增强 I4 §7.2）：实现方在**调用方已开启的
+     * 事务线程内**同步删除当前草稿并写 tombstone；无草稿为 no-op。null = 不消费。
+     */
+    public interface DraftConsumer {
+        void consumeSubmitted(String ownerUserId, String vehicleZone, String conversationId,
+                String draftInstanceId);
+    }
+
     public RoomConversationStore(MatrixDatabase database,
             ConversationStoreTransactionRunner transaction) {
+        this(database, transaction, null);
+    }
+
+    public RoomConversationStore(MatrixDatabase database,
+            ConversationStoreTransactionRunner transaction, DraftConsumer draftConsumer) {
+        this(database, transaction, draftConsumer, null, null);
+    }
+
+    public RoomConversationStore(MatrixDatabase database,
+            ConversationStoreTransactionRunner transaction, DraftConsumer draftConsumer,
+            com.matrix.agent.data.conversation.ConversationAttachmentDao attachments,
+            java.util.function.Supplier<com.matrix.agent.model.ModelExecutionSnapshot>
+                    modelSnapshotSupplier) {
         this.database = database;
         this.conversations = database.conversationDao();
         this.messages = database.conversationMessageDao();
         this.links = database.conversationTaskLinkDao();
         this.transaction = transaction;
+        this.draftConsumer = draftConsumer;
+        this.attachments = attachments;
+        this.modelSnapshotSupplier = modelSnapshotSupplier;
     }
 
     // ---- 线程 ----
@@ -188,6 +219,23 @@ public final class RoomConversationStore implements ConversationStore {
             message.schemaVersion = WIRE_SCHEMA_VERSION;
             messages.upsert(message);
 
+            // 引用是这次用户提交的一部分：同一个 SQLite 事务验证来源并写入快照，不能在
+            // message/link 已可见后再尝试记录。clearUserData 与本事务互斥，故这里的来源
+            // 校验同时消除了“事务外读到、事务内已被清除”的 TOCTOU。
+            if (command.quotedMessageId() != null) {
+                ConversationMessageEntity quoted = messages.getById(command.quotedMessageId());
+                if (quoted == null || !command.conversationId().equals(quoted.conversationId)) {
+                    throw new IllegalArgumentException("被引消息不存在或不属于该会话");
+                }
+                com.matrix.agent.data.conversation.ConversationQuoteEntity quote =
+                        new com.matrix.agent.data.conversation.ConversationQuoteEntity();
+                quote.messageId = command.messageId();
+                quote.quotedMessageId = command.quotedMessageId();
+                quote.quoteSnapshot = command.quoteSnapshot();
+                quote.createdAtMs = now;
+                database.conversationQuoteDao().upsert(quote);
+            }
+
             ConversationTaskLinkEntity link = new ConversationTaskLinkEntity();
             link.conversationTaskId = command.conversationTaskId();
             link.runtimeRequestId = command.runtimeRequestId();
@@ -200,10 +248,43 @@ public final class RoomConversationStore implements ConversationStore {
             link.startedAtMs = null;
             link.terminalAtMs = null;
             links.upsert(link);
+            // ModelExecutionSnapshot（I5 §8.2）：受理事务内取当前配置投影——此后当前
+            // 模型无论如何切换，本任务“用的是哪个配置代际”不可变；供应方未装配/无
+            // 配置时不写（历史行读侧规约为“未知”，不倒填）。
+            if (modelSnapshotSupplier != null) {
+                com.matrix.agent.model.ModelExecutionSnapshot snapshot =
+                        modelSnapshotSupplier.get();
+                if (snapshot != null) {
+                    link.modelProviderId = snapshot.providerId();
+                    link.modelId = snapshot.modelId();
+                    link.modelBackend = snapshot.backend();
+                    link.configGeneration = snapshot.configGeneration();
+                    link.configFingerprint = snapshot.configFingerprint();
+                    links.upsert(link);
+                }
+            }
+            // 附件冻结（I6 §9.2）：草稿附件在受理事务内绑定为本消息的事实——
+            // 提交成功即不可删除、不可改投；幂等重放不重复链接。
+            if (attachments != null && command.contextAttachmentIds() != null) {
+                int ordinal = 0;
+                for (String attachmentId : command.contextAttachmentIds()) {
+                    if (attachments.linkToMessage(attachmentId, command.messageId(), ordinal++)
+                            != 1) {
+                        throw new IllegalStateException("附件在提交时已失效: " + attachmentId);
+                    }
+                }
+            }
 
             conversations.touchLastInputChannel(command.conversationId(),
                     command.channelWire());
             conversations.touchUpdated(command.conversationId(), now);
+            // 草稿消费（I4 §7.2）：与受理同一事务——提交成功后当前草稿立即失效，
+            // 迟到的旧 instance 保存由 tombstone 拒绝。幂等重放不消费。
+            if (draftConsumer != null) {
+                draftConsumer.consumeSubmitted(conversation.ownerUserId,
+                        conversation.vehicleZone, command.conversationId(),
+                        command.submittedDraftInstanceId());
+            }
             result[0] = new SubmittedUserMessage(sequence, false);
         });
         return result[0];
@@ -260,21 +341,51 @@ public final class RoomConversationStore implements ConversationStore {
             conversations.touchLastInputChannel(command.conversationId(),
                     command.channelWire());
             conversations.touchUpdated(command.conversationId(), now);
+            // 受控附件与 steer 行一起冻结；若任一行在验证后被并发删除/占用，抛异常使
+            // 整个事务回滚，不能创建“用户看见 chip、模型却没拿到”的半提交。
+            if (attachments != null && command.contextAttachmentIds() != null) {
+                int ordinal = 0;
+                for (String attachmentId : command.contextAttachmentIds()) {
+                    if (attachments.linkToMessage(attachmentId, command.messageId(), ordinal++)
+                            != 1) {
+                        throw new IllegalStateException("附件在提交时已失效: " + attachmentId);
+                    }
+                }
+            }
             result[0] = new SubmittedSteerMessage(sequence, false);
         });
         return result[0];
     }
 
     @Override
-    public void updateSteerDelivery(String messageId, boolean offered) {
+    public void updateSteerDelivery(String messageId, boolean offered,
+            String submittedDraftInstanceId) {
         long now = System.currentTimeMillis();
         transaction.runInTransaction(() -> {
             if (offered) {
-                messages.updateSteerDelivery(messageId, STEER_DELIVERY_OFFERED_TEXT, now);
+                // 只允许 PENDING -> OFFERED 一次。迟到回执不能消费另一份草稿，
+                // 也不能把已经 FAILED 的事实重新写成“已并入”。
+                if (messages.updateSteerDelivery(messageId, STEER_DELIVERY_OFFERED_TEXT, now)
+                        != 1) {
+                    return;
+                }
+                // 只有运行时确认接收后才消费草稿。offer 失败必须保留用户文本以便修订/重试。
+                if (draftConsumer != null && submittedDraftInstanceId != null) {
+                    ConversationMessageEntity steer = messages.getById(messageId);
+                    ConversationEntity conversation = steer == null ? null
+                            : conversations.getById(steer.conversationId);
+                    if (steer != null && conversation != null) {
+                        draftConsumer.consumeSubmitted(conversation.ownerUserId,
+                                conversation.vehicleZone, steer.conversationId,
+                                submittedDraftInstanceId);
+                    }
+                }
                 return;
             }
             // 拒绝投递：附属输入自收敛 FAILED（“未能并入宿主请求”），不再随宿主镜像
-            messages.updateSteerDelivery(messageId, STEER_DELIVERY_FAILED_TEXT, now);
+            if (messages.updateSteerDelivery(messageId, STEER_DELIVERY_FAILED_TEXT, now) != 1) {
+                return;
+            }
             messages.updateStatus(messageId, PersistedMessageStatus.FAILED.wire(), 0, now);
         });
     }
@@ -303,8 +414,9 @@ public final class RoomConversationStore implements ConversationStore {
     }
 
     @Override
-    public boolean writeTerminal(TerminalWrite command) {
-        final boolean[] written = {false};
+    public ConversationStore.TerminalOutcome writeTerminal(TerminalWrite command) {
+        final ConversationStore.TerminalOutcome[] outcome =
+                {ConversationStore.TerminalOutcome.dropped()};
         long now = System.currentTimeMillis();
         transaction.runInTransaction(() -> {
             // 与 clearForUsers 共用同一事务边界，避免“先查到 link，后被清库，再插 assistant”
@@ -344,10 +456,20 @@ public final class RoomConversationStore implements ConversationStore {
             }
             messages.updateStatus(link.userMessageId, command.userStatusWire(),
                     command.failureCode(), now);
-            // 附属 steer 镜像收敛（评估 v1.0 §4.3）：仍 RUNNING 的 steer 与宿主同事务
-            // 收敛；投递态保留原值（OFFERED 才声称“已并入”，PENDING 显示“未确认”）。
-            messages.convergeSteersByHost(link.userMessageId, command.userStatusWire(),
-                    command.failureCode(), now);
+            // 附属 steer 镜像收敛（评估 v1.0 §4.3）：同事务先读 RUNNING steer 再逐行
+            // 置终态——与单条批量 UPDATE 在事务内等价，但拿到确切行集供调用方补发
+            // 事件（宿主终态后 UI 不得停留在“正在并入”）。投递态保留原值
+            // （OFFERED 才声称“已并入”，PENDING 显示“未确认”）。
+            List<ConversationMessageEntity> pendingSteers =
+                    messages.findRunningSteersByHost(link.userMessageId);
+            List<ConversationStore.ConvergedSteer> converged =
+                    new ArrayList<>(pendingSteers.size());
+            for (ConversationMessageEntity steer : pendingSteers) {
+                messages.updateStatus(steer.messageId, command.userStatusWire(),
+                        command.failureCode(), now);
+                converged.add(new ConversationStore.ConvergedSteer(steer.messageId,
+                        command.userStatusWire(), command.failureCode()));
+            }
             links.writeTerminal(command.conversationTaskId(), command.userStatusWire(),
                     assistantMessageId, now);
             // 轨迹投影（评估 v1.0 §4.3）：与终态同事务落列——写时净化、终态后不可改写
@@ -356,9 +478,10 @@ public final class RoomConversationStore implements ConversationStore {
                         CapabilityTraceCodec.VERSION);
             }
             conversations.touchUpdated(link.conversationId, now);
-            written[0] = true;
+            outcome[0] = ConversationStore.TerminalOutcome.writtenWith(
+                    Collections.unmodifiableList(converged));
         });
-        return written[0];
+        return outcome[0];
     }
 
     @Override
@@ -477,24 +600,6 @@ public final class RoomConversationStore implements ConversationStore {
                 database.conversationMessageAnnotationDao().get(messageId, ownerUserId);
         return entity == null ? null : new AnnotationRow(entity.messageId,
                 entity.ownerUserId, entity.favorite, entity.userNote, entity.updatedAtMs);
-    }
-
-    @Override
-    public void recordQuote(QuoteRecord command) {
-        long now = System.currentTimeMillis();
-        transaction.runInTransaction(() -> {
-            if (messages.getById(command.quotedMessageId()) == null) {
-                throw new IllegalArgumentException(
-                        "被引消息不存在: " + command.quotedMessageId());
-            }
-            com.matrix.agent.data.conversation.ConversationQuoteEntity entity =
-                    new com.matrix.agent.data.conversation.ConversationQuoteEntity();
-            entity.messageId = command.messageId();
-            entity.quotedMessageId = command.quotedMessageId();
-            entity.quoteSnapshot = command.snapshot();
-            entity.createdAtMs = now;
-            database.conversationQuoteDao().upsert(entity);
-        });
     }
 
     @Override
@@ -628,6 +733,11 @@ public final class RoomConversationStore implements ConversationStore {
             database.debugTraceEventDao().deleteByOwnerUsers(userIds);
             messages.deleteByOwnerUsers(userIds);
             links.deleteByOwnerUsers(userIds);
+            // 受控附件（I6）：正文驻 SQLCipher，同一事务按 owner 级联删除——
+            // clearUserData 后不残留任何已冻结/草稿附件文本。
+            if (attachments != null) {
+                attachments.deleteByUsers(userIds);
+            }
             removed[0] = conversations.deleteByOwners(userIds);
         });
         return removed[0];

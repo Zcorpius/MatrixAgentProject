@@ -57,7 +57,7 @@ public abstract class ModelApiException extends RuntimeException {
         }
     }
 
-    /** 网络层异常——不重试,AgentEngine 转 TIMEOUT 终态。 */
+    /** 网络层异常——不重试,AgentEngine 转 NETWORK_UNAVAILABLE 终态。 */
     public static final class NetworkException extends ModelApiException {
         public NetworkException(String sanitizedEndpoint, Throwable cause) {
             super("network-error", 0, sanitizedEndpoint, cause);

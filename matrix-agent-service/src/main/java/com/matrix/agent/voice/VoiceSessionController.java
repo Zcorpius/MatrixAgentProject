@@ -41,6 +41,9 @@ import java.util.concurrent.TimeUnit;
 public final class VoiceSessionController {
     private static final String TAG = "MatrixAgent";
 
+    /** Binder PTT 入口的唤醒来源（VoiceServiceStub.beginListening 使用）。 */
+    public static final String WAKE_SOURCE_BINDER_PTT = "binder_ptt";
+
     private final VoiceSessionState state = new VoiceSessionState();
     private final WakeWordPort wakePort;
     private final AsrPort asrPort;
@@ -78,6 +81,13 @@ public final class VoiceSessionController {
      * 迟到唤醒污染重建后的新会话(采音错误 stop+start 窗口)。 */
     private volatile long expectedWakeEpoch = Long.MIN_VALUE;
     private volatile int repromptCount;
+    /**
+     * 本次会话由 Binder PTT 触发（按住手势即承诺）：旁路免手持的 SPEECH_START 静音超时，
+     * 采音由 maxSpeech 硬上限与松开 flush 收敛；被拒绝的 final 直接收尾，绝不重听。
+     */
+    private volatile boolean pttSession;
+    /** PTT 松开后的 final 若被拒绝，必须收尾本轮；不能复用免手持唤醒的追问监听。 */
+    private volatile boolean closeAfterRejectedFinal;
     /** 唤醒重建已重试次数(onWake 成功重置,onWakeError 递增,上限 3)。 */
     private volatile int wakeRetryCount;
     /** 唤醒重建延迟任务句柄;onWake/cleanup/shutdown 取消,防旧重试执行。 */
@@ -282,6 +292,10 @@ public final class VoiceSessionController {
         if (transit(VoiceEvent.wake()) != VoiceSessionState.State.WAKE_ACCEPTED) return;
         generation++;
         repromptCount = 0;
+        // PTT 会话：按住手势本身就是开口承诺，整轮持有 closeAfterRejectedFinal——
+        // 任何被拒绝的 final（空文本/低置信度）都直接收尾，绝不重开麦克风追问。
+        pttSession = WAKE_SOURCE_BINDER_PTT.equals(source);
+        closeAfterRejectedFinal = pttSession;
         wakeRetryCount = 0; // 唤醒成功,重置重建计数
         cancelFuture(wakeRetryFuture); wakeRetryFuture = null; // 取消旧重试(防迟到重试中断新会话)
         pendingFinal = null;
@@ -289,6 +303,7 @@ public final class VoiceSessionController {
         cancelAllTimeouts();
         metrics.onWake(source);
         Log.i(TAG, "[Voice] wake accepted source=" + source
+                + " pttSession=" + pttSession
                 + ", waiting_for_command timeoutMs=" + policy.speechStartMs());
         wakePort.stop();
         if (!startAsr()) return;
@@ -413,7 +428,13 @@ public final class VoiceSessionController {
                     + " confidence=" + transcript.confidence()
                     + " threshold=" + policy.minConfidence()
                     + " repromptCount=" + repromptCount);
-            if (repromptCount <= policy.maxReprompt()) {
+            if (closeAfterRejectedFinal) {
+                // PTT 已经松开：空文本或低置信度不应重新打开麦克风等待下一句。否则 Host
+                // 会在 speechStartMs 内保留 session，用户下一次点按必然撞上 session_busy。
+                Log.i(TAG, "[Voice] PTT final rejected; ending released session");
+                transit(VoiceEvent.cancel());
+                cleanupAndIdle();
+            } else if (repromptCount <= policy.maxReprompt()) {
                 transit(VoiceEvent.rejected());
                 if (!startAsr()) return;
                 startListeningTimeouts();
@@ -764,7 +785,12 @@ public final class VoiceSessionController {
 
     private void startListeningTimeouts() {
         cancelSpeechStartAndMax();
-        speechStartFuture = scheduleAsrTimeout(policy.speechStartMs(), this::handleSpeechStartTimeout);
+        // PTT 旁路 SPEECH_START：免手持场景"唤醒后 3 秒未开口"是正常收尾，但 PTT 的
+        // 按住手势就是开口承诺，静音不是结束信号——用户可能在斟酌词句。采音时长由
+        // maxSpeech 硬上限与松开 flush 收敛（真机闭环 D 验证：慢引擎首条 partial 可能
+        // 晚于 3s，旧逻辑会把按住中的会话静默杀掉，松开后什么都收不到）。
+        speechStartFuture = pttSession
+                ? null : scheduleAsrTimeout(policy.speechStartMs(), this::handleSpeechStartTimeout);
         maxSpeechFuture = scheduleAsrTimeout(policy.maxSpeechMs(), this::handleMaxSpeechTimeout);
     }
 
@@ -957,12 +983,37 @@ public final class VoiceSessionController {
      * 走 LISTENING→ENDPOINTING→consumeFinal 状态机，不旁路（§6.2-2）。
      */
     public void flushFinal() {
+        flushFinal(false);
+    }
+
+    /** PTT 松开专用 flush：无有效转写时结束本轮，不进入免手持语音的重听流程。 */
+    public void flushFinalForPtt() {
+        flushFinal(true);
+    }
+
+    private void flushFinal(boolean endIfRejected) {
         runInState(() -> {
             VoiceSessionState.State current = state.current();
             if (current != VoiceSessionState.State.LISTENING) {
+                // runtime 已进入 WAKE_ACCEPTED 但尚未拿到 AudioRecord 时，PTT 已松开的
+                // 正确语义仍是结束本轮；不能等到 start timeout 后继续占住 Host session。
+                if (endIfRejected && current == VoiceSessionState.State.WAKE_ACCEPTED) {
+                    Log.i(TAG, "[Voice] PTT released before capture started; ending session");
+                    transit(VoiceEvent.cancel());
+                    cleanupAndIdle();
+                    return;
+                }
+                // 静音端点已在途（finalWait 已排队）：不重复 finish；只补 PTT 收尾标记，
+                // 让排队的 finalWait 消费/超时后按"拒绝即收尾"关闭，绝不重开麦克风追问。
+                if (endIfRejected && current == VoiceSessionState.State.ENDPOINTING) {
+                    Log.i(TAG, "[Voice] PTT released while endpointing; marking close-on-reject");
+                    closeAfterRejectedFinal = true;
+                    return;
+                }
                 Log.w(TAG, "[Voice] flushFinal 非 LISTENING(state=" + current + "),忽略");
                 return;
             }
+            closeAfterRejectedFinal = endIfRejected;
             cancelSpeechStartAndMax();
             // 强制产出 final + 走 endpoint 路径
             asrPort.finish();

@@ -83,7 +83,37 @@ public interface ConversationStore {
 
     record UserSubmission(String conversationId, String messageId, int channelWire,
             String text, String languageTag, String conversationTaskId,
-            String runtimeRequestId, boolean readOnlyHint, String idempotencyKey) { }
+            String runtimeRequestId, boolean readOnlyHint, String idempotencyKey,
+            String submittedDraftInstanceId, String quotedMessageId, String quoteSnapshot,
+            List<String> contextAttachmentIds) {
+        /** Source-compatible constructor for inputs that do not originate from a text draft. */
+        public UserSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String conversationTaskId,
+                String runtimeRequestId, boolean readOnlyHint, String idempotencyKey) {
+            this(conversationId, messageId, channelWire, text, languageTag, conversationTaskId,
+                    runtimeRequestId, readOnlyHint, idempotencyKey, null, null, null, null);
+        }
+
+        /** Source-compatible constructor for draft-aware primary input without a quote. */
+        public UserSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String conversationTaskId,
+                String runtimeRequestId, boolean readOnlyHint, String idempotencyKey,
+                String submittedDraftInstanceId) {
+            this(conversationId, messageId, channelWire, text, languageTag, conversationTaskId,
+                    runtimeRequestId, readOnlyHint, idempotencyKey, submittedDraftInstanceId,
+                    null, null, null);
+        }
+
+        /** Source-compatible constructor for quote-bearing input without attachments. */
+        public UserSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String conversationTaskId,
+                String runtimeRequestId, boolean readOnlyHint, String idempotencyKey,
+                String submittedDraftInstanceId, String quotedMessageId, String quoteSnapshot) {
+            this(conversationId, messageId, channelWire, text, languageTag, conversationTaskId,
+                    runtimeRequestId, readOnlyHint, idempotencyKey, submittedDraftInstanceId,
+                    quotedMessageId, quoteSnapshot, List.of());
+        }
+    }
 
     record SubmittedUserMessage(long sequenceNo, boolean replay) { }
 
@@ -100,7 +130,23 @@ public interface ConversationStore {
 
     record SteerSubmission(String conversationId, String messageId, int channelWire,
             String text, String languageTag, String hostUserMessageId,
-            String idempotencyKey) { }
+            String idempotencyKey, String submittedDraftInstanceId,
+            List<String> contextAttachmentIds) {
+        /** Source-compatible constructor for voice and legacy append callers. */
+        public SteerSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String hostUserMessageId,
+                String idempotencyKey) {
+            this(conversationId, messageId, channelWire, text, languageTag, hostUserMessageId,
+                    idempotencyKey, null, List.of());
+        }
+
+        public SteerSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String hostUserMessageId,
+                String idempotencyKey, String submittedDraftInstanceId) {
+            this(conversationId, messageId, channelWire, text, languageTag, hostUserMessageId,
+                    idempotencyKey, submittedDraftInstanceId, List.of());
+        }
+    }
 
     record SubmittedSteerMessage(long sequenceNo, boolean replay) { }
 
@@ -109,7 +155,12 @@ public interface ConversationStore {
      * 消息状态收敛 FAILED（“未能并入宿主请求”）。仅 PENDING 行生效，其余 no-op
      * （迟到回执不得覆盖已收敛事实）。
      */
-    void updateSteerDelivery(String messageId, boolean offered);
+    void updateSteerDelivery(String messageId, boolean offered, String submittedDraftInstanceId);
+
+    /** Compatibility convenience for legacy/voice callers with no Launcher draft snapshot. */
+    default void updateSteerDelivery(String messageId, boolean offered) {
+        updateSteerDelivery(messageId, offered, null);
+    }
 
     // ---- 执行期状态机 ----
 
@@ -121,9 +172,15 @@ public interface ConversationStore {
      * 插入 assistant 消息（assistantText 非空时）+ **同一事务内把仍为 RUNNING 的
      * 附属 steer 行（steer_host_user_message_id 指向本宿主）镜像收敛为同终态**
      * （投递态 FAILED 的 steer 已自收敛，不被覆盖）。conversation 已被 clear 的行
-     * 静默丢弃（返回 false）——清库后旧异步任务不得回写（epoch 等价门，§5.2）。
+     * 静默丢弃（返回 dropped）——清库后旧异步任务不得回写（epoch 等价门，§5.2）。
+     *
+     * <p>返回 {@link TerminalOutcome}：除写入结果外，携带本事务实际收敛的 steer 行
+     * 事实（messageId + 终态 + 错误码）。调用方（Coordinator）据此为每行补发
+     * upsert/status 事件——宿主终态后 UI 不得停留在“正在并入”（评审 P1：镜像收敛
+     * 若无事件投影，客户端缓存将悬挂至重进会话）。恢复对账（writeRecoveryOutcome）
+     * 不需要该返回值：对账完成先于任何订阅，快照读取的已是收敛后事实。</p>
      */
-    boolean writeTerminal(TerminalWrite command);
+    TerminalOutcome writeTerminal(TerminalWrite command);
 
     record TerminalWrite(String conversationTaskId, int userStatusWire, int failureCode,
             String assistantMessageId, String assistantText, String traceJson) {
@@ -135,6 +192,21 @@ public interface ConversationStore {
                     assistantText, null);
         }
     }
+
+    /** writeTerminal 的结果：written=false 表示会话已清除/任务已终态（幂等丢弃）。 */
+    record TerminalOutcome(boolean written, List<ConvergedSteer> convergedSteers) {
+
+        public static TerminalOutcome dropped() {
+            return new TerminalOutcome(false, List.of());
+        }
+
+        public static TerminalOutcome writtenWith(List<ConvergedSteer> convergedSteers) {
+            return new TerminalOutcome(true, convergedSteers);
+        }
+    }
+
+    /** 同事务镜像收敛的一行附属输入事实；供调用方补发事件，不再回查。 */
+    record ConvergedSteer(String messageId, int statusWire, int failureCode) { }
 
     /** 恢复对账：写入一条 sequence 有序的 SYSTEM 说明行；返回其 sequence。 */
     long appendSystemNote(String conversationId, String text);
@@ -152,11 +224,6 @@ public interface ConversationStore {
 
     record AnnotationRow(String messageId, String ownerUserId, boolean favorite,
             String userNote, long updatedAtMs) { }
-
-    /** 引用落库（1:1 于发起消息）；被引消息不存在/跨会话抛 IllegalArgumentException。 */
-    void recordQuote(QuoteRecord command);
-
-    record QuoteRecord(String messageId, String quotedMessageId, String snapshot) { }
 
     /** 可空。 */
     QuoteRow findQuoteByQuotingMessage(String messageId);

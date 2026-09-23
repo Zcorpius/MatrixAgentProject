@@ -341,4 +341,104 @@ public final class MatrixDatabaseMigrationTest {
         cursor.close();
         db.close();
     }
+
+    /**
+     * v10 → v11（输入交互增强 I4）：草稿两表迁移与 Room 导出的 v11 schema 对齐；
+     * 两表可写、复合主键生效（同 scope 同会话仅一行 REPLACE 语义由 DAO 承担）。
+     */
+    @Test
+    public void migrate10To11CreatesDraftAndTombstoneTables() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 10);
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 11, true,
+                MatrixDatabase.MIGRATION_10_11);
+        db.execSQL("INSERT INTO conversation_draft (owner_user_id, vehicle_zone, "
+                + "conversation_id, draft_instance_id, revision, text, selection_start, "
+                + "selection_end, updated_at_ms) VALUES "
+                + "('demo-driver', 'DRIVER', 'conv-1', 'inst-1', 3, '草稿', 0, 2, 1000)");
+        db.execSQL("INSERT INTO conversation_consumed_draft (owner_user_id, vehicle_zone, "
+                + "conversation_id, draft_instance_id, consumed_at_ms) VALUES "
+                + "('demo-driver', 'DRIVER', 'conv-1', 'inst-0', 999)");
+        Cursor draft = db.query("SELECT revision, text FROM conversation_draft "
+                + "WHERE conversation_id='conv-1'");
+        assertTrue(draft.moveToFirst());
+        assertEquals(3, draft.getLong(0));
+        assertEquals("草稿", draft.getString(1));
+        draft.close();
+        Cursor tombstone = db.query("SELECT consumed_at_ms FROM conversation_consumed_draft "
+                + "WHERE draft_instance_id='inst-0'");
+        assertTrue(tombstone.moveToFirst());
+        assertEquals(999, tombstone.getLong(0));
+        tombstone.close();
+        db.close();
+    }
+
+    /**
+     * v11 → v12（输入交互增强 I6/I5 Phase 2）：conversation_attachment 表 +
+     * conversation_task_link 的 5 个 ModelExecutionSnapshot 列。
+     */
+    @Test
+    public void migrate11To12CreatesAttachmentTableAndModelSnapshotColumns()
+            throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 11);
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 12, true,
+                MatrixDatabase.MIGRATION_11_12);
+        db.execSQL("INSERT INTO conversation_attachment (attachment_id, owner_user_id, "
+                + "vehicle_zone, conversation_id, source_kind, mime_type, safe_display_name, "
+                + "byte_size, state, error_code, extracted_text, extracted_chars, "
+                + "linked_message_id, ordinal, created_at_ms, client_operation_id) VALUES "
+                + "('att-1', 'demo-driver', 'DRIVER', 'conv-1', 0, 'text/plain', "
+                + "'notes.txt', 100, 1, 0, 'Hello', 5, NULL, 0, 1000, 'op-1')");
+        db.execSQL("UPDATE conversation_attachment SET linked_message_id='msg-1', ordinal=0 "
+                + "WHERE attachment_id='att-1'");
+        Cursor att = db.query("SELECT state, extracted_text FROM conversation_attachment "
+                + "WHERE attachment_id='att-1'");
+        assertTrue(att.moveToFirst());
+        assertEquals(1, att.getInt(0));
+        assertEquals("Hello", att.getString(1));
+        att.close();
+
+        Cursor snapshot = db.query("SELECT model_provider_id, model_id, model_backend, "
+                + "config_generation, config_fingerprint FROM conversation_task_link LIMIT 1");
+        assertTrue("空 link 行的快照列为 null", !snapshot.moveToFirst()
+                || (snapshot.isNull(0) && snapshot.isNull(4)));
+        snapshot.close();
+        db.close();
+    }
+
+    @Test
+    public void migrate12To13ScopesAttachmentOperationUniquenessByOwnerAndZone()
+            throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 12);
+        db.execSQL("INSERT INTO conversation_attachment (attachment_id, owner_user_id, "
+                + "vehicle_zone, conversation_id, source_kind, mime_type, safe_display_name, "
+                + "byte_size, state, error_code, extracted_text, extracted_chars, "
+                + "linked_message_id, ordinal, created_at_ms, client_operation_id) VALUES "
+                + "('att-driver', 'driver-a', 'DRIVER', 'conv-a', 0, 'text/plain', "
+                + "'a.txt', 1, 1, 0, 'A', 1, NULL, 0, 1, 'op-shared')");
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 13, true,
+                MatrixDatabase.MIGRATION_12_13);
+        db.execSQL("INSERT INTO conversation_attachment (attachment_id, owner_user_id, "
+                + "vehicle_zone, conversation_id, source_kind, mime_type, safe_display_name, "
+                + "byte_size, state, error_code, extracted_text, extracted_chars, "
+                + "linked_message_id, ordinal, created_at_ms, client_operation_id) VALUES "
+                + "('att-passenger', 'driver-a', 'PASSENGER', 'conv-b', 0, 'text/plain', "
+                + "'b.txt', 1, 1, 0, 'B', 1, NULL, 0, 2, 'op-shared')");
+
+        Cursor index = db.query("SELECT name FROM sqlite_master WHERE type='index' "
+                + "AND name='uq_attachment_owner_zone_operation'");
+        assertTrue("迁移后必须有 owner/zone 复合唯一索引", index.moveToFirst());
+        index.close();
+        Cursor count = db.query("SELECT COUNT(*) FROM conversation_attachment "
+                + "WHERE client_operation_id='op-shared'");
+        assertTrue(count.moveToFirst());
+        assertEquals("不同隔离域可安全使用相同 operationId", 2, count.getInt(0));
+        count.close();
+        db.close();
+    }
 }

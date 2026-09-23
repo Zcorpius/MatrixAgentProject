@@ -83,6 +83,8 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
     private volatile boolean enabled = true;
     private volatile String currentSessionId;
     private volatile Consumer<com.matrix.agent.voice.VoiceSessionController> controllerConfigurer;
+    /** In-process readback output is separately owned; refresh it after an idle route change. */
+    private volatile Runnable ttsOutputRouteChangedListener = () -> { };
 
     public VoiceServiceStub(Application application, ModelDownloadDao downloads,
             ExecutorService modelDownloadExecutor,
@@ -97,13 +99,18 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         chineseModel = VoskModelSpec.cn(voskRoot);
         File sherpaRoot = new File(application.getFilesDir(), "sherpa-model");
         sherpaDownloader = new SherpaModelDownloader(application, downloads,
-                new com.matrix.agent.platform.MatrixHttpClient().download());
+                new com.matrix.agent.platform.MatrixHttpClient().download(),
+                SherpaModelDownloader.systemPresetRoot());
         sherpaAsr = SherpaModelSpec.streamingBilingual(sherpaRoot);
         sherpaVad = SherpaModelSpec.sileroVad(sherpaRoot);
         sherpaKws = SherpaModelSpec.kwsZhEn(sherpaRoot);
         sherpaTts = SherpaModelSpec.piperZhCn(sherpaRoot);
         this.modelDownloadExecutor = modelDownloadExecutor;
         tencentTtsConfig = new SecureTencentTtsConfigStore(application);
+    }
+
+    public void setTtsOutputRouteChangedListener(Runnable listener) {
+        ttsOutputRouteChangedListener = listener == null ? () -> { } : listener;
     }
 
     @Override public VoiceServiceStatus getStatus() {
@@ -134,7 +141,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         String session = currentSessionId;
         if (session == null) return result(MatrixErrorCode.NOT_FOUND, operationId, null);
         runtime.cancel();
-        finishSession(VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.SUCCESS);
+        finishSession(session, VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.SUCCESS);
         return result(MatrixErrorCode.SUCCESS, operationId, session);
     }
 
@@ -232,12 +239,19 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         if (runtime == null) {
             return result(MatrixErrorCode.SERVICE_NOT_READY, operationId, null);
         }
-        // flush = 停止采音 + 强制产出 final（§6.2 契约变更）
-        runtime.manualWake("flush");  // 确保在活跃状态
         var controller = runtime.getController();
-        if (controller != null) {
-            controller.flushFinal();
+        if (controller == null || controller.currentState() == VoiceSessionState.State.IDLE) {
+            // PTT 是有界的按住手势。若松手时运行时仍在装配（controller 为 null）或已发布但
+            // beginListening 的唤醒尚未派发（IDLE），直接结束本次 Host 会话；运行时可继续
+            // 预热，但 beginListening 的 isCurrent 门卫会丢弃旧 session 的迟到唤醒，
+            // 绝不允许它在后台占住下一次 PTT。
+            Log.i("MatrixAgent", "[VoiceSession] PTT released before listen dispatch; closing session");
+            finishSession(safeSession, VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.SUCCESS);
+            return result(MatrixErrorCode.SUCCESS, operationId, safeSession);
         }
+        // flush = 停止采音 + 强制产出 final。PTT session 已活跃，不应再 manualWake；那会
+        // 在 WAKE_ACCEPTED/LISTENING 之间制造无效的重复 wake。
+        controller.flushFinalForPtt();
         return result(MatrixErrorCode.SUCCESS, operationId, safeSession);
     }
 
@@ -261,39 +275,77 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         if (!persistenceGate.isAvailable()) {
             return result(MatrixErrorCode.PERSISTENCE_UNAVAILABLE, safeOperation, null);
         }
-        synchronized (modelInstallLock) {
-            if (modelInstallInFlight) return result(MatrixErrorCode.OVERLOADED, safeOperation, null);
-            modelInstallInFlight = true;
-        }
-        try {
-            modelDownloadExecutor.execute(() -> {
-                try {
-                    if (enginePreference.isSherpaSelected()) {
-                        installIfMissing(sherpaAsr);
-                        installIfMissing(sherpaVad);
-                        installIfMissing(sherpaKws);
-                        installIfMissing(sherpaTts);
-                    } else {
-                        installIfMissing(englishModel);
-                        installIfMissing(chineseModel);
-                        installIfMissing(sherpaTts);
-                    }
-                    // An already-built runtime may be holding the system-TTS fallback selected
-                    // before the local model was installed. Rebuild it while idle so the very
-                    // next PTT/wake uses Piper rather than honestly failing output again.
-                    recreateIdleRuntimeForInstalledTts();
-                } catch (IOException failure) {
-                    android.util.Log.w("MatrixAgent", "[Voice] 离线模型安装未完成: "
-                            + failure.getClass().getSimpleName());
-                } finally {
-                    synchronized (modelInstallLock) { modelInstallInFlight = false; }
-                }
-            });
-            return result(MatrixErrorCode.SUCCESS, safeOperation, null);
-        } catch (RejectedExecutionException unavailable) {
-            synchronized (modelInstallLock) { modelInstallInFlight = false; }
+        if (!beginModelInstall()) {
             return result(MatrixErrorCode.OVERLOADED, safeOperation, null);
         }
+        try {
+            modelDownloadExecutor.execute(() -> runModelInstall("离线模型安装"));
+            return result(MatrixErrorCode.SUCCESS, safeOperation, null);
+        } catch (RejectedExecutionException unavailable) {
+            endModelInstall();
+            return result(MatrixErrorCode.OVERLOADED, safeOperation, null);
+        }
+    }
+
+    /**
+     * ROM 预埋场景的启动期自动安装：Host 拉起后从系统预埋归档本地补齐当前引擎所需
+     * 模型（预埋归档经钉死 SHA-256 准入，见 SherpaModelDownloader）。无预埋的普通
+     * 安装不触发，行为不变。安装只依赖文件系统——进度入库失败仅降级显示，不查
+     * persistence gate，SQLCipher 降级时语音模型照常就绪。
+     */
+    public void schedulePresetAutoInstall() {
+        if (!sherpaDownloader.hasPresetArchive()) return;
+        if (!beginModelInstall()) return;
+        try {
+            modelDownloadExecutor.execute(() -> runModelInstall("预埋模型自动安装"));
+        } catch (RejectedExecutionException unavailable) {
+            endModelInstall();
+        }
+    }
+
+    /** 单飞占位；true = 获得安装槽位，调用方结束前须 {@link #endModelInstall()}。 */
+    private boolean beginModelInstall() {
+        synchronized (modelInstallLock) {
+            if (modelInstallInFlight) return false;
+            modelInstallInFlight = true;
+            return true;
+        }
+    }
+
+    private void endModelInstall() {
+        synchronized (modelInstallLock) { modelInstallInFlight = false; }
+    }
+
+    /** 安装任务体：吞掉一切失败只留日志（executor 任务无 Future，异常会静默丢失）。 */
+    private void runModelInstall(String what) {
+        try {
+            performOfflineModelInstall();
+        } catch (IOException failure) {
+            android.util.Log.w("MatrixAgent", "[Voice] " + what + "未完成: "
+                    + failure.getClass().getSimpleName());
+        } catch (RuntimeException failure) {
+            android.util.Log.w("MatrixAgent", "[Voice] " + what + "异常: ", failure);
+        } finally {
+            endModelInstall();
+        }
+    }
+
+    /** 按当前引擎补齐离线模型并刷新空闲 TTS 路由。 */
+    private void performOfflineModelInstall() throws IOException {
+        if (enginePreference.isSherpaSelected()) {
+            installIfMissing(sherpaAsr);
+            installIfMissing(sherpaVad);
+            installIfMissing(sherpaKws);
+            installIfMissing(sherpaTts);
+        } else {
+            installIfMissing(englishModel);
+            installIfMissing(chineseModel);
+            installIfMissing(sherpaTts);
+        }
+        // An already-built runtime may be holding the system-TTS fallback selected
+        // before the local model was installed. Rebuild it while idle so the very
+        // next PTT/wake uses Piper rather than honestly failing output again.
+        recreateIdleRuntimeForInstalledTts();
     }
 
     @Override public VoiceOperationResult deleteOfflineModel(String modelId, String operationId) {
@@ -392,6 +444,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
                     tencentTtsConfig.save(parts[0], parts[1], input.voiceType,
                             input.emotionCategory, input.emotionIntensity);
                     recreateIdleRuntimeForTencentTtsChange();
+                    notifyTtsOutputRouteChanged();
                     Log.i("MatrixAgent", "[TencentTts] credential provisioning complete voiceType="
                             + input.voiceType + " emotion=" + input.emotionCategory);
                 } catch (Exception error) {
@@ -423,6 +476,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         try {
             tencentTtsConfig.clear();
             recreateIdleRuntimeForTencentTtsChange();
+            notifyTtsOutputRouteChanged();
             Log.i("MatrixAgent", "[TencentTts] credential cleared");
             return result(MatrixErrorCode.SUCCESS, safeOperation, null);
         } catch (Exception e) {
@@ -501,6 +555,15 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         }
     }
 
+    private void notifyTtsOutputRouteChanged() {
+        try {
+            ttsOutputRouteChangedListener.run();
+        } catch (RuntimeException failure) {
+            Log.w("MatrixAgent", "[TencentTts] readback 路由刷新失败 type="
+                    + failure.getClass().getSimpleName());
+        }
+    }
+
     /** Framed credential wire format: four-byte big-endian SecretId length, then id and key. */
     private static byte[][] readTencentCredential(ParcelFileDescriptor descriptor) throws IOException {
         final int maxBytes = 1024;
@@ -563,13 +626,14 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
             dispatchSessionState(sessionId, publicState);
             dispatchStatus();
             if (state == VoiceSessionState.State.IDLE) {
-                finishSession(publicState, MatrixErrorCode.SUCCESS);
+                finishSession(sessionId, publicState, MatrixErrorCode.SUCCESS);
             }
         }
 
         @Override public void onError(String code) {
             if (!isCurrent(sessionId)) return;
-            finishSession(VoiceServiceStatus.SESSION_IDLE, publicVoiceFailureCode(code));
+            finishSession(sessionId, VoiceServiceStatus.SESSION_IDLE,
+                    publicVoiceFailureCode(code));
         }
     }
 
@@ -591,7 +655,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
         if (!isCurrent(sessionId) || !enabled) return;
         Log.i("MatrixAgent", "[VoiceSession] runtime ready, dispatching PTT listen");
         runtime.resume();
-        runtime.manualWake("binder_ptt");
+        runtime.manualWake(com.matrix.agent.voice.VoiceSessionController.WAKE_SOURCE_BINDER_PTT);
         dispatchSessionState(sessionId, VoiceServiceStatus.SESSION_LISTENING);
         dispatchStatus();
     }
@@ -599,7 +663,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
     private void failStartup(String sessionId) {
         if (isCurrent(sessionId)) {
             Log.e("MatrixAgent", "[VoiceSession] startup failed, closing PTT session");
-            finishSession(VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.TASK_FAILED);
+            finishSession(sessionId, VoiceServiceStatus.SESSION_IDLE, MatrixErrorCode.TASK_FAILED);
         }
     }
 
@@ -608,9 +672,19 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
     }
 
     private void finishSession(int finalState, int errorCode) {
+        finishSession(null, finalState, errorCode);
+    }
+
+    /**
+     * Ends the active session, optionally only when it is still the session that initiated
+     * this callback.  Runtime startup and listener callbacks are asynchronous: without the
+     * expected-id check, a delayed callback from an old PTT gesture could clear a newer one.
+     */
+    private void finishSession(String expectedSessionId, int finalState, int errorCode) {
         synchronized (sessionLock) {
             String session = currentSessionId;
-            if (session == null) return;
+            if (session == null || (expectedSessionId != null
+                    && !expectedSessionId.equals(session))) return;
             currentSessionId = null;
             VoiceRuntime runtime = VoiceRuntimeHolder.get();
             if (runtime != null) {

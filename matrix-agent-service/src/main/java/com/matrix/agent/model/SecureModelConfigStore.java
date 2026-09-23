@@ -26,6 +26,7 @@ public final class SecureModelConfigStore {
     private static final String TAG = "MatrixAgent";
     private static final String FILE = "matrix_model_config";
     private static final String KEY_ALIAS = "matrix_agent_api_key";
+    private static final String KEY_GENERATION = "config_generation";
     private final SharedPreferences preferences;
 
     public SecureModelConfigStore(Context context) {
@@ -44,6 +45,9 @@ public final class SecureModelConfigStore {
                 + " model=" + config.model + " mode=" + config.plannerMode
                 + " apiKeyChars=" + (config.apiKey == null ? 0 : config.apiKey.length()));
         String encryptedApiKey = encrypt(config.apiKey);
+        // configurationGeneration（输入交互增强 I5 §8.2）：每次成功持久化单调 +1——
+        // 供 ModelExecutionSnapshot 锁定“本任务用的是哪个配置代际”。
+        int nextGeneration = preferences.getInt(KEY_GENERATION, 0) + 1;
         boolean committed = preferences.edit()
                 .putString("providerId", config.providerId)
                 .putString("displayName", config.displayName)
@@ -53,12 +57,59 @@ public final class SecureModelConfigStore {
                 .putBoolean("keyRequired", config.apiKeyRequired)
                 .putString("plannerMode", config.plannerMode.name())
                 .putString("apiKey", encryptedApiKey)
+                .putInt(KEY_GENERATION, nextGeneration)
                 .commit();
         if (!committed) {
             throw new java.io.IOException("failed to persist encrypted model configuration");
         }
         Log.d(TAG, "[ConfigStore] saved. apiKeyCipherChars=" + encryptedApiKey.length()
+                + " generation=" + nextGeneration
                 + " allKeys=" + preferences.getAll().keySet());
+    }
+
+    /** 当前配置代际（单调递增；0 = 从未保存过配置）。 */
+    public int configurationGeneration() {
+        return preferences.getInt(KEY_GENERATION, 0);
+    }
+
+    /**
+     * 非秘密字段的 SHA-256 指纹（I5 §8.2）：provider|model|protocol|端点类别|generation。
+     * 不含 API key 与完整 endpoint（只取“云端/局域网/端侧”类别），可安全进入
+     * conversation_task_link 与未来脱敏 TaskDetails 投影。
+     */
+    public String configFingerprint() {
+        ModelConfig config = load();
+        return fingerprintOf(config == null ? "" : config.providerId,
+                config == null ? "" : config.model,
+                config == null ? "" : config.protocol.name(),
+                config == null ? "" : ModelExecutionSnapshot.endpointCategory(
+                        config.protocol, config.endpoint),
+                configurationGeneration());
+    }
+
+    /** 纯函数形态（JVM 可测）：canonical 输入 → SHA-256 十六进制。 */
+    static String fingerprintOf(String providerId, String model, String protocol,
+            String endpointCategory, int generation) {
+        String canonical = String.join("|",
+                nullSafe(providerId), nullSafe(model), nullSafe(protocol),
+                nullSafe(endpointCategory), String.valueOf(generation));
+        try {
+            java.security.MessageDigest digest =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(canonical.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16))
+                        .append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
+    }
+
+    private static String nullSafe(String value) {
+        return value == null ? "" : value;
     }
 
     public ModelConfig load() {

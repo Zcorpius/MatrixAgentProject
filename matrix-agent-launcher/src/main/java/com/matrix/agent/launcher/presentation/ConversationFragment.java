@@ -1,9 +1,14 @@
 package com.matrix.agent.launcher.presentation;
 
+import android.animation.ObjectAnimator;
 import android.graphics.Typeface;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -19,33 +24,71 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.matrix.agent.api.conversation.ConversationMessage;
+import com.matrix.agent.api.conversation.ConversationRuntimeStage;
 import com.matrix.agent.api.debug.DebugTraceWireEvent;
 import com.matrix.agent.launcher.BuildConfig;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
- * 对话页（阶段 A：文字通道）。纯渲染：全部状态来自 ViewModel 的不可变投影；
+ * 对话页。纯渲染：全部状态来自 ViewModel 的不可变投影；
  * EXECUTION_UNKNOWN 按契约渲染为“执行结果未知”提示行，绝不显示成取消或失败。
+ *
+ * <p>输入区（输入交互增强 Phase 1）：多行输入 + 全屏编辑 + Host 加密草稿、
+ * 统一提交（发送/追加由 Host 原子判定）、固定 PTT 次级钮（按压反馈契约）与
+ * Host 驱动的运行阶段条。</p>
  */
 public final class ConversationFragment extends Fragment {
 
     private static final int MAX_RENDERED_ROWS = 200;
+    /** “回车发送”偏好（I4 §7.3）：纯 Launcher UI 偏好，默认关闭。 */
+    private static final String INPUT_PREFERENCES = "conversation_input_preferences";
+    private static final String KEY_ENTER_TO_SEND = "enter_to_send";
 
     private LinearLayout messageRows;
     private TextView notice;
     private EditText input;
-    private View sendButton;
-    private View cancelButton;
-    private android.widget.Button voiceButton;
+    private TextView cancelButton;
+    private android.widget.ImageButton voiceButton;
+    /** I5 只读模型胶囊：点击弹只读简表；数据来自 ModelRuntimeStatus。 */
+    private TextView modelCapsule;
+    /** 调节图标与模型胶囊都只打开只读模型简表。 */
+    private View modelOptionsButton;
+    /** I6 附件 chips 容器与 + 入口。 */
+    private LinearLayout attachmentChipRow;
+    private View attachmentChipsScroll;
+    private View attachButton;
+    private TextView stageView;
+    private View fullscreenButton;
     private TextView dynamicTitle;
     private TextView summaryBadge;
+    /** PTT 状态条（§5.2 可视化）：呼吸点 + 阶段标签 + 实时转写；IDLE 隐藏。 */
+    private LinearLayout pttStatusBar;
+    private View pttDot;
+    private TextView pttLabel;
+    private TextView pttTranscript;
+    private ObjectAnimator pttPulse;
     private ConversationViewModel viewModel;
     private int renderedCount;
     /** 上一次重建入列的消息快照：用于把本次变化归类为前插/追加/重载，驱动滚动策略。 */
     private List<ConversationViewModel.UiMessage> renderedSnapshot = List.of();
+    /** 草稿恢复应用中：抑制 TextWatcher 回灌（恢复不该触发一次多余的 debounce 保存）。 */
+    private boolean applyingDraftRestore;
+    /** PTT 手势进行中（触摸层事实）：与 ViewModel 阶段机正交，只补 DOWN 即时按压视觉。 */
+    private boolean pttHeld;
+    /** 主动作的触摸契约在一个手势内不可改写；否则快速点按会丢失 ACTION_UP。 */
+    private boolean primaryActionConfigured;
+    private boolean primaryActionIsSend;
+    /** 附件 picker（SAF）：只收 text/*（图片入口在 OCR 选型前不开放，§9.4）。 */
+    private final androidx.activity.result.ActivityResultLauncher<String[]> attachmentPicker =
+            registerForActivityResult(
+                    new androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+                    uri -> {
+                        if (uri != null) onAttachmentPicked(uri);
+                    });
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
             @Nullable ViewGroup parent, @Nullable Bundle state) {
@@ -56,18 +99,33 @@ public final class ConversationFragment extends Fragment {
         messageRows = root.findViewById(R.id.conversation_messages);
         notice = root.findViewById(R.id.conversation_notice);
         input = root.findViewById(R.id.conversation_input);
-        sendButton = root.findViewById(R.id.conversation_send);
         cancelButton = root.findViewById(R.id.conversation_cancel);
         voiceButton = root.findViewById(R.id.conversation_voice);
+        modelCapsule = root.findViewById(R.id.conversation_model_capsule);
+        modelOptionsButton = root.findViewById(R.id.conversation_model_options);
+        attachmentChipRow = root.findViewById(R.id.conversation_attachment_chip_row);
+        attachmentChipsScroll = root.findViewById(R.id.conversation_attachment_chips);
+        attachButton = root.findViewById(R.id.conversation_attach);
+        stageView = root.findViewById(R.id.conversation_stage);
+        fullscreenButton = root.findViewById(R.id.conversation_fullscreen);
         dynamicTitle = root.findViewById(R.id.conversation_dynamic_title);
         summaryBadge = root.findViewById(R.id.conversation_summary_badge);
+        pttStatusBar = root.findViewById(R.id.conversation_ptt_status);
+        pttDot = root.findViewById(R.id.conversation_ptt_dot);
+        pttLabel = root.findViewById(R.id.conversation_ptt_label);
+        pttTranscript = root.findViewById(R.id.conversation_ptt_transcript);
         dynamicTitle.setOnLongClickListener(ignored -> {
             promptRename();
             return true;
         });
 
-        sendButton.setOnClickListener(ignored -> submitInput());
+        fullscreenButton.setOnClickListener(ignored -> showFullscreenEditor());
+        modelOptionsButton.setOnClickListener(ignored -> showModelCapsuleDialog());
+        attachButton.setOnClickListener(ignored -> attachmentPicker.launch(
+                new String[] {"text/*"}));
+        applyEnterToSendPreference();
         input.setOnEditorActionListener((view, actionId, event) -> {
+            if (!isEnterToSendEnabled()) return false;
             boolean imeSend = actionId == EditorInfo.IME_ACTION_SEND;
             boolean hardwareEnter = event != null
                     && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
@@ -78,28 +136,36 @@ public final class ConversationFragment extends Fragment {
             }
             return false;
         });
-        cancelButton.setOnClickListener(ignored -> viewModel.cancelLatest());
-        voiceButton.setOnTouchListener((ignored, event) -> {
-            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
-                viewModel.startRecording();
-                return true;
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count,
+                    int after) { }
+
+            @Override public void onTextChanged(CharSequence s, int start, int before,
+                    int count) { }
+
+            @Override public void afterTextChanged(Editable s) {
+                if (applyingDraftRestore) return;
+                viewModel.onDraftChanged(s.toString(), input.getSelectionStart(),
+                        input.getSelectionEnd());
+                renderInputControls();
             }
-            if (event.getAction() == android.view.MotionEvent.ACTION_UP
-                    || event.getAction() == android.view.MotionEvent.ACTION_CANCEL) {
-                viewModel.stopRecording();
-                return true;
-            }
-            return true;
         });
+        input.setOnFocusChangeListener((view, focused) -> {
+            if (!focused) viewModel.flushDraft();
+        });
+        cancelButton.setOnClickListener(ignored -> viewModel.cancelLatest());
+        stageView.setOnClickListener(ignored -> scrollToStageTask());
         root.findViewById(R.id.conversation_scroll).setOnClickListener(
                 ignored -> viewModel.refresh());
 
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
+        viewModel.draftRestores().observe(getViewLifecycleOwner(), this::applyDraftRestore);
         new ViewModelProvider(requireActivity(), activity.viewModelFactory())
                 .get(LauncherViewModel.class)
                 .connectionState().observe(getViewLifecycleOwner(), value -> {
                     if (viewModel.isHostConnected()) {
                         viewModel.start();
+                        viewModel.refreshModelRuntime();
                     }
                 });
         return root;
@@ -107,23 +173,241 @@ public final class ConversationFragment extends Fragment {
 
     @Override public void onStart() {
         super.onStart();
+        setConversationNavigationSurface(true);
         if (viewModel.isHostConnected()) {
             viewModel.start();
+            // 胶囊是“下一次提交将使用的当前 Host 模型”，页面重新可见时必须重读 Host
+            // 真相，不能沿用上次进入页面的缓存。
+            viewModel.refreshModelRuntime();
         }
     }
 
     @Override public void onStop() {
+        // 草稿契约（§7.2）：onStop 立即 flush——debounce 保存与提交经 lane 全序。
+        viewModel.flushDraft();
         viewModel.closeSubscription();
+        setConversationNavigationSurface(false);
         super.onStop();
+    }
+
+    /** 输入面贴底延续到手势导航区；离开会话页后恢复应用的深色全局 chrome。 */
+    private void setConversationNavigationSurface(boolean active) {
+        android.view.Window window = requireActivity().getWindow();
+        int color = ContextCompat.getColor(requireContext(), active
+                ? R.color.composer_surface : R.color.matrix_primary_dark);
+        window.setNavigationBarColor(color);
+        int visibility = window.getDecorView().getSystemUiVisibility();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            int flag = View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            window.getDecorView().setSystemUiVisibility(active
+                    ? visibility | flag : visibility & ~flag);
+        }
+    }
+
+    /** PTT 按压契约（§5.2）：DOWN 立即 pressed 视觉；UP=flush；CANCEL=取消本轮。 */
+    private boolean onPttTouch(MotionEvent event) {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                pttHeld = true;
+                voiceButton.setPressed(true);
+                viewModel.startRecording();
+                renderPttVisual();
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (!pttHeld) return true;
+                pttHeld = false;
+                voiceButton.setPressed(false);
+                viewModel.stopRecording();
+                renderPttVisual();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (!pttHeld) return true;
+                pttHeld = false;
+                voiceButton.setPressed(false);
+                viewModel.cancelRecording();
+                renderPttVisual();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * 按钮视觉三态（§5.2）：默认“按住说话” → 按住“松开发送”（pressed 加深）→
+     * Host capture-started“录音中…”（selected 转暖橙 accent）。阶段唯一来自
+     * ViewModel 投影；pttHeld 只补 postValue 异步派发前一帧的即时按压反馈。
+     */
+    private void renderPttVisual() {
+        if (hasSubmittableInput()) return;
+        ConversationViewModel.State state = viewModel.state().getValue();
+        ConversationViewModel.PttPhase phase = state == null
+                ? ConversationViewModel.PttPhase.IDLE : state.pttPhase;
+        voiceButton.setSelected(phase == ConversationViewModel.PttPhase.LISTENING);
+        voiceButton.setContentDescription(getString(switch (phase) {
+            case LISTENING -> R.string.conversation_voice_listening;
+            case PROCESSING -> R.string.conversation_voice_processing;
+            default -> pttHeld ? R.string.conversation_voice_recording
+                    : R.string.conversation_voice_hold;
+        }));
+    }
+
+    /** PTT 状态条（§5.2 可视化补全）：按下即现——阶段标签 + 实时转写；IDLE 隐藏。 */
+    private void renderPttStatus(ConversationViewModel.State value) {
+        ConversationViewModel.PttPhase phase = value.pttPhase;
+        if (phase == ConversationViewModel.PttPhase.IDLE) {
+            pttStatusBar.setVisibility(View.GONE);
+            setPttPulse(false);
+            return;
+        }
+        pttStatusBar.setVisibility(View.VISIBLE);
+        pttLabel.setText(switch (phase) {
+            case ARMING -> R.string.conversation_voice_starting;
+            case LISTENING -> R.string.conversation_voice_listening;
+            default -> R.string.conversation_voice_processing; // IDLE 已提前返回
+        });
+        String transcript = value.liveTranscript;
+        boolean hasTranscript = transcript != null && !transcript.isBlank();
+        pttTranscript.setVisibility(hasTranscript ? View.VISIBLE : View.GONE);
+        if (hasTranscript) pttTranscript.setText(transcript);
+        setPttPulse(phase == ConversationViewModel.PttPhase.LISTENING);
+    }
+
+    /** “录音中”呼吸点：LISTENING 期间循环渐隐；离开该阶段即停并复位不透明度。 */
+    private void setPttPulse(boolean recording) {
+        boolean pulsing = pttPulse != null && pttPulse.isRunning();
+        if (recording == pulsing) return;
+        if (recording) {
+            if (pttPulse == null) {
+                pttPulse = ObjectAnimator.ofFloat(pttDot, View.ALPHA, 1f, 0.25f);
+                pttPulse.setDuration(650L);
+                pttPulse.setRepeatCount(ObjectAnimator.INFINITE);
+                pttPulse.setRepeatMode(ObjectAnimator.REVERSE);
+            }
+            pttPulse.start();
+        } else {
+            pttPulse.cancel();
+            pttDot.setAlpha(1f);
+        }
+    }
+
+    @Override public void onDestroyView() {
+        if (pttPulse != null) pttPulse.cancel();
+        pttPulse = null;
+        super.onDestroyView();
+    }
+
+    private boolean isEnterToSendEnabled() {
+        return requireContext().getSharedPreferences(INPUT_PREFERENCES,
+                android.content.Context.MODE_PRIVATE)
+                .getBoolean(KEY_ENTER_TO_SEND, false);
+    }
+
+    private void applyEnterToSendPreference() {
+        boolean enabled = isEnterToSendEnabled();
+        input.setImeOptions(enabled
+                ? EditorInfo.IME_ACTION_SEND
+                : EditorInfo.IME_FLAG_NO_ENTER_ACTION | EditorInfo.IME_ACTION_NONE);
+    }
+
+    /** 全屏编辑（I1）：只编辑并回填草稿，绝不提交；含“回车发送”偏好开关。 */
+    private void showFullscreenEditor() {
+        EditText editor = new EditText(requireContext());
+        editor.setText(input.getText().toString());
+        editor.setSelection(input.getSelectionStart(), input.getSelectionEnd());
+        editor.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        editor.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        editor.setTextSize(16);
+        editor.setMinLines(8);
+        editor.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+        android.widget.CheckBox enterToSend = new android.widget.CheckBox(requireContext());
+        enterToSend.setText(R.string.conversation_enter_to_send);
+        enterToSend.setChecked(isEnterToSendEnabled());
+        enterToSend.setOnCheckedChangeListener((button, checked) -> {
+            requireContext().getSharedPreferences(INPUT_PREFERENCES,
+                    android.content.Context.MODE_PRIVATE).edit()
+                    .putBoolean(KEY_ENTER_TO_SEND, checked).apply();
+            applyEnterToSendPreference();
+        });
+        LinearLayout form = new LinearLayout(requireContext());
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(20);
+        form.setPadding(pad, pad, pad, dp(8));
+        form.addView(editor, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        TextView attachmentContext = new TextView(requireContext());
+        attachmentContext.setText(fullscreenAttachmentSummary());
+        attachmentContext.setTextColor(ContextCompat.getColor(requireContext(),
+                R.color.matrix_muted));
+        attachmentContext.setTextSize(12);
+        attachmentContext.setPadding(0, dp(12), 0, dp(4));
+        if (!attachmentContext.getText().toString().isBlank()) {
+            form.addView(attachmentContext);
+        }
+        form.addView(enterToSend);
+        androidx.appcompat.app.AlertDialog dialog =
+                new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle(R.string.conversation_fullscreen_input)
+                        .setView(form)
+                        .setPositiveButton(R.string.conversation_fullscreen_done, null)
+                        .setNegativeButton(R.string.cancel, null)
+                        .create();
+        // 写回草稿（不提交）：只有“完成”明确确认才回填；取消/返回保持原草稿。
+        java.util.function.BiConsumer<String, int[]> writeBack = (text, selection) -> {
+            applyingDraftRestore = true;
+            int start = Math.max(0, Math.min(selection[0], text.length()));
+            int end = Math.max(start, Math.min(selection[1], text.length()));
+            input.setText(text);
+            input.setSelection(start, end);
+            applyingDraftRestore = false;
+            viewModel.onDraftChanged(text, start, end);
+            renderInputControls();
+        };
+        final int[] selection = {editor.getSelectionStart(), editor.getSelectionEnd()};
+        editor.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count,
+                    int after) { }
+
+            @Override public void onTextChanged(CharSequence s, int start, int before,
+                    int count) { }
+
+            @Override public void afterTextChanged(Editable s) {
+                selection[0] = editor.getSelectionStart();
+                selection[1] = editor.getSelectionEnd();
+            }
+        });
+        dialog.show();
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(ignored -> {
+                    writeBack.accept(editor.getText().toString(), selection);
+                    dialog.dismiss();
+                });
+    }
+
+    /** 草稿恢复：应用到输入框（含光标），不等值覆盖避免 IME 跳动。 */
+    private void applyDraftRestore(ConversationViewModel.DraftRestore restore) {
+        if (restore == null) return;
+        applyingDraftRestore = true;
+        if (!input.getText().toString().equals(restore.text())) {
+            input.setText(restore.text());
+        }
+        int start = Math.max(0, Math.min(restore.selectionStart(), restore.text().length()));
+        int end = Math.max(start, Math.min(restore.selectionEnd(), restore.text().length()));
+        input.setSelection(start, end);
+        applyingDraftRestore = false;
+        renderInputControls();
     }
 
     private void submitInput() {
         String text = input.getText().toString();
-        if (text.isBlank()) return;
-        input.setText("");
-        // 始终作为新消息发送——keyed lane 自动排队同会话任务，不会并发。
-        // 不在有运行任务时静默转 steer（用户不知道消息去了哪）。
-        viewModel.send(text);
+        ConversationViewModel.State state = viewModel.state().getValue();
+        boolean hasReadyAttachment = state != null && state.draftAttachments.stream()
+                .anyMatch(com.matrix.agent.api.conversation.ConversationAttachment::isReady);
+        if (text.isBlank() && !hasReadyAttachment) return;
+        // 统一提交会在 ViewModel 中冻结“本次草稿快照”、轮换新 instance 后再清空编辑器。
+        // 不能在此先 setText("")：那会把本次提交错误地变成一个空草稿保存生命周期。
+        viewModel.submitUnified(text);
     }
 
     private boolean currentStateHasRunning() {
@@ -134,15 +418,286 @@ public final class ConversationFragment extends Fragment {
     private void render(@NonNull ConversationViewModel.State value) {
         renderNotice(value);
         renderMessages(value.messages);
-        cancelButton.setVisibility(value.hasRunningTask ? View.VISIBLE : View.GONE);
-        sendButton.setEnabled(!value.sending);
-        voiceButton.setEnabled(value.conversationId != null);
-        voiceButton.setText(value.recording
-                ? R.string.conversation_voice_recording : R.string.conversation_voice_hold);
+        renderInputBar(value);
+        renderPttStatus(value);
         if (value.conversationTitle != null) {
             dynamicTitle.setText(value.conversationTitle);
         }
         summaryBadge.setVisibility(value.summaryActive ? View.VISIBLE : View.GONE);
+    }
+
+    /** 底栏（§3.1/§5.2）：阶段条 + 文字次级取消 + 固定 PTT + 主动作（发送/追加）。 */
+    private void renderInputBar(@NonNull ConversationViewModel.State value) {
+        ConversationRuntimeStage stage = value.runtimeStage;
+        if (stage != null) {
+            stageView.setText(stageText(stage));
+            stageView.setVisibility(View.VISIBLE);
+        } else {
+            stageView.setVisibility(View.GONE);
+        }
+        cancelButton.setVisibility(value.hasRunningTask ? View.VISIBLE : View.GONE);
+        renderModelCapsule(value);
+        renderAttachmentChips(value);
+        renderInputControls();
+        voiceButton.setEnabled(!value.sending && value.conversationId != null);
+        renderPttVisual();
+    }
+
+    /** I5 胶囊投影：模型名 · 后端（未配置/未就绪各自浅色态，绝不统称 Connecting）。 */
+    private void renderModelCapsule(@NonNull ConversationViewModel.State value) {
+        com.matrix.agent.api.model.ModelRuntimeStatus runtime = value.modelRuntime;
+        if (runtime == null || !runtime.ready) {
+            modelCapsule.setText(R.string.conversation_model_unconfigured);
+            modelCapsule.setTextColor(
+                    ContextCompat.getColor(requireContext(), R.color.matrix_muted));
+        } else {
+            String backend = runtime.backend
+                    == com.matrix.agent.api.model.ModelRuntimeStatus.BACKEND_ON_DEVICE
+                    ? getString(R.string.conversation_model_backend_device)
+                    : getString(R.string.conversation_model_backend_cloud);
+            modelCapsule.setText(getString(R.string.conversation_model_format,
+                    runtime.activeModelId == null ? "—" : runtime.activeModelId, backend));
+            modelCapsule.setTextColor(
+                    ContextCompat.getColor(requireContext(), R.color.matrix_primary_dark));
+        }
+    }
+
+    /** 胶囊点击 → 只读简表 + 打开模型接入页入口（§8.1：不在这里编辑配置）。 */
+    private void showModelCapsuleDialog() {
+        ConversationViewModel.State state = viewModel.state().getValue();
+        com.matrix.agent.api.model.ModelRuntimeStatus runtime =
+                state == null ? null : state.modelRuntime;
+        String backend = runtime == null
+                ? getString(R.string.value_unavailable)
+                : runtime.backend
+                        == com.matrix.agent.api.model.ModelRuntimeStatus.BACKEND_ON_DEVICE
+                        ? getString(R.string.conversation_model_backend_device)
+                        : runtime.backend
+                                == com.matrix.agent.api.model.ModelRuntimeStatus.BACKEND_CLOUD
+                                ? getString(R.string.conversation_model_backend_cloud)
+                                : getString(R.string.value_unavailable);
+        String body = getString(R.string.conversation_model_dialog_body,
+                backend,
+                runtime == null || runtime.activeModelId == null
+                        ? getString(R.string.value_unavailable) : runtime.activeModelId,
+                runtime != null && runtime.ready);
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.conversation_model_dialog_title)
+                .setMessage(body)
+                .setPositiveButton(R.string.conversation_model_dialog_go_models,
+                        (dialog, which) -> activity().showModelsPage())
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    /** I6 chips：每项可见、可删、可解释（FAILED chip 说明摄取失败原因）。 */
+    private void renderAttachmentChips(@NonNull ConversationViewModel.State value) {
+        List<com.matrix.agent.api.conversation.ConversationAttachment> attachments =
+                value.draftAttachments;
+        attachmentChipRow.removeAllViews();
+        if (attachments.isEmpty()) {
+            attachmentChipsScroll.setVisibility(View.GONE);
+            return;
+        }
+        attachmentChipsScroll.setVisibility(View.VISIBLE);
+        for (com.matrix.agent.api.conversation.ConversationAttachment attachment
+                : attachments) {
+            attachmentChipRow.addView(buildAttachmentChip(attachment));
+        }
+    }
+
+    private View buildAttachmentChip(
+            com.matrix.agent.api.conversation.ConversationAttachment attachment) {
+        LinearLayout chip = new LinearLayout(requireContext());
+        chip.setOrientation(LinearLayout.HORIZONTAL);
+        chip.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        chip.setBackgroundResource(R.drawable.bg_attachment_chip);
+        chip.setPadding(dp(10), dp(5), dp(4), dp(5));
+        String label = attachment.isReady() ? attachment.safeDisplayName
+                : attachment.isStaging()
+                        ? getString(R.string.conversation_attachment_staging_chip,
+                                attachment.safeDisplayName)
+                        : getString(R.string.conversation_attachment_failed_chip,
+                                attachment.safeDisplayName);
+        TextView name = new TextView(requireContext());
+        name.setText(label);
+        name.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+        name.setTextSize(12);
+        name.setMaxWidth(dp(180));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        chip.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.ImageButton remove = new android.widget.ImageButton(requireContext());
+        remove.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        remove.setBackground(null);
+        remove.setPadding(dp(4), dp(4), dp(4), dp(4));
+        remove.setContentDescription(getString(R.string.conversation_attachment_delete));
+        LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        removeParams.setMarginStart(dp(4));
+        ConversationViewModel.State state = viewModel.state().getValue();
+        remove.setEnabled(state == null || !state.sending);
+        remove.setOnClickListener(ignored -> viewModel.deleteAttachment(attachment.attachmentId));
+        chip.addView(remove, removeParams);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(dp(6));
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
+    /** SAF 回调：打开只读 PFD 交给 Host 摄取（URI 授权不跨 UID 假定，§9.2）。 */
+    private void onAttachmentPicked(android.net.Uri uri) {
+        try {
+            android.os.ParcelFileDescriptor fd =
+                    requireContext().getContentResolver().openFileDescriptor(uri, "r");
+            if (fd == null) {
+                android.widget.Toast.makeText(requireContext(),
+                        R.string.conversation_attachment_error_host,
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String name = queryDisplayName(uri);
+            viewModel.stageAttachment(fd, mimeOf(name), name, noticeText ->
+                    android.widget.Toast.makeText(requireContext(), noticeText,
+                            android.widget.Toast.LENGTH_SHORT).show());
+        } catch (java.io.FileNotFoundException | SecurityException unavailable) {
+            android.widget.Toast.makeText(requireContext(),
+                    R.string.conversation_attachment_error_host,
+                    android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String queryDisplayName(android.net.Uri uri) {
+        try (android.database.Cursor cursor = requireContext().getContentResolver().query(
+                uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(
+                        android.provider.OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) return cursor.getString(index);
+            }
+        } catch (RuntimeException ignored) {
+            // 名字只是展示；查询失败用 URI 尾段兜底。
+        }
+        String path = uri.getLastPathSegment();
+        return path == null ? "附件" : path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    private static String mimeOf(String displayName) {
+        if (displayName == null) return "text/plain";
+        int dot = displayName.lastIndexOf('.');
+        if (dot < 0) return "text/plain";
+        return switch (displayName.substring(dot + 1).toLowerCase(Locale.ROOT)) {
+            case "md", "markdown" -> "text/markdown";
+            case "json" -> "application/json";
+            case "xml" -> "application/xml";
+            case "csv" -> "text/csv";
+            case "html", "htm" -> "text/html";
+            default -> "text/plain";
+        };
+    }
+
+    /** 主动作可见性由草稿内容驱动（Fragment 本地事实），标签由运行态驱动。 */
+    private void renderInputControls() {
+        ConversationViewModel.State state = viewModel.state().getValue();
+        boolean hasSubmittableInput = hasSubmittableInput();
+        boolean editingEnabled = state == null || !state.sending;
+        input.setEnabled(editingEnabled);
+        fullscreenButton.setEnabled(editingEnabled);
+        attachButton.setEnabled(editingEnabled);
+        voiceButton.setEnabled(editingEnabled && state != null && state.conversationId != null);
+        if (hasSubmittableInput) {
+            // 文字/READY 附件出现后，圆形主动作在原位从 PTT 切换为发送；不额外挤出按钮。
+            if (!primaryActionConfigured || !primaryActionIsSend) {
+                voiceButton.setOnTouchListener(null);
+                voiceButton.setOnClickListener(ignored -> submitInput());
+                primaryActionConfigured = true;
+                primaryActionIsSend = true;
+            }
+            voiceButton.setImageResource(R.drawable.ic_send_arrow);
+            voiceButton.setSelected(false);
+            voiceButton.setContentDescription(getString(state != null && state.hasRunningTask
+                    ? R.string.conversation_append : R.string.conversation_send));
+        } else {
+            // 不要在 ACTION_DOWN 触发 publish() 后的重渲染中替换 listener：Android 会把同一
+            // 手势的 ACTION_UP 交给当前 listener，替换会令快速点按留下未结束的 Host 会话。
+            if (!primaryActionConfigured || primaryActionIsSend) {
+                voiceButton.setOnClickListener(null);
+                voiceButton.setOnTouchListener((ignored, event) -> onPttTouch(event));
+                primaryActionConfigured = true;
+                primaryActionIsSend = false;
+            }
+            voiceButton.setImageResource(R.drawable.ic_mic);
+            renderPttVisual();
+        }
+    }
+
+    private boolean hasSubmittableInput() {
+        ConversationViewModel.State state = viewModel.state().getValue();
+        if (!input.getText().toString().strip().isEmpty()) return true;
+        return state != null && state.draftAttachments.stream()
+                .anyMatch(com.matrix.agent.api.conversation.ConversationAttachment::isReady);
+    }
+
+    /** 全屏编辑器仍须明确展示随本轮冻结的受控上下文，避免“看不见的附件”式提交。 */
+    private String fullscreenAttachmentSummary() {
+        ConversationViewModel.State state = viewModel.state().getValue();
+        if (state == null || state.draftAttachments.isEmpty()) return "";
+        StringBuilder summary = new StringBuilder(
+                getString(R.string.conversation_fullscreen_attachment_context));
+        for (com.matrix.agent.api.conversation.ConversationAttachment attachment
+                : state.draftAttachments) {
+            String status = attachment.isReady()
+                    ? getString(R.string.conversation_fullscreen_attachment_ready)
+                    : attachment.isStaging()
+                            ? getString(R.string.conversation_fullscreen_attachment_staging)
+                            : getString(R.string.conversation_fullscreen_attachment_failed);
+            summary.append('\n').append("• ").append(attachment.safeDisplayName)
+                    .append(" · ").append(status);
+        }
+        return summary.toString();
+    }
+
+    private String stageText(@NonNull ConversationRuntimeStage stage) {
+        if (stage.stage == ConversationRuntimeStage.STAGE_QUEUED) {
+            return getString(R.string.conversation_stage_queued);
+        }
+        if (stage.stage == ConversationRuntimeStage.STAGE_PLANNING) {
+            return getString(R.string.conversation_stage_planning);
+        }
+        if (stage.stage == ConversationRuntimeStage.STAGE_EXECUTING) {
+            return stage.safeLabel == null || stage.safeLabel.isEmpty()
+                    ? getString(R.string.conversation_stage_planning)
+                    : getString(R.string.conversation_stage_executing, stage.safeLabel);
+        }
+        return getString(R.string.conversation_stage_planning);
+    }
+
+    /** 阶段条点击 → 定位该任务的用户消息（§6.3；不跳调试面板）。 */
+    private void scrollToStageTask() {
+        ConversationViewModel.State state = viewModel.state().getValue();
+        if (state == null || state.runtimeStage == null) return;
+        String taskId = state.runtimeStage.conversationTaskId;
+        long targetSequence = Long.MIN_VALUE;
+        for (ConversationViewModel.UiMessage message : state.messages) {
+            if (message.role() == ConversationMessage.ROLE_USER
+                    && taskId != null && taskId.equals(message.conversationTaskId())) {
+                targetSequence = message.sequence();
+                break;
+            }
+        }
+        if (targetSequence == Long.MIN_VALUE
+                || !(messageRows.getParent() instanceof android.widget.ScrollView scroll)) {
+            return;
+        }
+        for (int i = 0; i < messageRows.getChildCount(); i++) {
+            View child = messageRows.getChildAt(i);
+            Object tag = child.getTag(R.id.conversation_row_sequence);
+            if (tag instanceof Long sequence && sequence == targetSequence) {
+                scroll.smoothScrollTo(0, Math.max(0, child.getTop() - dp(48)));
+                return;
+            }
+        }
     }
 
     private void renderNotice(ConversationViewModel.State value) {
@@ -482,9 +1037,9 @@ public final class ConversationFragment extends Fragment {
     }
 
     /**
-     * Operit 同构的过程组：一轮 AI 回复把连续的思考、工具请求和工具结果编排成一个
+     * 过程组：一轮 AI 回复把连续的思考、工具请求和工具结果编排成一个
      * 可折叠组；组内“思考”和每个 capability 又各自独立折叠。这里不是 Logcat 的镜像：
-     * 只展示写时已脱敏的事实投影，且只在 debug/internal 构建可达。
+     * 只展示写时已脱敏的事实投影；所有构建变体均由 matrix.debugTraceUi 显式控制。
      */
     private View buildDebugTracePanel(List<DebugTraceWireEvent> rawEvents, int maxBubbleWidth,
             float density) {
@@ -502,7 +1057,7 @@ public final class ConversationFragment extends Fragment {
                 ? getString(R.string.conversation_debug_trace_group_without_reasoning, toolCount)
                 : getString(R.string.conversation_debug_trace_group, thinkingCount, toolCount);
 
-        // 收起态仿照 Operit 的“过程分隔器”：没有背景、没有描边、没有信息图标，只把
+        // 收起态使用轻量过程分隔器：没有背景、没有描边、没有信息图标，只把
         // 标题置于两条细线之间。箭头是唯一的交互暗示，过程不会再误读成助手气泡。
         LinearLayout header = new LinearLayout(requireContext());
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -518,7 +1073,7 @@ public final class ConversationFragment extends Fragment {
         title.setPadding((int) (10 * density + .5f), 0, (int) (5 * density + .5f), 0);
         header.addView(title, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        android.widget.ImageButton affordance = traceDisclosure(false, density);
+        android.widget.ImageButton affordance = traceDisclosure(false, density, groupText);
         LinearLayout.LayoutParams affordanceParams = new LinearLayout.LayoutParams(
                 (int) (22 * density + .5f), (int) (22 * density + .5f));
         affordanceParams.rightMargin = (int) (5 * density + .5f);
@@ -535,7 +1090,7 @@ public final class ConversationFragment extends Fragment {
         detail.setBackground(background);
         int inset = (int) (8 * density + .5f);
         detail.setPadding(inset, inset, inset, inset);
-        // Operit 的静态消息默认收起；进行中的消息才能自动展开。Matrix 只持久化 final，
+        // 静态消息默认收起；进行中的消息才能自动展开。Matrix 只持久化 final，
         // 因而重进会话保持稳定、可预期的收起状态。
         detail.setVisibility(View.GONE);
         for (int i = 0; i < nodes.size(); i++) {
@@ -549,7 +1104,7 @@ public final class ConversationFragment extends Fragment {
         header.setOnClickListener(ignored -> {
             boolean expanding = detail.getVisibility() != View.VISIBLE;
             detail.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            updateTraceDisclosure(affordance, expanding);
+            updateTraceDisclosure(affordance, expanding, groupText);
         });
         return panel;
     }
@@ -561,25 +1116,27 @@ public final class ConversationFragment extends Fragment {
     }
 
     /**
-     * 借鉴 Operit 的无底座 Material 图标造型：Matrix 的收起态向左，展开态向下。
+     * 无底座的 Material 图标：Matrix 的收起态向左，展开态向下。
      * 它没有背景或文字，排布仍由 Matrix 的居中分隔器与节点标题负责。
      */
-    private android.widget.ImageButton traceDisclosure(boolean expanded, float density) {
+    private android.widget.ImageButton traceDisclosure(boolean expanded, float density,
+            String subject) {
         android.widget.ImageButton disclosure = new android.widget.ImageButton(requireContext());
         disclosure.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         disclosure.setPadding((int) (2 * density + .5f), (int) (2 * density + .5f),
                 (int) (2 * density + .5f), (int) (2 * density + .5f));
         disclosure.setBackground(null);
-        updateTraceDisclosure(disclosure, expanded);
+        updateTraceDisclosure(disclosure, expanded, subject);
         return disclosure;
     }
 
-    private void updateTraceDisclosure(android.widget.ImageButton disclosure, boolean expanded) {
+    private void updateTraceDisclosure(android.widget.ImageButton disclosure, boolean expanded,
+            String subject) {
         disclosure.setImageResource(expanded ? R.drawable.ic_trace_disclosure_down
                 : R.drawable.ic_trace_disclosure_right);
-        disclosure.setContentDescription(expanded
-                ? getString(R.string.conversation_debug_trace_expanded)
-                : getString(R.string.conversation_debug_trace_collapsed, 0));
+        disclosure.setContentDescription(subject + "，"
+                + (expanded ? getString(R.string.conversation_debug_trace_collapse_detail)
+                : getString(R.string.conversation_debug_trace_expand_detail)));
     }
 
     private View buildDebugTraceNode(DebugTraceTimeline.Node node, boolean last, int maxWidth,
@@ -623,7 +1180,8 @@ public final class ConversationFragment extends Fragment {
         title.setText(node.title(requireContext()));
         nodeHeader.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        android.widget.ImageButton affordance = traceDisclosure(false, density);
+        String nodeTitle = node.title(requireContext());
+        android.widget.ImageButton affordance = traceDisclosure(false, density, nodeTitle);
         LinearLayout.LayoutParams nodeAffordanceParams = new LinearLayout.LayoutParams(
                 (int) (22 * density + .5f), (int) (22 * density + .5f));
         nodeHeader.addView(affordance, nodeAffordanceParams);
@@ -648,7 +1206,7 @@ public final class ConversationFragment extends Fragment {
         View.OnClickListener toggle = ignored -> {
             boolean expanding = content.getVisibility() != View.VISIBLE;
             content.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            updateTraceDisclosure(affordance, expanding);
+            updateTraceDisclosure(affordance, expanding, nodeTitle);
         };
         nodeHeader.setOnClickListener(toggle);
         affordance.setOnClickListener(toggle);
@@ -721,19 +1279,23 @@ java.util.List<String> options = new java.util.ArrayList<>();
     }
 
     private void quoteReply(ConversationViewModel.UiMessage message) {
-        input.setText("");
+        // 已挂在底栏的 input 不能再作为 AlertDialog 的 child；复用它会触发
+        // “specified child already has a parent” 并让长按引用直接崩溃。
+        android.widget.EditText quoteInput = new android.widget.EditText(requireContext());
+        quoteInput.setHint(R.string.conversation_input_hint);
+        quoteInput.setMinLines(3);
+        quoteInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         new androidx.appcompat.app.AlertDialog.Builder(requireContext())
                 .setTitle(R.string.conversation_quote_prompt)
-                .setView(input)
+                .setView(quoteInput)
                 .setPositiveButton(R.string.conversation_send, (dialog, which) -> {
-                    String text = input.getText().toString();
-                    input.setText("");
+                    String text = quoteInput.getText().toString();
                     if (!text.isBlank()) {
                         viewModel.sendQuoting(message.messageId(), text);
                     }
                 })
-                .setNegativeButton(android.R.string.cancel, (dialog, which) ->
-                        input.setText(""))
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
@@ -796,5 +1358,9 @@ java.util.List<String> options = new java.util.ArrayList<>();
 
     private LauncherActivity activity() {
         return (LauncherActivity) requireActivity();
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + .5f);
     }
 }

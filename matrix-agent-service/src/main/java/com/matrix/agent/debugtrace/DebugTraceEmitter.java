@@ -49,7 +49,7 @@ public final class DebugTraceEmitter {
     }
 
     /**
-     * @param store 仅 debug/internal 装配的 SQLCipher 投影端口；null 保持纯内存测试语义
+     * @param store matrix.debugTraceUi=true 时装配的 SQLCipher 投影端口；null 保持纯内存测试语义
      */
     public DebugTraceEmitter(boolean uiEnabled, DebugTraceStore store) {
         this.uiEnabled = uiEnabled;

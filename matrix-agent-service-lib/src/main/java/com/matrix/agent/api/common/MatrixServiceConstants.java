@@ -25,6 +25,11 @@ public final class MatrixServiceConstants {
     public static final String CONVERSATION_SERVICE = "matrix.service.CONVERSATION";
     /** 调试轨迹发现键 → IDebugTraceService（评估 v1.0 §4.3；BuildConfig 门控，UI 关闭时空壳）。 */
     public static final String DEBUG_TRACE_SERVICE = "matrix.service.DEBUG_TRACE";
+    /**
+     * 受控附件 staging 发现键 → IConversationAttachmentService（输入交互增强 I6，v8）。
+     * 刻意不复用对话域键：附件是窄能力，老 Host 不通告时客户端按位独立降级。
+     */
+    public static final String ATTACHMENT_SERVICE = "matrix.service.ATTACHMENT";
 
     /** Host notification → Launcher download page deep-link contract. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.matrix.agent.action.OPEN_DOWNLOADS";
@@ -41,6 +46,11 @@ public final class MatrixServiceConstants {
      * 对话域是增量能力——客户端按位独立探测，未通告时视为该 Host 版本不支持对话。
      */
     public static final int FEATURE_CONVERSATION_DOMAIN = 1 << 5;
+    /**
+     * 附件 staging 特性位（输入交互增强 I6，v8）：SQLCipher 可用时才通告；
+     * 未通告的 Host 上客户端隐藏 `+` 入口而不是调用后吃异常。
+     */
+    public static final int FEATURE_ATTACHMENT_DOMAIN = 1 << 6;
 
     public static final int ALL_STAGE_B_FEATURES = FEATURE_DURABLE_TASKS
             | FEATURE_MODEL_DOMAIN | FEATURE_DOWNLOAD_DOMAIN | FEATURE_VOICE_DOMAIN

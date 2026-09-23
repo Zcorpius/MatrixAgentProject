@@ -209,6 +209,11 @@ public final class MatrixAgent {
         return (DebugTraceManager) getMatrixManager(MatrixServiceConstants.DEBUG_TRACE_SERVICE);
     }
 
+    /** 受控附件 staging（输入交互增强 I6）；Host 未通告该域时返回 null。 */
+    public AttachmentManager getAttachmentManager() {
+        return (AttachmentManager) getMatrixManager(MatrixServiceConstants.ATTACHMENT_SERVICE);
+    }
+
     /**
      * 按服务名常量取 Manager（扩展入口；常规业务用四个类型安全方法）。
      * Manager 实例跨断线稳定复用：断线后内部 proxy 置失效，重连自动换绑。
@@ -559,6 +564,8 @@ public final class MatrixAgent {
                 return new ConversationManager(this, serviceBinder);
             case MatrixServiceConstants.DEBUG_TRACE_SERVICE:
                 return new DebugTraceManager(this, serviceBinder);
+            case MatrixServiceConstants.ATTACHMENT_SERVICE:
+                return new AttachmentManager(this, serviceBinder);
             default:
                 Log.w(TAG, "unknown matrix service: " + serviceName);
                 return null;

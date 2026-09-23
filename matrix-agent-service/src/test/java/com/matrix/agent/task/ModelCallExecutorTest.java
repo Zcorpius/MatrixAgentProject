@@ -221,7 +221,7 @@ public final class ModelCallExecutorTest {
      * 与本层模型决策超时无关。)
      */
     @Test
-    public void networkExceptionWrappedInIllegalStateMapsToTimeout() {
+    public void networkExceptionWrappedInIllegalStateMapsToNetworkUnavailable() {
         ModelApiException.NetworkException root = new ModelApiException.NetworkException(
                 "https://api.example.com", new java.io.IOException("connection reset"));
         ModelGateway gateway = request -> {
@@ -237,7 +237,8 @@ public final class ModelCallExecutorTest {
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);
 
         assertFalse("网络异常(被包装)后应非 success", result.isSuccess());
-        assertEquals("被包装的网络异常应沿 cause 链识别为 TIMEOUT", StopReason.TIMEOUT,
+        assertEquals("被包装的网络异常应沿 cause 链识别为 NETWORK_UNAVAILABLE",
+                StopReason.NETWORK_UNAVAILABLE,
                 result.getTerminalReason());
     }
 
@@ -258,7 +259,8 @@ public final class ModelCallExecutorTest {
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);
 
         assertFalse(result.isSuccess());
-        assertEquals("直达的网络异常应映射为 TIMEOUT", StopReason.TIMEOUT, result.getTerminalReason());
+        assertEquals("直达的网络异常应映射为 NETWORK_UNAVAILABLE",
+                StopReason.NETWORK_UNAVAILABLE, result.getTerminalReason());
     }
 
     /** 对照:非网络异常(普通 IllegalStateException,cause 链无 Network/Timeout)仍 POLICY_HALT。 */

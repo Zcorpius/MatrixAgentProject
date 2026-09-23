@@ -71,6 +71,12 @@ public final class ConversationMessage implements Parcelable {
     public final int steerDeliveryState;
     /** v5 追加：宿主任务的能力事实轨迹（仅用户消息携带；旧 schema 空数组）。 */
     public final java.util.List<CapabilityTraceEntry> executionTraces;
+    /**
+     * v8 追加（输入交互增强 I6）：随本条用户消息提交的受控附件元数据（chip 回放）；
+     * 正文已由 Host 净化并入模型投影，不随 DTO 携带。旧 schema / 无附件为空列表。
+     * 仅 INPUT_PRIMARY 行可携带；steer 附属输入不挂附件。
+     */
+    public final java.util.List<ConversationAttachment> contextAttachments;
 
     public ConversationMessage(String conversationId, String messageId, long sequenceNo,
             int role, int status, int channel, String text, String languageTag,
@@ -93,6 +99,17 @@ public final class ConversationMessage implements Parcelable {
             String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs,
             int inputKind, String steerHostUserMessageId, int steerDeliveryState,
             java.util.List<CapabilityTraceEntry> executionTraces) {
+        this(schemaVersion, conversationId, messageId, sequenceNo, role, status, channel,
+                text, languageTag, conversationTaskId, failureCode, createdAtMs, updatedAtMs,
+                inputKind, steerHostUserMessageId, steerDeliveryState, executionTraces, null);
+    }
+
+    public ConversationMessage(int schemaVersion, String conversationId, String messageId,
+            long sequenceNo, int role, int status, int channel, String text, String languageTag,
+            String conversationTaskId, int failureCode, long createdAtMs, long updatedAtMs,
+            int inputKind, String steerHostUserMessageId, int steerDeliveryState,
+            java.util.List<CapabilityTraceEntry> executionTraces,
+            java.util.List<ConversationAttachment> contextAttachments) {
         this.schemaVersion = schemaVersion;
         this.conversationId = conversationId;
         this.messageId = messageId;
@@ -113,6 +130,10 @@ public final class ConversationMessage implements Parcelable {
                 ? java.util.Collections.emptyList()
                 : java.util.Collections.unmodifiableList(
                         new java.util.ArrayList<>(executionTraces));
+        this.contextAttachments = contextAttachments == null
+                ? java.util.Collections.emptyList()
+                : java.util.Collections.unmodifiableList(
+                        new java.util.ArrayList<>(contextAttachments));
     }
 
     private ConversationMessage(Parcel in) {
@@ -143,6 +164,14 @@ public final class ConversationMessage implements Parcelable {
             steerDeliveryState = STEER_DELIVERY_PENDING;
             executionTraces = java.util.Collections.emptyList();
         }
+        if (schemaVersion >= 8) {
+            java.util.ArrayList<ConversationAttachment> attachments =
+                    new java.util.ArrayList<>();
+            in.readTypedList(attachments, ConversationAttachment.CREATOR);
+            contextAttachments = java.util.Collections.unmodifiableList(attachments);
+        } else {
+            contextAttachments = java.util.Collections.emptyList();
+        }
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -163,6 +192,7 @@ public final class ConversationMessage implements Parcelable {
         dest.writeString(steerHostUserMessageId);
         dest.writeInt(steerDeliveryState);
         dest.writeTypedList(executionTraces);
+        dest.writeTypedList(contextAttachments);
     }
 
     @Override public int describeContents() { return 0; }

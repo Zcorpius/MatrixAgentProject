@@ -18,10 +18,16 @@ public final class ParcelSchema {
      * (capability execution fact projection, user-message-carried).
      * v6 appends version to ModelDownloadInfo: the offline-voice model version is a
      * Host-owned spec fact, so clients render it instead of duplicating it locally.
-     * Readers must branch on schemaVersion before consuming appended fields;
-     * writers remain append-only.
+     * v7 (输入交互增强 Phase 1): appends outcome to ConversationSubmission
+     * (submitTextOrAppend result), adds ConversationDraft and ConversationRuntimeStage
+     * DTOs plus the draft AIDL trio and the onRuntimeStageChanged callback.
+     * v8 (输入交互增强 Phase 2): adds ConversationAttachment DTO with the narrow
+     * IConversationAttachmentService (PFD staging for text attachments), appends
+     * contextAttachments to ConversationMessage, and registers the attachment
+     * discovery key. Readers must branch on schemaVersion before consuming
+     * appended fields; writers remain append-only.
      */
-    public static final int CURRENT = 6;
+    public static final int CURRENT = 8;
 
     private ParcelSchema() {
     }

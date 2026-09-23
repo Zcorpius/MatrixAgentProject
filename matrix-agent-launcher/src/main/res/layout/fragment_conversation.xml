@@ -114,60 +114,204 @@
         android:layout_height="1dp"
         android:background="#18B9A98E" />
 
+    <!-- 贴底输入面：它是页面的一部分，不作为悬浮卡片呈现。 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="12dp">
+        android:background="@color/matrix_card"
+        android:orientation="vertical"
+        android:padding="0dp">
 
-        <EditText
-            android:id="@+id/conversation_input"
-            android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_conversation_input"
-            android:hint="@string/conversation_input_hint"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:imeOptions="actionSend"
-            android:singleLine="true"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:textColor="@color/matrix_text"
-            android:textColorHint="@color/matrix_muted"
-            android:textSize="14sp"
-            android:contentDescription="@string/conversation_input_hint" />
+        <LinearLayout
+            android:id="@+id/conversation_composer_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chat_composer"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
 
-        <Button
-            android:id="@+id/conversation_send"
-            style="@style/MatrixPrimaryButton"
-            android:layout_width="wrap_content"
-            android:layout_height="46dp"
-            android:layout_marginStart="10dp"
-            android:contentDescription="@string/conversation_send"
-            android:text="@string/conversation_send" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top"
+                android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/conversation_voice"
-            style="@style/MatrixOutlineButton"
-            android:layout_width="wrap_content"
-            android:layout_height="46dp"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/conversation_voice_hold"
-            android:text="@string/conversation_voice_hold" />
+                <EditText
+                    android:id="@+id/conversation_input"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="64dp"
+                    android:maxLines="6"
+                    android:background="@null"
+                    android:gravity="top|start"
+                    android:hint="@string/conversation_input_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:textColor="@color/matrix_text"
+                    android:textColorHint="@color/matrix_muted"
+                    android:textSize="16sp"
+                    android:contentDescription="@string/conversation_input_hint" />
 
-        <Button
-            android:id="@+id/conversation_cancel"
-            style="@style/MatrixOutlineButton"
-            android:layout_width="wrap_content"
-            android:layout_height="46dp"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/conversation_cancel"
-            android:text="@string/conversation_cancel"
-            android:visibility="gone" />
+                <ImageButton
+                    android:id="@+id/conversation_fullscreen"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="2dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/conversation_fullscreen_input"
+                    android:padding="11dp"
+                    android:src="@drawable/ic_fullscreen" />
+            </LinearLayout>
+
+            <!-- 附件 chip 是卡片内的显式上下文，而非浮在输入区外。 -->
+            <HorizontalScrollView
+                android:id="@+id/conversation_attachment_chips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/conversation_attachment_chip_row"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- PTT 状态条（§5.2 可视化）：按下即现——呼吸点 + 阶段标签 + 实时转写；IDLE 隐藏。 -->
+            <LinearLayout
+                android:id="@+id/conversation_ptt_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingBottom="4dp"
+                android:visibility="gone">
+
+                <View
+                    android:id="@+id/conversation_ptt_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_ptt_dot" />
+
+                <TextView
+                    android:id="@+id/conversation_ptt_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="@color/matrix_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/conversation_ptt_transcript"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/matrix_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- 运行事实单独占行；默认隐藏，静态布局保持输入优先。 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/conversation_stage"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/conversation_stage"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/matrix_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/conversation_cancel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:contentDescription="@string/conversation_cancel"
+                    android:gravity="center_vertical"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="@string/conversation_cancel"
+                    android:textColor="@color/matrix_accent"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/conversation_model_capsule"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="@null"
+                    android:ellipsize="end"
+                    android:gravity="center_vertical"
+                    android:maxWidth="152dp"
+                    android:maxLines="1"
+                    android:text="@string/conversation_model_unconfigured"
+                    android:textColor="@color/matrix_primary_dark"
+                    android:textSize="12sp" />
+
+                <ImageButton
+                    android:id="@+id/conversation_model_options"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/conversation_model_settings"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_model_tune" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <ImageButton
+                    android:id="@+id/conversation_attach"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/conversation_attach"
+                    android:padding="11dp"
+                    android:src="@drawable/ic_add_attachment" />
+
+                <ImageButton
+                    android:id="@+id/conversation_voice"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_ptt_hold"
+                    android:contentDescription="@string/conversation_voice_hold"
+                    android:padding="15dp"
+                    android:src="@drawable/ic_mic" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

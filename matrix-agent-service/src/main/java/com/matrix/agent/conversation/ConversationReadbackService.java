@@ -6,13 +6,14 @@ import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.task.TaskState;
 import com.matrix.agent.voice.SpeakableResponse;
 import com.matrix.agent.voice.port.AudioFocusPort;
-import com.matrix.agent.voice.port.TtsPort;
+import com.matrix.agent.voice.port.ManagedTtsPort;
 
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * 助手回复朗读（评估 v1.0 §4.8 / 阶段 2）：从 Store 重读已持久化、经投影允许朗读的
@@ -26,7 +27,7 @@ import java.util.function.BooleanSupplier;
  * <p><b>幂等/迟到防御</b>：utteranceId 单调递增，迟到 onDone/onError 只按当前代次
  * 收敛焦点；终态后清理 current 使后续 stop 成为 no-op。</p>
  */
-public final class ConversationReadbackService {
+public final class ConversationReadbackService implements AutoCloseable {
 
     private static final String TAG = "MatrixAgent";
 
@@ -34,21 +35,39 @@ public final class ConversationReadbackService {
     private static final int READBACK_MAX_CHARS = 2000;
 
     private final ConversationStore store;
-    private final TtsPort tts;
+    private final Supplier<ManagedTtsPort> outputFactory;
     private final AudioFocusPort focus;
     private final BooleanSupplier voiceSessionActive;
+    /** Serializes route replacement with speaking so an old asynchronous callback is harmless. */
+    private final Object outputLock = new Object();
+    private ManagedTtsPort output;
+    private boolean closed;
 
     private final AtomicLong utteranceSequence = new AtomicLong();
     private final AtomicReference<String> currentUtterance = new AtomicReference<>();
 
-    public ConversationReadbackService(ConversationStore store, TtsPort tts,
+    public ConversationReadbackService(ConversationStore store,
+            Supplier<ManagedTtsPort> outputFactory,
             AudioFocusPort focus, BooleanSupplier voiceSessionActive) {
         this.store = Objects.requireNonNull(store, "store");
-        this.tts = Objects.requireNonNull(tts, "tts");
+        this.outputFactory = Objects.requireNonNull(outputFactory, "outputFactory");
         this.focus = Objects.requireNonNull(focus, "focus");
         this.voiceSessionActive = Objects.requireNonNull(voiceSessionActive,
                 "voiceSessionActive");
-        this.tts.setListener(new TtsPort.Listener() {
+        synchronized (outputLock) {
+            output = createOutput();
+        }
+        this.focus.setListener(() -> {
+            // 焦点丢失（来电/导航/语音会话抢焦点）——立即停读并收敛。
+            // 此处不可 release：焦点已经被系统收回。
+            stopOutputOnly();
+            currentUtterance.set(null);
+        });
+    }
+
+    private ManagedTtsPort createOutput() {
+        ManagedTtsPort next = Objects.requireNonNull(outputFactory.get(), "outputFactory result");
+        next.setListener(new com.matrix.agent.voice.port.TtsPort.Listener() {
             @Override public void onDone(String utteranceId) {
                 finishIfCurrent(utteranceId);
             }
@@ -59,11 +78,7 @@ public final class ConversationReadbackService {
                 finishIfCurrent(utteranceId);
             }
         });
-        this.focus.setListener(() -> {
-            // 焦点丢失（来电/导航/语音会话抢焦点）——立即停读并收敛
-            tts.stop();
-            currentUtterance.set(null);
-        });
+        return next;
     }
 
     /** 稳定错误码（stub 映射 MatrixErrorCode）。 */
@@ -76,12 +91,17 @@ public final class ConversationReadbackService {
      * NOT_READABLE=非助手行或非 COMPLETED 终态；VOICE_ACTIVE=活跃语音会话（禁用）。
      */
     public String speak(String conversationId, String assistantMessageId, String ownerUserId) {
+        synchronized (outputLock) {
+            if (closed) return ERR_VOICE_ACTIVE;
+        }
         if (voiceSessionActive.getAsBoolean()) {
             return ERR_VOICE_ACTIVE;
         }
         ConversationStore.MessageRow message = store.findMessage(assistantMessageId);
-        if (message == null || !message.conversationId().equals(conversationId)
-                || !store.findConversation(conversationId).ownerUserId().equals(ownerUserId)) {
+        ConversationStore.ConversationRow conversation = store.findConversation(conversationId);
+        if (message == null || conversation == null
+                || !message.conversationId().equals(conversationId)
+                || !conversation.ownerUserId().equals(ownerUserId)) {
             return ERR_NOT_FOUND; // 统一不可定位，不泄漏存在性
         }
         if (message.roleWire() != ConversationMessage.ROLE_ASSISTANT
@@ -100,10 +120,17 @@ public final class ConversationReadbackService {
         currentUtterance.set(utteranceId);
         String text = message.text().length() > READBACK_MAX_CHARS
                 ? message.text().substring(0, READBACK_MAX_CHARS) : message.text();
-        tts.speak(new SpeakableResponse(text,
-                message.languageTag() == null ? Locale.getDefault().toLanguageTag()
-                        : message.languageTag(),
-                TaskState.SUCCEEDED), utteranceId);
+        synchronized (outputLock) {
+            if (closed || output == null) {
+                currentUtterance.compareAndSet(utteranceId, null);
+                focus.release();
+                return ERR_VOICE_ACTIVE;
+            }
+            output.speak(new SpeakableResponse(text,
+                    message.languageTag() == null ? Locale.getDefault().toLanguageTag()
+                            : message.languageTag(),
+                    TaskState.SUCCEEDED), utteranceId);
+        }
         Log.i(TAG, "[Readback] 开始朗读 msg=" + assistantMessageId
                 + " utterance=" + utteranceId + " chars=" + text.length());
         return null;
@@ -111,8 +138,51 @@ public final class ConversationReadbackService {
 
     /** 停止当前朗读并释放焦点（幂等）。 */
     public void stop() {
-        tts.stop();
+        stopOutputOnly();
         finishIfCurrent(currentUtterance.get());
+    }
+
+    /** Re-resolve credentials only at an idle boundary chosen by the Voice service. */
+    public void refreshOutputRoute() {
+        String interrupted;
+        ManagedTtsPort previous;
+        synchronized (outputLock) {
+            if (closed) return;
+            interrupted = currentUtterance.getAndSet(null);
+            previous = output;
+            output = createOutput();
+        }
+        // A configured-route change is explicit user intent; do not continue a response through
+        // a now-obsolete engine.  Shutdown occurs after swap so late callbacks cannot touch a
+        // future utterance (IDs are monotonic).
+        try {
+            previous.stop();
+            previous.shutdown();
+        } finally {
+            if (interrupted != null) focus.release();
+        }
+    }
+
+    @Override public void close() {
+        ManagedTtsPort previous;
+        synchronized (outputLock) {
+            if (closed) return;
+            closed = true;
+            previous = output;
+            output = null;
+            currentUtterance.set(null);
+        }
+        if (previous != null) {
+            previous.stop();
+            previous.shutdown();
+        }
+        focus.release();
+    }
+
+    private void stopOutputOnly() {
+        synchronized (outputLock) {
+            if (output != null) output.stop();
+        }
     }
 
     private void finishIfCurrent(String utteranceId) {

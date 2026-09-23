@@ -29,8 +29,13 @@ import okhttp3.Response;
 
 /**
  * Sherpa 模型下载器——复用 ModelDownloadEntity/DAO 记录进度，
- * 下载→SHA-256→解压（tar.bz2/zip/RAW）→版本目录→原子 promote，
+ * 归档获取→SHA-256→解压（tar.bz2/zip/RAW）→版本目录→原子 promote，
  * 与 VoskModelDownloader 同管道、同状态语义。
+ *
+ * <p>归档获取优先使用 ROM 预埋源（{@link #systemPresetRoot()}，vendor 侧
+ * PRODUCT_COPY_FILES 预置原始归档）：预埋文件须经 {@link SherpaModelSpec} 钉死的
+ * 字节数 + SHA-256 准入才被采纳，之后的解压/校验/promote 与网络归档完全同管道；
+ * 无预埋或预埋损坏时落回网络下载（/system 只读，损坏预埋不删不阻断）。</p>
  *
  * <p>与 Vosk 的差异：上游发布为 tar.bz2（commons-compress 解压）或单文件（RAW 直落）；
  * 大包含多精度变体，解压按 {@link SherpaModelSpec#requiredFiles} 白名单只落盘
@@ -44,12 +49,27 @@ public final class SherpaModelDownloader {
     private final ModelDownloadDao dao;
     private final Context appContext;
     private final OkHttpClient httpClient;
+    /** ROM 预埋归档根；null = 该安装无预埋能力。 */
+    private final File presetRoot;
 
     public SherpaModelDownloader(Context context, ModelDownloadDao dao,
-            OkHttpClient httpClient) {
+            OkHttpClient httpClient, File presetRoot) {
         this.appContext = context.getApplicationContext();
         this.dao = dao;
         this.httpClient = httpClient;
+        this.presetRoot = presetRoot;
+    }
+
+    /** ROM 预埋归档根（{@code /system/etc/matrix/sherpa}），vendor 构建期预置。 */
+    public static File systemPresetRoot() {
+        return new File(android.os.Environment.getRootDirectory(), "etc/matrix/sherpa");
+    }
+
+    /** 是否存在系统预埋（目录非空即视为预埋了至少一个归档）。 */
+    public boolean hasPresetArchive() {
+        if (presetRoot == null || !presetRoot.isDirectory()) return false;
+        File[] files = presetRoot.listFiles();
+        return files != null && files.length > 0;
     }
 
     /** active 版本目录存在且 marker 就绪。 */
@@ -98,7 +118,7 @@ public final class SherpaModelDownloader {
         }
     }
 
-    /** 下载并安装。 */
+    /** 下载并安装（预埋归档可用时跳过网络，其余管道不变）。 */
     public void download(SherpaModelSpec spec, BooleanSupplier cancelled) throws IOException {
         File parent = spec.targetDir.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
@@ -110,11 +130,19 @@ public final class SherpaModelDownloader {
 
         try {
             setStatus(spec, "DOWNLOADING", 0, 0);
-            downloadArchive(spec, tmpArchive, cancelled);
-            if (cancelled.getAsBoolean()) throw new IOException("CANCELLED");
+            ArchiveSource source = resolveArchiveSource(spec, presetRoot, tmpArchive);
+            if (source.fromPreset()) {
+                // 预埋归档已在准入判定中通过钉死的长度+SHA-256，不重复整档哈希
+                Log.i(TAG, "[SherpaDL] 使用系统预埋归档 model=" + spec.name
+                        + " path=" + source.archive().getPath());
+                setStatus(spec, "DOWNLOADING", spec.sizeBytes, 0);
+            } else {
+                downloadArchive(spec, tmpArchive, cancelled);
+                if (cancelled.getAsBoolean()) throw new IOException("CANCELLED");
 
-            setStatus(spec, "DOWNLOADING", tmpArchive.length(), 0);
-            verifySha256(tmpArchive, spec.sha256, spec.name);
+                setStatus(spec, "DOWNLOADING", tmpArchive.length(), 0);
+                verifySha256(tmpArchive, spec.sha256, spec.name);
+            }
             if (cancelled.getAsBoolean()) throw new IOException("CANCELLED");
 
             File versionDir = new File(new File(spec.targetDir, "versions"), spec.version);
@@ -124,13 +152,13 @@ public final class SherpaModelDownloader {
             }
             switch (spec.format) {
                 case RAW:
-                    installRaw(tmpArchive, versionDir, spec);
+                    installRaw(source.archive(), versionDir, spec);
                     break;
                 case TAR_BZ2:
-                    untarBz2Flatten(tmpArchive, versionDir, spec, cancelled);
+                    untarBz2Flatten(source.archive(), versionDir, spec, cancelled);
                     break;
                 case ZIP:
-                    unzipFlatten(tmpArchive, versionDir, spec, cancelled);
+                    unzipFlatten(source.archive(), versionDir, spec, cancelled);
                     break;
                 default:
                     throw new IOException("UNSUPPORTED_FORMAT: " + spec.format);
@@ -148,12 +176,12 @@ public final class SherpaModelDownloader {
             }
 
             com.matrix.agent.voice.ModelPathResolver.promote(spec.targetDir, spec.version);
-            tmpArchive.delete();
+            if (!source.fromPreset()) tmpArchive.delete();
 
             long size = dirSize(versionDir);
             setStatus(spec, "COMPLETED", size, size);
             Log.i(TAG, "[SherpaDL] 模型就绪: " + spec.name + " v" + spec.version
-                    + " size=" + size);
+                    + " size=" + size + (source.fromPreset() ? " (preset)" : ""));
         } catch (IOException e) {
             boolean cancelledNow = cancelled.getAsBoolean()
                     || "CANCELLED".equals(e.getMessage());
@@ -207,6 +235,17 @@ public final class SherpaModelDownloader {
 
     static boolean isCompleteVerifiedArchive(SherpaModelSpec spec, File archive)
             throws IOException {
+        return isCompleteVerifiedArchive(spec, archive, true);
+    }
+
+    /**
+     * 完整归档准入：字节数与钉死 SHA-256 全部符合才可用。
+     *
+     * @param deleteInvalid true（网络 tmp 路径）校验失败即删除，杜绝断点续传误 416；
+     *                      false（只读预埋路径）保留文件，仅判定为不可用
+     */
+    static boolean isCompleteVerifiedArchive(SherpaModelSpec spec, File archive,
+            boolean deleteInvalid) throws IOException {
         if (!archive.isFile() || spec.sizeBytes <= 0 || archive.length() != spec.sizeBytes) {
             return false;
         }
@@ -214,11 +253,39 @@ public final class SherpaModelDownloader {
             verifySha256(archive, spec.sha256, spec.name);
             return true;
         } catch (IOException invalid) {
-            if (!archive.delete()) {
+            if (deleteInvalid && !archive.delete()) {
                 throw new IOException("TMP_DELETE_FAILED: " + spec.name, invalid);
             }
             return false;
         }
+    }
+
+    /** download() 的归档输入：预埋归档或网络 tmp，二者经同一后续管道。 */
+    record ArchiveSource(File archive, boolean fromPreset) { }
+
+    /** ROM 预埋归档命名约定：{@code <spec.name>.<tar.bz2|zip|onnx>}（vendor 侧同步遵守）。 */
+    static String presetFileName(SherpaModelSpec spec) {
+        String suffix = switch (spec.format) {
+            case TAR_BZ2 -> "tar.bz2";
+            case ZIP -> "zip";
+            case RAW -> "onnx";
+        };
+        return spec.name + "." + suffix;
+    }
+
+    /**
+     * 归档源决策（纯函数、无删除副作用）：预埋归档通过钉死准入 → 采纳预埋；
+     * 无预埋根 / 文件缺失 / 准入失败 → 网络路径。损坏预埋不删除、不阻断安装。
+     */
+    static ArchiveSource resolveArchiveSource(SherpaModelSpec spec, File presetRoot,
+            File tmpArchive) throws IOException {
+        if (presetRoot != null) {
+            File preset = new File(presetRoot, presetFileName(spec));
+            if (isCompleteVerifiedArchive(spec, preset, false)) {
+                return new ArchiveSource(preset, true);
+            }
+        }
+        return new ArchiveSource(tmpArchive, false);
     }
 
     private void downloadArchiveFrom(SherpaModelSpec spec, String url, File tmpFile,

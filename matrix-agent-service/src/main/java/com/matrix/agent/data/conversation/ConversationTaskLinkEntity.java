@@ -64,4 +64,29 @@ public final class ConversationTaskLinkEntity {
     /** 轨迹投影版本（脱敏器版本）；null = 无轨迹。 */
     @ColumnInfo(name = "trace_projection_version")
     public Integer traceProjectionVersion;
+
+    // ---- ModelExecutionSnapshot（输入交互增强 I5 §8.2，v12 追加列）----
+    // 提交受理时写入的受限模型快照：此后当前模型无论如何切换，本任务“用的是哪个
+    // 配置代际”不可变。全部为非秘密字段（无 API key / 完整 endpoint）；null = 旧数据
+    // 或快照供应方未装配（读侧规约为“未知”，不倒填）。
+
+    /** provider ID（如 glm / anthropic / on_device）。 */
+    @ColumnInfo(name = "model_provider_id")
+    public String modelProviderId;
+
+    /** 模型 ID（端侧为模型目录名）。 */
+    @ColumnInfo(name = "model_id")
+    public String modelId;
+
+    /** ModelRuntimeStatus.BACKEND_* 投影（云端 / 端侧 / 无）。 */
+    @ColumnInfo(name = "model_backend")
+    public Integer modelBackend;
+
+    /** SecureModelConfigStore 的单调配置代际。 */
+    @ColumnInfo(name = "config_generation")
+    public Integer configGeneration;
+
+    /** 非秘密字段的 SHA-256 指纹（provider|model|protocol|端点类别|generation）。 */
+    @ColumnInfo(name = "config_fingerprint")
+    public String configFingerprint;
 }

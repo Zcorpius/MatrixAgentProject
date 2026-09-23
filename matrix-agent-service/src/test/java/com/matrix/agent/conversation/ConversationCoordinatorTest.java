@@ -683,11 +683,17 @@ public final class ConversationCoordinatorTest {
         // 跨会话引用拒绝
         String otherConv = UUID.randomUUID().toString();
         store.seedConversation(otherConv, OWNER);
+        int messageCountBeforeRejectedQuote = store.messages.size();
+        int linkCountBeforeRejectedQuote = store.links.size();
         org.junit.Assert.assertThrows("跨会话引用必须拒绝", IllegalArgumentException.class,
                 () -> coordinator.submitText(new ConversationCoordinator.TextCommand(
                         otherConv, "引用别会话", "zh-CN", UUID.randomUUID().toString(),
                         Actor.DRIVER, ConversationIds.agentSessionId(otherConv,
                                 "DRIVER", "DRIVER"), "demo-vehicle", null, null, quotedId)));
+        assertEquals("被拒绝引用不得留下 ACCEPTED 幽灵消息", messageCountBeforeRejectedQuote,
+                store.messages.size());
+        assertEquals("被拒绝引用不得留下不可执行 task link", linkCountBeforeRejectedQuote,
+                store.links.size());
     }
 
     /** 分支：切点必须是已完成消息；子会话历史 = 冻结快照 + 子自身回合。 */

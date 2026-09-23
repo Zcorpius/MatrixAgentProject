@@ -60,6 +60,9 @@ final class ConversationGraph {
     private final ConversationServiceStub service;
     private final ConversationServiceGate gate;
     private final AtomicBoolean recoveryAttempted = new AtomicBoolean(false);
+    /** 附件域（I6）：staging store + 附件 Binder Stub（database=null 时为 null）。 */
+    private final com.matrix.agent.attachment.RoomAttachmentStagingStore attachmentStore;
+    private final com.matrix.agent.host.rpc.ConversationAttachmentServiceStub attachmentService;
 
     ConversationGraph(@Nullable android.content.Context appContext,
             @Nullable MatrixDatabase database,
@@ -71,7 +74,13 @@ final class ConversationGraph {
             PersistenceGate persistence,
             ModelServiceStub.CallerResolver callers,
             LlmClient titleModelClient,
-            Supplier<ModelConfig> titleConfigSupplier) {
+            Supplier<ModelConfig> titleConfigSupplier,
+            com.matrix.agent.conversation.ConversationRuntimeStageRegistry progressRegistry,
+            com.matrix.agent.conversation.ConversationTaskProgressBridge progressBridge,
+            okhttp3.OkHttpClient voiceCloudClient,
+            ExecutorService voiceOutputExecutor,
+            com.matrix.agent.model.SecureModelConfigStore modelConfigStore,
+            ExecutorService attachmentIoExecutor) {
         if (database == null) {
             // 降级模式：不装配任何组件，gate 永不 open，featureFlags 不通告该位。
             this.coordinator = null;
@@ -82,10 +91,27 @@ final class ConversationGraph {
             this.readback = null;
             this.summaryMarker = null;
             this.gate = new ConversationServiceGate();
+            this.attachmentStore = null;
+            this.attachmentService = null;
             return;
         }
         this.gate = new ConversationServiceGate();
-        ConversationStore store = new RoomConversationStore(database, database::runInTransaction);
+        // 草稿两表（I4）：提交受理事务经 DraftConsumer 同事务消费当前草稿。
+        com.matrix.agent.conversation.persistence.RoomConversationDraftStore draftStore =
+                new com.matrix.agent.conversation.persistence.RoomConversationDraftStore(
+                        database.conversationDraftDao(), database::runInTransaction);
+        // 附件域（I6 §9.2）：正文与元数据全驻 SQLCipher；Coordinator 端口负责提交验证
+        // 与受限文本投影（ModelSanitizer 同配置），冻结在受理事务内由 store 完成。
+        this.attachmentStore = new com.matrix.agent.attachment.RoomAttachmentStagingStore(
+                database.conversationAttachmentDao(), database::runInTransaction);
+        ConversationStore store = new RoomConversationStore(database, database::runInTransaction,
+                draftStore::consumeSubmittedInCallerTransaction,
+                database.conversationAttachmentDao(),
+                // ModelExecutionSnapshot（I5 §8.2）：受理事务内取当前配置投影。
+                () -> com.matrix.agent.model.ModelExecutionSnapshot.of(
+                        modelConfigStore.load(),
+                        modelConfigStore.configurationGeneration(),
+                        modelConfigStore.configFingerprint()));
         KeyedSerialDispatcher dispatcher = new KeyedSerialDispatcher("matrix-conversation",
                 conversationLane, DISPATCHER_MAX_PENDING);
         this.coordinator = new ConversationCoordinator(store, submitter, runtime::executePrepared,
@@ -93,6 +119,15 @@ final class ConversationGraph {
                 conversationId -> ConversationIds.agentSessionId(conversationId,
                         "DRIVER", "DRIVER"),
                 runtime::offerSteer);
+        this.coordinator.setAttachmentPort(new com.matrix.agent.attachment
+                .ConversationAttachmentPort(database.conversationAttachmentDao(),
+                new com.matrix.agent.attachment.AttachmentContextProjector(
+                        sharedBudget.getMaxMessageChars())));
+        this.attachmentService = new com.matrix.agent.host.rpc
+                .ConversationAttachmentServiceStub(attachmentStore, store, persistence,
+                callers, attachmentIoExecutor);
+        // 运行阶段追踪（I3）：bind 映射 + QUEUED/清理生命周期挂在协调器上。
+        this.coordinator.setProgressTracking(progressRegistry, progressBridge);
         // 自动标题（评估 v1.0 §4.1）：功能型轻量调用——同一 LlmClient + 配置 supplier，
         // 单线程低优先级，比较交换写入；协调器与恢复对账两路终态都汇入同一服务。
         ConversationTitleService titleService = new ConversationTitleService(store,
@@ -101,9 +136,23 @@ final class ConversationGraph {
         this.recoveryTitleSink = titleService::onTerminalRound;
         this.bindingStore = new ConversationVoiceBindingStore();
         runtime.addConversationClearHook(bindingStore::clearAll);
+        // clearUserData 覆盖（I4/I3）：草稿与 tombstone、内存运行阶段随清数据一并回收。
+        runtime.addConversationClearHook(() -> draftStore.clearForUsers(
+                java.util.Arrays.asList(com.matrix.agent.identity.ActorUsers.USER_DRIVER,
+                        com.matrix.agent.identity.ActorUsers.USER_PASSENGER)));
+        runtime.addConversationClearHook(progressRegistry::clearAll);
+        // 附件（I6）：clearUserData 级联删除附件正文与元数据（owner 维度）。
+        runtime.addConversationClearHook(() -> attachmentStore.clearForUsers(
+                java.util.Arrays.asList(com.matrix.agent.identity.ActorUsers.USER_DRIVER,
+                        com.matrix.agent.identity.ActorUsers.USER_PASSENGER)));
+        com.matrix.agent.voice.tencent.TencentCloudTtsRouteFactory readbackOutputRoute =
+                new com.matrix.agent.voice.tencent.TencentCloudTtsRouteFactory(
+                        (android.app.Application) appContext.getApplicationContext(), voiceCloudClient);
         this.readback = new ConversationReadbackService(store,
-                new com.matrix.agent.voice.platform.AndroidTtsAdapter(
-                        (android.app.Application) appContext.getApplicationContext()),
+                () -> readbackOutputRoute.create(
+                        () -> new com.matrix.agent.voice.platform.AndroidTtsAdapter(
+                                (android.app.Application) appContext.getApplicationContext()),
+                        voiceOutputExecutor),
                 new com.matrix.agent.voice.platform.AndroidAudioFocusAdapter(
                         appContext.getApplicationContext()),
                 () -> {
@@ -116,23 +165,34 @@ final class ConversationGraph {
                 new com.matrix.agent.conversation.ConversationHistoryAdapter(store),
                 sharedBudget);
         this.service = new ConversationServiceStub(coordinator, gate, persistence, callers,
-                bindingStore, readback, summaryMarker);
+                bindingStore, readback, summaryMarker, draftStore, progressRegistry,
+                attachmentStore);
         // 标题落库属于独立的低优先级功能调用；通过既有会话订阅只推展示元数据，
         // 让当前页面无需重进或轮询就能从默认标题切到 AUTO 标题。
         titleService.setTitleChangedSink(service::onConversationInfoChanged);
         // 阶段 C：创建对话桥；配置器由 MatrixServiceGraph 注册到 VoiceRuntime，保证当前
         // 与未来（引擎切换后重建）的 Controller 都会接到同一套治理。
         this.voiceBridge = createVoiceBridge();
-        recoverOffMainThread(databaseExecutor, store);
+        recoverOffMainThread(databaseExecutor, store, draftStore, attachmentStore);
     }
 
     boolean isAvailable() {
         return coordinator != null;
     }
 
+    /** 附件域 Binder（database=null 时为 null，ServiceGraph 不通告特性位）。 */
+    android.os.IBinder attachmentBinder() {
+        return attachmentService == null ? null : attachmentService.asBinder();
+    }
+
     ConversationVoiceBindingStore bindingStore() { return bindingStore; }
 
     VoiceConversationBridge voiceBridge() { return voiceBridge; }
+
+    /** Voice configuration changed while no session is active: the next readback uses its route. */
+    void refreshReadbackOutputRoute() {
+        if (readback != null) readback.refreshOutputRoute();
+    }
 
     /**
      * 创建对话桥——提交侧走 Coordinator.submitText，
@@ -197,13 +257,18 @@ final class ConversationGraph {
     }
 
     void shutdown() {
+        if (readback != null) {
+            readback.close();
+        }
         if (service != null) {
             service.shutdown();
         }
     }
 
     private void recoverOffMainThread(ExecutorService databaseExecutor,
-            ConversationStore store) {
+            ConversationStore store,
+            com.matrix.agent.conversation.persistence.RoomConversationDraftStore draftStore,
+            com.matrix.agent.attachment.RoomAttachmentStagingStore attachmentStore) {
         try {
             databaseExecutor.execute(() -> {
                 if (!recoveryAttempted.compareAndSet(false, true)) {
@@ -218,6 +283,19 @@ final class ConversationGraph {
                     // 对账失败保持关门——宁可拒绝服务，不冒“半套对话状态 +
                     // 幂等账本缺口”的风险；重启 Host 后重试。
                     Log.e(TAG, "[ConversationGraph] 恢复对账失败，对话域保持关闭", failure);
+                }
+                // tombstone 清理（I4 §7.2）：恢复完成后 best-effort 执行一次；
+                // 失败只影响存储上界，不影响任何功能路径。
+                try {
+                    draftStore.cleanupTombstones(System.currentTimeMillis());
+                } catch (RuntimeException cleanupFailure) {
+                    Log.w(TAG, "[ConversationGraph] tombstone 清理失败", cleanupFailure);
+                }
+                // 草稿附件 GC（I6 §9.2）：超期未提交即回收，best-effort。
+                try {
+                    attachmentStore.cleanupExpiredDrafts(System.currentTimeMillis());
+                } catch (RuntimeException cleanupFailure) {
+                    Log.w(TAG, "[ConversationGraph] 附件 GC 失败", cleanupFailure);
                 }
             });
         } catch (RejectedExecutionException unavailable) {
