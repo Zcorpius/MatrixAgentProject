@@ -63,7 +63,7 @@ public final class RoomMemoryStoreInstrumentedTest {
         MemoryRecordDao dao = db.memoryRecordDao();
         MemoryStore store = new RoomMemoryStore(dao, db::runInTransaction);
 
-        store.putPreference("demo-driver", "user.preference.temperature", "24");
+        seed(store, "demo-driver", "user.preference.temperature", "24");
 
         assertEquals("24", store.getPreference("demo-driver", "user.preference.temperature"));
         assertNull(store.getPreference("demo-driver", "missing"));
@@ -99,8 +99,8 @@ public final class RoomMemoryStoreInstrumentedTest {
         MemoryRecordDao dao = db.memoryRecordDao();
         RoomMemoryStore store = new RoomMemoryStore(dao, db::runInTransaction);
 
-        store.putPreference("demo-driver", "k1", "v1");
-        store.putPreference("demo-passenger", "k2", "v2");
+        seed(store, "demo-driver", "k1", "v1");
+        seed(store, "demo-passenger", "k2", "v2");
         assertEquals(0L, store.currentEpoch());
 
         long newEpoch = store.clearUserDataAndBump("demo-driver", "demo-passenger");
@@ -122,12 +122,20 @@ public final class RoomMemoryStoreInstrumentedTest {
         MemoryRecordDao dao = db.memoryRecordDao();
         RoomMemoryStore store = new RoomMemoryStore(dao, db::runInTransaction);
 
-        store.putPreference("demo-driver", "key-a", "value-a");
+        seed(store, "demo-driver", "key_a", "value-a");
         store.bumpEpoch();  // 写 epoch 行
-        store.putPreference("demo-driver", "key-b", "value-b");
+        seed(store, "demo-driver", "key_b", "value-b");
 
         Map<String, String> all = store.getAllPreferences("demo-driver");
         assertEquals(2, all.size());
         assertFalse("epoch 行不能暴露给 caller", all.containsKey("__epoch__"));
     }
+    private static void seed(MemoryStore store, String userId, String key, String value) {
+        assertTrue(store.putPreferenceChecked(userId, key, value, store.currentEpoch()));
+    }
+
+    private static void seed(MemoryStore store, MemoryScope scope, String key, String value) {
+        assertTrue(store.putPreferenceChecked(scope, key, value, store.currentEpoch()));
+    }
+
 }

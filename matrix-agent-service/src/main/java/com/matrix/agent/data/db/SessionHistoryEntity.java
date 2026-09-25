@@ -9,7 +9,7 @@ import androidx.annotation.NonNull;
  *
  * <p>{@code RoomMemoryWriter} 仅在可持久化的任务终态写入脱敏的
  * {@code EpisodicSummary}；{@code EpisodicMemorySourceImpl} 按 user/zone 召回。
- * 它不保存原始用户文本、工具参数或工具结果。
+ * 它不保存原始用户文本或完整轨迹；v2 可保存经过白名单验证的少量能力回读事实。
  */
 @Entity(tableName = "session_history",
         primaryKeys = {"userId", "zone", "sessionId", "startedAtMillis"})

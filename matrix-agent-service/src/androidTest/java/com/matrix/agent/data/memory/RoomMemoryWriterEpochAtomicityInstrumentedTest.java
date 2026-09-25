@@ -89,7 +89,8 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
 
     private static AgentOutcome makeSucceededOutcome(AgentRequest request) {
         return new AgentOutcome(request.getRequestId(),
-                TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 100L);
+                TaskState.SUCCEEDED, StopReason.DONE,
+                new Trajectory(System.currentTimeMillis()), 100L);
     }
 
     /**
@@ -112,28 +113,24 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
 
         // 验证:Episodic 表无 A 的旧数据(写入被事务内 stale check 拒绝)
         List<SessionHistoryEntity> episodicRows = sessionDao.queryByUserZone(
-                "demo-driver", "DRIVER", 10);
+                "demo-driver", "driver", 10);
         assertTrue("stale episodic 写入必须被拒(session_history 应为空)",
                 episodicRows.isEmpty());
 
         // 验证:Semantic 同样拒绝(另一条调用路径)
-        boolean semanticAccepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "fact.home_city", "北京",
-                1.0, "session-A", 0L);
+        boolean semanticAccepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "session-A", 0L), "fact.home_city", "北京", 1.0);
         assertFalse("stale semantic 写入必须被事务内 reject", semanticAccepted);
         assertNull("memory_record 表无 A 的语义行",
-                memoryDao.queryByKey("demo-driver", "DRIVER", "semantic", "fact.home_city"));
+                memoryDao.queryByKey("demo-driver", "driver", "semantic", "fact.home_city"));
 
         // 验证:新 epoch 的写入仍成功(系统未死锁,clearUserData 不影响后续合法写入)
         AgentRequest requestB = makeRequest("记住公司在新地址", "session-B", 1L);
         new EpisodicMemorySink(writer).writeEpisodicOnTerminal(requestB,
                 makeSucceededOutcome(requestB), 1L);
         assertEquals("新 epoch 写入成功",
-                1, sessionDao.queryByUserZone("demo-driver", "DRIVER", 10).size());
+                1, sessionDao.queryByUserZone("demo-driver", "driver", 10).size());
 
-        boolean semanticB = writer.writeSemantic(
-                "demo-driver", "DRIVER", "work.office_city", "上海",
-                1.0, "session-B", 1L);
+        boolean semanticB = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "session-B", 1L), "work.office_city", "上海", 1.0);
         assertTrue("新 epoch semantic 写入成功", semanticB);
     }
 
@@ -147,12 +144,10 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
     @Test
     public void priorWriteClearedByClearUserDataOnRealRoom() {
         // 初始 epoch=0,A 用 requestEpoch=0 合法写入语义记忆。
-        boolean semanticA = writer.writeSemantic(
-                "demo-driver", "DRIVER", "fact.home_city", "北京",
-                1.0, "session-A", 0L);
+        boolean semanticA = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "session-A", 0L), "fact.home_city", "北京", 1.0);
         assertTrue("A 的 semantic 行已写入", semanticA);
         assertNotNull("memory_record 表有 A 的语义行",
-                memoryDao.queryByKey("demo-driver", "DRIVER", "semantic", "fact.home_city"));
+                memoryDao.queryByKey("demo-driver", "driver", "semantic", "fact.home_city"));
 
         // 触发 clearUserDataAndBump——必须清空 MemoryStore 所拥有的表 + bump epoch。
         long newEpoch = store.clearUserDataAndBump("demo-driver", "demo-passenger");
@@ -161,7 +156,7 @@ public final class RoomMemoryWriterEpochAtomicityInstrumentedTest {
         // 验证:RoomMemoryStore 只拥有 memory_record；session_history / trajectory /
         // audit_event 的跨表清理由 UserDataResetCoordinator 委托 AuditRepository 完成。
         assertNull("clearUserData 后 semantic 表无 A 的行",
-                memoryDao.queryByKey("demo-driver", "DRIVER", "semantic", "fact.home_city"));
+                memoryDao.queryByKey("demo-driver", "driver", "semantic", "fact.home_city"));
 
         // 验证:epoch 行保留(在 __system__ 下,不被 deleteByUser 触及)
         MemoryRecordEntity epochRow = memoryDao.queryByKey(

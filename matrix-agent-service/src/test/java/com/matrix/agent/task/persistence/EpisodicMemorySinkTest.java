@@ -27,6 +27,7 @@ public final class EpisodicMemorySinkTest {
         AgentRequest request = AgentRequest.builder("我的地址是示例路 1 号", Actor.DRIVER)
                 .sessionId("session-1")
                 .occupantZone(VehicleZone.DRIVER)
+                .epoch(7L)
                 .build();
         Trajectory trajectory = new Trajectory(1000L);
         trajectory.finish(StopReason.DONE, 200L, 0);
@@ -39,7 +40,7 @@ public final class EpisodicMemorySinkTest {
         assertNotNull(write);
         assertEquals(request.getRequestId(), write.requestId);
         assertEquals("demo-driver", write.userId);
-        assertEquals("DRIVER", write.zone);
+        assertEquals("driver", write.zone);
         assertEquals("session-1", write.sessionId);
         assertEquals(1000L, write.startedAtMillis);
         assertEquals("SUCCEEDED", write.finalState);
@@ -68,18 +69,23 @@ public final class EpisodicMemorySinkTest {
         private EpisodicWrite write;
 
         @Override
-        public void writeEpisodic(EpisodicWrite write) {
+        public void writeEpisodic(com.matrix.agent.identity.AgentRequest request, com.matrix.agent.data.memory.EpisodicWrite write) {
             this.write = write;
         }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(com.matrix.agent.identity.AgentRequest request, String key, String value, double score) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            String sourceSessionId = request.getSessionId();
+            long requestEpoch = request.getEpoch();
             return false;
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(com.matrix.agent.identity.AgentRequest request, String key) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
             return null;
         }
     }

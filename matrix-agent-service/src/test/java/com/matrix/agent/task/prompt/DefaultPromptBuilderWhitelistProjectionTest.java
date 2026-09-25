@@ -112,7 +112,7 @@ public final class DefaultPromptBuilderWhitelistProjectionTest {
         String text = format(Collections.singletonList(
                 MemorySnippet.of(MemoryLayer.EPISODIC, scope, "preferred_temperature", "24")));
 
-        assertTrue(text.contains("(已保存,请用工具查询)"));
+        assertTrue(text.contains("不足以还原历史细节"));
         assertFalse("EPISODIC 层 preferred_temperature: 24 不应投影",
                 text.contains("preferred_temperature: 24"));
     }

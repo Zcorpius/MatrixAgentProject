@@ -126,6 +126,8 @@ public final class AuditEventDaoContractTest {
 
     /** JVM in-memory fake——验证 caller 隔离行为(语义对齐真实 Room _Impl.java)。 */
     private static final class FakeAuditEventDao implements AuditEventDao {
+        @Override public int deleteByUser(String userId) { return 0; }
+
         final Map<String, AuditEventEntity> store = new LinkedHashMap<>();
         private long nextId = 1L;
 

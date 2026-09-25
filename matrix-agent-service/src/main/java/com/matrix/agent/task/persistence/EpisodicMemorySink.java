@@ -22,9 +22,9 @@ public final class EpisodicMemorySink implements TaskMemoryWriter {
         com.matrix.agent.task.persistence.EpisodicSummary summary =
                 com.matrix.agent.task.persistence.EpisodicSummary.build(request, outcome);
         if (summary.shouldSkip()) return;
-        writer.writeEpisodic(new EpisodicWrite(
+        writer.writeEpisodic(request, new EpisodicWrite(
                 outcome.getRequestId(), com.matrix.agent.identity.ActorUsers.userIdOf(request),
-                request.getOccupantZone() == null ? "" : request.getOccupantZone().name(),
+                request.getOccupantZone() == null ? "global" : request.getOccupantZone().wireValue(),
                 request.getSessionId(), request.getActor() == null ? "" : request.getActor().name(),
                 summary.getStartedAtMillis(), summary.getFinalState(),
                 outcome.getStopReason() == null ? "" : outcome.getStopReason().name(),

@@ -71,7 +71,7 @@ public final class GeminiNativeToolCallingTest {
         // tools 是 [{functionDeclarations:[...]}],不是 OpenAI 平铺
         JSONArray functionDeclarations = request.getJSONArray("tools")
                 .getJSONObject(0).getJSONArray("functionDeclarations");
-        assertEquals(12, functionDeclarations.length());
+        assertEquals(17, functionDeclarations.length());
         JSONObject climate = findFunctionDeclaration(functionDeclarations,
                 "vehicle_climate_set_temperature");
         assertEquals("vehicle_climate_set_temperature", climate.getString("name"));

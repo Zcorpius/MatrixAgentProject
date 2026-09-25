@@ -387,7 +387,10 @@ public final class AgentRuntimeRepository {
      * Steer 与记忆异步写回均带 epoch gate；清空后的旧 generation 不能重新写回用户域。
      */
     public void clearUserData() {
-        clearUserDataDetailed();
+        ClearUserDataOutcome outcome = clearUserDataDetailed();
+        if (!outcome.isComplete()) {
+            throw new IllegalStateException("user data clear incomplete: " + outcome.summary());
+        }
     }
 
     /**
@@ -411,6 +414,14 @@ public final class AgentRuntimeRepository {
      */
     public void setConversationClearHook(Runnable hook) {
         userDataResetCoordinator.setConversationClearHook(hook);
+    }
+
+    public void setLegacyMemoryClearHook(java.util.function.BooleanSupplier hook) {
+        userDataResetCoordinator.setLegacyMemoryClearHook(hook);
+    }
+
+    public void setResetLifecycleHooks(Runnable begin, Runnable complete) {
+        userDataResetCoordinator.setResetLifecycleHooks(begin, complete);
     }
 
     /** 追加进程内对话附属状态的清理（如一次性语音绑定），不覆盖持久化正文清理。 */

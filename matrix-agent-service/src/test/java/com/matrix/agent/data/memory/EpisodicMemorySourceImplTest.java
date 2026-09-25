@@ -26,73 +26,67 @@ public final class EpisodicMemorySourceImplTest {
     @Test
     public void recallReturnsRecentSessionsInOrder() {
         FakeDao dao = new FakeDao();
-        dao.add("user-d", "driver", "sess-a", 100L, "SUCCESS");
-        dao.add("user-d", "driver", "sess-b", 200L, "SUCCESS");
-        dao.add("user-d", "driver", "sess-c", 300L, "TIMEOUT");
+        dao.add("user-d", "driver", "sess-climate", 100L, "SUCCEEDED");
+        dao.add("user-d", "driver", "sess-nav", 200L, "SUCCEEDED");
+        dao.add("user-d", "driver", "sess-media", 300L, "TIMEOUT");
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         List<MemorySnippet> result = source.recallEpisodic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "查天气", 5);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 5);
 
-        assertEquals("返回 3 条 snippet", 3, result.size());
-        // queryByUserZone ORDER BY startedAtMillis DESC → 最新在前
-        assertTrue("第 1 条 key 含 sess-c", result.get(0).getKey().contains("sess-c"));
-        assertTrue("第 2 条 key 含 sess-b", result.get(1).getKey().contains("sess-b"));
-        assertTrue("第 3 条 key 含 sess-a", result.get(2).getKey().contains("sess-a"));
+        assertEquals("只返回安全且终态可用的类别", 2, result.size());
+        assertEquals("recent_task.navigation.succeeded", result.get(0).getKey());
+        assertEquals("recent_task.climate.succeeded", result.get(1).getKey());
     }
 
     @Test
     public void maxItemsCapsResultSize() {
         FakeDao dao = new FakeDao();
         for (int i = 0; i < 8; i++) {
-            dao.add("user-d", "driver", "sess-" + i, 100L + i, "SUCCESS");
+            dao.add("user-d", "driver", "sess-" + i, 100L + i, "SUCCEEDED");
         }
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         List<MemorySnippet> result = source.recallEpisodic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "q", 3);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 3);
 
-        assertEquals("maxItems=3 截断结果", 3, result.size());
+        assertEquals("重复类别去重", 1, result.size());
     }
 
     @Test
-    public void cacheReusesResultWithinTtl() {
+    public void noCacheMakesClearImmediatelyVisible() {
         FakeDao dao = new FakeDao();
-        dao.add("user-d", "driver", "sess-a", 100L, "SUCCESS");
+        dao.add("user-d", "driver", "sess-climate", 100L, "SUCCEEDED");
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         // 第 1 次:命中 DB
-        source.recallEpisodic(new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
+        source.recallEpisodic(new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 5);
         assertEquals("DB 调用 1 次", 1, dao.callCount);
 
-        // 第 2 次:命中 cache,不再调 DB
-        source.recallEpisodic(new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
-        assertEquals("DB 仍只调 1 次(cache 命中)", 1, dao.callCount);
-
-        // invalidateCache 后再调:DB 再次调用
-        source.invalidateCache();
-        source.recallEpisodic(new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
-        assertEquals("invalidate 后 DB 再次调用", 2, dao.callCount);
+        dao.store.clear();
+        assertTrue(source.recallEpisodic(new MemoryScope("user-d", VehicleZone.DRIVER),
+                "上次做过什么", 5).isEmpty());
+        assertEquals(2, dao.callCount);
     }
 
     @Test
     public void cacheIsPerUserZone() {
         FakeDao dao = new FakeDao();
-        dao.add("user-d", "driver", "sess-driver", 100L, "SUCCESS");
-        dao.add("user-p", "passenger", "sess-passenger", 200L, "SUCCESS");
+        dao.add("user-d", "driver", "sess-climate", 100L, "SUCCEEDED");
+        dao.add("user-p", "passenger", "sess-nav", 200L, "SUCCEEDED");
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         // driver 召回
         List<MemorySnippet> driverResult = source.recallEpisodic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 5);
         // passenger 召回
         List<MemorySnippet> passengerResult = source.recallEpisodic(
-                new MemoryScope("user-p", VehicleZone.PASSENGER), "q", 5);
+                new MemoryScope("user-p", VehicleZone.PASSENGER), "上次做过什么", 5);
 
         assertEquals("driver 命中 driver session", 1, driverResult.size());
-        assertTrue("key 截短后含 sess-dri", driverResult.get(0).getKey().contains("sess-dri"));
+        assertTrue(driverResult.get(0).getKey().contains("climate"));
         assertEquals("passenger 命中 passenger session", 1, passengerResult.size());
-        assertTrue("key 截短后含 sess-pas", passengerResult.get(0).getKey().contains("sess-pas"));
+        assertTrue(passengerResult.get(0).getKey().contains("navigation"));
         assertEquals("DB 调用 2 次(2 个不同 cache key)", 2, dao.callCount);
     }
 
@@ -102,7 +96,7 @@ public final class EpisodicMemorySourceImplTest {
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         List<MemorySnippet> result = source.recallEpisodic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 5);
 
         // 不抛——fail-open 返回空 list
         assertTrue("Dao 异常返回空 list", result.isEmpty());
@@ -121,18 +115,47 @@ public final class EpisodicMemorySourceImplTest {
     @Test
     public void snippetKeyUsesShortSessionId() {
         FakeDao dao = new FakeDao();
-        dao.add("user-d", "driver", "abcdef1234567890", 100L, "SUCCESS");
+        dao.add("user-d", "driver", "abcdef1234567890", 100L, "SUCCEEDED");
         EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao, 5);
 
         List<MemorySnippet> result = source.recallEpisodic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "q", 5);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "上次做过什么", 5);
 
         assertEquals(1, result.size());
-        // substring(0, 8) → "abcdef12"
-        assertTrue(result.get(0).getKey().startsWith("session#abcdef12"));
+        assertEquals("recent_task.climate.succeeded", result.get(0).getKey());
+        assertTrue(!result.get(0).getKey().contains("abcdef"));
+    }
+
+    @Test
+    public void multiCapabilityEventCanBeFoundByEitherCategory() {
+        FakeDao dao = new FakeDao();
+        SessionHistoryEntity row = new SessionHistoryEntity();
+        row.userId = "user-d";
+        row.zone = "driver";
+        row.sessionId = "multi";
+        row.startedAtMillis = System.currentTimeMillis();
+        row.finalState = "SUCCEEDED";
+        row.trajectoryJson = "{\"eventSchemaVersion\":2,\"eventId\":\"0123456789abcdef0123456789abcdef\","
+                + "\"eventKind\":\"display\",\"successfulCapabilities\":["
+                + "\"system.display.set_brightness\",\"system.media.set_volume\"],"
+                + "\"verifiedFacts\":[]}";
+        dao.store.add(row);
+        EpisodicMemorySourceImpl source = new EpisodicMemorySourceImpl(dao);
+        MemoryScope scope = new MemoryScope("user-d", VehicleZone.DRIVER);
+
+        assertTrue(source.recallEpisodic(scope, "上次音量多少", 2).get(0).getKey()
+                .startsWith("recent.media.succeeded."));
+        assertTrue(source.recallEpisodic(scope, "上次屏幕亮度多少", 2).get(0).getKey()
+                .startsWith("recent.display.succeeded."));
     }
 
     private static final class FakeDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final List<SessionHistoryEntity> store = new ArrayList<>();
         int callCount = 0;
 
@@ -143,6 +166,10 @@ public final class EpisodicMemorySourceImplTest {
             e.sessionId = sessionId;
             e.startedAtMillis = startedAt;
             e.finalState = finalState;
+            String capability = sessionId.contains("nav") ? "navigation.start_route"
+                    : sessionId.contains("media") ? "media.play"
+                    : "vehicle.climate.set_temperature";
+            e.trajectoryJson = "{\"successfulCapabilities\":[\"" + capability + "\"]}";
             store.add(e);
         }
 
@@ -192,6 +219,12 @@ public final class EpisodicMemorySourceImplTest {
     }
 
     private static final class ThrowingDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         @Override public void insert(SessionHistoryEntity entity) { }
         @Override public List<SessionHistoryEntity> queryByUserZone(String userId, String zone, int limit) {
             throw new RuntimeException("simulated SQL failure");

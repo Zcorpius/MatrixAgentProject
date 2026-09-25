@@ -24,10 +24,14 @@ public final class DefaultContextUpdater implements ContextUpdater {
                     + " reason=result not success status=" + result.getStatus());
             return;
         }
-        if ("vehicle.climate.set_temperature".equals(call.getCapabilityName())) {
-            Object temperature = call.argument("temperature");
+        if (result.isVerified() && "vehicle.climate.set_temperature".equals(call.getCapabilityName())) {
             VehicleZone zone = VehicleZone.parse(call.argument("zone"));
-            if (temperature instanceof Number && zone != null) {
+            Object temperature = zone == null ? null
+                    : result.getObservedState().get(zone.wireValue() + ".temperature");
+            if (temperature instanceof Number && zone != null
+                    && ((Number) temperature).doubleValue() == Math.rint(((Number) temperature).doubleValue())
+                    && ((Number) temperature).intValue() >= 16
+                    && ((Number) temperature).intValue() <= 30) {
                 int tempValue = ((Number) temperature).intValue();
                 context.rememberTemperature(tempValue, zone.wireValue());
                 Log.d(TAG, "[Context] remembered temperature=" + tempValue

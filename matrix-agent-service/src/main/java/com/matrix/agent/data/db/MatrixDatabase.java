@@ -22,8 +22,8 @@ import java.util.Arrays;
 /**
  * Room + SQLCipher 加密数据库入口。
  *
- * <p>version=2——audit_event 加 userId 列 + idx_audit_user_zone
- * 索引,配合 {@link AuditEventDao#deleteByUserZone(String, String)} 实现 4 表原子 clear。
+ * <p>Current schema version is 14. Migration 13→14 normalizes memory zones and removes
+ * historical raw episodic trajectories before the data can be recalled.
  *
  * <p>SQLCipher Android SupportOpenHelperFactory 注入 byte[] passphrase——passphrase 由 MasterKeyProvider
  * 提供(从 AndroidKeyStore 取主密钥解密本地缓存)。
@@ -70,7 +70,7 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationAttachmentEntity.class,
                 com.matrix.agent.data.debugtrace.DebugTraceEventEntity.class
         },
-        version = 13,
+        version = 14,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -469,6 +469,46 @@ public abstract class MatrixDatabase extends RoomDatabase {
         }
     };
 
+    /** Canonicalize memory zones and remove historical full trajectory payloads in one upgrade. */
+    public static final Migration MIGRATION_13_14 = new Migration(13, 14) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase db) {
+            String canonicalZone = "CASE WHEN userId='__system__' THEN '__system__' "
+                    + "WHEN lower(zone) IN ('', 'global') AND userId='demo-driver' THEN 'driver' "
+                    + "WHEN lower(zone) IN ('', 'global') AND userId='demo-passenger' THEN 'passenger' "
+                    + "ELSE lower(zone) END";
+            db.execSQL("CREATE TEMP TABLE memory_v14 AS SELECT * FROM memory_record");
+            db.execSQL("DELETE FROM memory_record");
+            db.execSQL("INSERT OR REPLACE INTO memory_record "
+                    + "(userId,zone,layer,`key`,`value`,score,capturedAtMs,sourceSessionId) "
+                    + "SELECT userId, " + canonicalZone + ", "
+                    + "layer,`key`,`value`,score,capturedAtMs,sourceSessionId "
+                    + "FROM memory_v14 WHERE "
+                    + "(userId='__system__' AND zone='__system__' AND layer='preference' "
+                    + "AND `key` IN ('__epoch__','__legacy_migration_complete__')) "
+                    + "OR lower(zone) IN ('driver','passenger','global') "
+                    + "OR (zone='' AND userId IN ('demo-driver','demo-passenger')) "
+                    + "ORDER BY capturedAtMs ASC, CASE WHEN zone = (" + canonicalZone
+                    + ") THEN 1 ELSE 0 END ASC, zone ASC, `key` ASC");
+            db.execSQL("DROP TABLE memory_v14");
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_memory_scope_layer_time "
+                    + "ON memory_record (userId,zone,layer,capturedAtMs)");
+
+            db.execSQL("CREATE TEMP TABLE session_v14 AS SELECT * FROM session_history");
+            db.execSQL("DELETE FROM session_history");
+            db.execSQL("INSERT OR REPLACE INTO session_history "
+                    + "(userId,zone,sessionId,startedAtMillis,actor,finalState,stopReason,"
+                    + "durationMs,turnCount,trajectoryJson) "
+                    + "SELECT userId, " + canonicalZone + ", "
+                    + "sessionId,startedAtMillis,actor,finalState,stopReason,durationMs,turnCount,"
+                    + "'{\"legacySanitized\":true}' FROM session_v14 WHERE "
+                    + "lower(zone) IN ('driver','passenger','global') "
+                    + "OR (zone='' AND userId IN ('demo-driver','demo-passenger')) "
+                    + "ORDER BY startedAtMillis ASC, CASE WHEN zone = (" + canonicalZone
+                    + ") THEN 1 ELSE 0 END ASC, zone ASC");
+            db.execSQL("DROP TABLE session_v14");
+        }
+    };
+
     /**
      * 加密数据库单例获取。
      *
@@ -511,12 +551,13 @@ public abstract class MatrixDatabase extends RoomDatabase {
             // 加 v3→v4 Migration(新建 model_download 表)与 v4→v5 持久任务表。
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13);
+                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+                    MIGRATION_13_14);
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=13 entities=18 journalMode=WAL");
+                    + " version=14 entities=18 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

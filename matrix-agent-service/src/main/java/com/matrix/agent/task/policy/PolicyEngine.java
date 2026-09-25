@@ -19,6 +19,7 @@ import com.matrix.agent.identity.AgentRequest;
 import android.util.Log;
 
 import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.data.memory.MemoryKeyCatalog;
 import com.matrix.agent.contract.schema.CanonicalSchema;
 import com.matrix.agent.contract.schema.SchemaError;
 import com.matrix.agent.contract.schema.SchemaErrorCode;
@@ -40,6 +41,7 @@ public final class PolicyEngine {
      * (若未来 Provider 不经过 PolicyEngine 直接调 handler,这层仍守住)。
      */
     private static final String MEMORY_SEMANTIC_SAVE = "memory.semantic.save";
+    private static final String MEMORY_PREFERENCE_SAVE = "memory.preference.save";
 
     private final CapabilityRegistry registry;
 
@@ -109,6 +111,8 @@ public final class PolicyEngine {
         // checkStrictSchema + checkTypeAndRangeAndEnum 双方法)。
         PolicyDecision schemaDecision = checkCanonicalSchema(definition, call, cap);
         if (schemaDecision != null) return schemaDecision;
+        PolicyDecision memoryArgumentDecision = checkMemoryArguments(request, call, cap);
+        if (memoryArgumentDecision != null) return memoryArgumentDecision;
 
         // 参数级:数值/格式/可补全参数(CapabilityValidator lambda,业务自定义)
         String violation = definition.validateArguments(call.getArguments());
@@ -180,12 +184,50 @@ public final class PolicyEngine {
      * <p>MockCapabilityProvider.MemorySemanticSaveHandler 内的同款 gate 保留作 defence-in-depth。
      */
     private static PolicyDecision checkMemorySaveExplicitGate(AgentRequest request, String cap) {
-        if (!MEMORY_SEMANTIC_SAVE.equals(cap)) return null;
-        if (request.isMemorySaveAllowed()) return null;
-        Log.w(TAG, "[Policy]   DENY (capability) cap=" + cap
-                + " 用户未显式要求长期记忆(memorySaveAllowed=false)");
-        return PolicyDecision.denyCapability(
-                "memory.semantic.save 需要用户显式长期记忆意图(如\"记住X\"/\"别忘了X\")");
+        if (MEMORY_SEMANTIC_SAVE.equals(cap) || MEMORY_PREFERENCE_SAVE.equals(cap)) {
+            return request.isMemorySaveAllowed() ? null : PolicyDecision.denyCapability(
+                    "保存长期记忆需要用户显式要求");
+        }
+        if ("memory.semantic.delete".equals(cap) || "memory.preference.delete".equals(cap)
+                || "memory.episodic.delete".equals(cap)) {
+            return MemoryKeyCatalog.explicitDeleteIntent(request.getText()) ? null
+                    : PolicyDecision.denyCapability("删除记忆需要用户显式要求");
+        }
+        return null;
+    }
+
+    private static PolicyDecision checkMemoryArguments(AgentRequest request, ToolCall call,
+            String capability) {
+        if ("memory.preference.list".equals(capability)) return null;
+        if ("memory.episodic.delete".equals(capability)) {
+            Object eventId = call.argument("event_id");
+            return eventId instanceof String && MemoryKeyCatalog.episodicDeleteAuthorized(
+                    (String) eventId, request.getText()) ? null
+                    : PolicyDecision.denyCapability("请先查询历史事件，再明确指定要删除的事件编号");
+        }
+        boolean preference = capability.startsWith("memory.preference.");
+        boolean semantic = capability.startsWith("memory.semantic.");
+        if (!preference && !semantic) return null;
+        Object rawKey = call.argument("key");
+        if (!(rawKey instanceof String)) return PolicyDecision.denyParameter("无效记忆键");
+        String key = (String) rawKey;
+        if (!(preference ? (capability.endsWith(".save")
+                        ? MemoryKeyCatalog.isPreferenceKey(key)
+                        : MemoryKeyCatalog.isReadablePreferenceKey(key))
+                : MemoryKeyCatalog.isSemanticKey(key))) {
+            return PolicyDecision.denyParameter("无效记忆键");
+        }
+        if (capability.endsWith(".save")) {
+            Object value = call.argument("value");
+            if (!(value instanceof String)
+                    || !MemoryKeyCatalog.saveAuthorized(key, (String) value, request.getText())) {
+                return PolicyDecision.denyCapability("记忆内容与本轮用户请求不匹配");
+            }
+        } else if (capability.endsWith(".delete")
+                && !MemoryKeyCatalog.deleteAuthorized(key, request.getText())) {
+            return PolicyDecision.denyCapability("删除目标与本轮用户请求不匹配");
+        }
+        return null;
     }
 
     /**

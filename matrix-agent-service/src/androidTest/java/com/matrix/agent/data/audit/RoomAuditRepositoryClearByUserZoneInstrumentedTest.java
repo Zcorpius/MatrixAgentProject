@@ -29,7 +29,7 @@ import java.util.List;
  *
  * <p>覆盖:
  * <ul>
- *   <li>5 参构造器(database + 3 DAO)在 runInTransaction 内跨表原子删除。</li>
+ *   <li>生产构造器在 runInTransaction 内清理审计两表，不触碰记忆表。</li>
  *   <li>跨用户 / 跨 zone 隔离:其他 user / 其他 zone 数据保留。</li>
  * </ul>
  *
@@ -60,8 +60,8 @@ public final class RoomAuditRepositoryClearByUserZoneInstrumentedTest {
     }
 
     @Test
-    public void clearByUserZoneDeletesAllThreeTablesAtomic() {
-        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, sessionDao, memoryDao);
+    public void auditClearDoesNotDeleteEitherMemoryTable() {
+        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, db.auditEventDao());
         // driver zone 3 表
         trajectoryDao.insert(newTrajectory("req-driver", "demo-driver", "DRIVER"));
         sessionDao.insert(newSession("demo-driver", "DRIVER", "session-driver", 100L));
@@ -72,23 +72,14 @@ public final class RoomAuditRepositoryClearByUserZoneInstrumentedTest {
         memoryDao.upsert(newMemory("demo-passenger", "PASSENGER", "preferred_temperature"));
 
         ClearOutcome outcome = repo.clearByUserZone("demo-driver", "DRIVER");
-        assertEquals("5 参构造路径 + 3 表成功 = SUCCESS",
-                ClearOutcome.Status.SUCCESS, outcome.getStatus());
-        assertEquals("5 参路径尝试 3 张表",
-                3, outcome.getTablesAttempted());
-        assertEquals("3 张表都删成功",
-                3, outcome.getTablesSucceeded());
-        assertTrue("rowsDeleted 应反映 3 表都删了至少 1 行",
-                outcome.getRowsDeleted() >= 3);
-
-        // driver zone 3 表全清
-        assertTrue("trajectory driver zone 应清空",
-                trajectoryDao.queryBySessionScoped(
-                        "demo-driver", "DRIVER", "session-driver", 10).isEmpty());
-        assertTrue("session_history driver zone 应清空",
-                sessionDao.queryByUserZone("demo-driver", "DRIVER", 10).isEmpty());
-        assertTrue("memory_record driver zone 应清空",
-                memoryDao.queryByUserZoneLayer("demo-driver", "DRIVER", "preference").isEmpty());
+        assertEquals(ClearOutcome.Status.SUCCESS, outcome.getStatus());
+        assertEquals(2, outcome.getTablesAttempted());
+        assertEquals(2, outcome.getTablesSucceeded());
+        assertEquals(1, outcome.getRowsDeleted());
+        assertTrue(trajectoryDao.queryBySessionScoped(
+                "demo-driver", "DRIVER", "session-driver", 10).isEmpty());
+        assertEquals(1, sessionDao.queryByUserZone("demo-driver", "DRIVER", 10).size());
+        assertEquals(1, memoryDao.queryByUserZoneLayer("demo-driver", "DRIVER", "preference").size());
 
         // passenger zone 3 表保留
         assertEquals("trajectory passenger zone 不应被删", 1,
@@ -102,7 +93,7 @@ public final class RoomAuditRepositoryClearByUserZoneInstrumentedTest {
 
     @Test
     public void clearByUserZoneKeepsOtherUsersAndZones() {
-        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, sessionDao, memoryDao);
+        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, db.auditEventDao());
         // 5 个组合:driver/DRIVER、driver/PASSENGER、passenger/PASSENGER、other-user/DRIVER、other-user/PASSENGER
         trajectoryDao.insert(newTrajectory("r1", "demo-driver", "DRIVER"));
         trajectoryDao.insert(newTrajectory("r2", "demo-driver", "PASSENGER"));
@@ -130,7 +121,7 @@ public final class RoomAuditRepositoryClearByUserZoneInstrumentedTest {
 
     @Test
     public void clearByUserZoneFailClosedOnNullArgs() {
-        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, sessionDao, memoryDao);
+        RoomAuditRepository repo = new RoomAuditRepository(db, trajectoryDao, db.auditEventDao());
         // null userId / zone 不应抛,但必须返回 FAILURE
         ClearOutcome nullUser = repo.clearByUserZone(null, "DRIVER");
         assertEquals("null userId 必须返回 FAILURE",

@@ -36,7 +36,7 @@ final class AuditRuntimeGraph {
         if (database == null) return NoopAuditRepository.INSTANCE;
         try {
             return new RoomAuditRepository(database, database.trajectoryDao(),
-                    database.sessionHistoryDao(), database.memoryRecordDao(), database.auditEventDao());
+                    database.auditEventDao());
         } catch (Exception error) {
             Log.e(TAG, "[AuditGraph] audit repository unavailable; using NOOP", error);
             return NoopAuditRepository.INSTANCE;

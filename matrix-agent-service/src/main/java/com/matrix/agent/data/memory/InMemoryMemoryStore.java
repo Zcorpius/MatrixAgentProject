@@ -9,7 +9,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class InMemoryMemoryStore implements MemoryStore {
     private static final String TAG = "MatrixAgent";
-    private final Map<MemoryScope, Map<String, String>> values = new LinkedHashMap<>();
+    private final Map<MemoryScope, Map<String, PreferenceRecord>> values = new LinkedHashMap<>();
+    private long lastWriteTimestamp;
     /**
      * data epoch——{@link #bumpEpoch()} 自增,
      * {@link #putPreferenceChecked} 严格校验。InMemoryMemoryStore 不持久化,重启回到 epoch=0
@@ -20,12 +21,12 @@ public class InMemoryMemoryStore implements MemoryStore {
 
     @Override
     public synchronized void putPreference(String userId, String key, String value) {
-        putPreference(MemoryScope.ofLegacy(userId), key, value);
+        throw new UnsupportedOperationException("preference writes require request epoch");
     }
 
     @Override
     public synchronized void putPreference(MemoryScope scope, String key, String value) {
-        values.computeIfAbsent(scope, ignored -> new LinkedHashMap<>()).put(key, value);
+        throw new UnsupportedOperationException("preference writes require request epoch");
     }
 
     @Override
@@ -35,8 +36,10 @@ public class InMemoryMemoryStore implements MemoryStore {
 
     @Override
     public synchronized String getPreference(MemoryScope scope, String key) {
-        Map<String, String> userValues = values.get(scope);
-        return userValues == null ? null : userValues.get(key);
+        Map<String, PreferenceRecord> userValues = values.get(scope);
+        PreferenceRecord record = userValues == null ? null : userValues.get(
+                PreferenceReferences.resolve(scope, key, userValues.keySet()));
+        return record == null ? null : record.value();
     }
 
     @Override
@@ -46,11 +49,19 @@ public class InMemoryMemoryStore implements MemoryStore {
 
     @Override
     public synchronized Map<String, String> getAllPreferences(MemoryScope scope) {
-        Map<String, String> userValues = values.get(scope);
+        Map<String, PreferenceRecord> userValues = values.get(scope);
         if (userValues == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<>(userValues));
+        Map<String, String> result = new LinkedHashMap<>();
+        for (PreferenceRecord record : userValues.values()) result.put(record.key(), record.value());
+        return Collections.unmodifiableMap(result);
+    }
+
+    @Override
+    public synchronized java.util.List<PreferenceRecord> getPreferenceRecords(MemoryScope scope) {
+        Map<String, PreferenceRecord> scoped = values.get(scope);
+        return scoped == null ? java.util.List.of() : java.util.List.copyOf(scoped.values());
     }
 
     @Override
@@ -82,11 +93,15 @@ public class InMemoryMemoryStore implements MemoryStore {
      */
     @Override
     public synchronized long clearUserDataAndBump(String userId1, String userId2) {
+        return clearUsersAndBump(java.util.List.of(userId1, userId2));
+    }
+
+    @Override
+    public synchronized long clearUsersAndBump(java.util.List<String> userIds) {
         long newEpoch = epoch.incrementAndGet();
-        clear(userId1);
-        clear(userId2);
+        for (String userId : userIds) clear(userId);
         Log.i(TAG, "[MemoryStore] clearUserDataAndBump -> epoch=" + newEpoch
-                + " clearedUsers=[" + userId1 + ", " + userId2 + "]");
+                + " clearedUsers=" + userIds.size());
         return newEpoch;
     }
 
@@ -108,16 +123,38 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public synchronized boolean putPreferenceChecked(MemoryScope scope, String key, String value,
             long requestEpoch) {
-        long current = epoch.get();
-        if (requestEpoch != current) {
-            Log.w(TAG, "[MemoryStore] reject stale write scope=" + scope
-                    + " key=" + key
-                    + " requestEpoch=" + requestEpoch
-                    + " currentEpoch=" + current
-                    + " — clearUserData 已发生,陈旧写入被拒绝");
-            return false;
+        return putPreferenceDetailed(scope, key, value, requestEpoch) == MemoryWriteOutcome.SAVED;
+    }
+
+    @Override
+    public synchronized MemoryWriteOutcome putPreferenceDetailed(MemoryScope scope, String key,
+            String value, long requestEpoch) {
+        if (scope == null || RoomMemoryStore.SYSTEM_USER.equals(scope.getUserId())) return MemoryWriteOutcome.INVALID_REQUEST;
+        if (!MemoryKeyCatalog.isPreferenceKey(key)) return MemoryWriteOutcome.INVALID_KEY;
+        if (value == null || value.isBlank() || value.length() > 2048) return MemoryWriteOutcome.INVALID_VALUE;
+        if (requestEpoch != epoch.get()) return MemoryWriteOutcome.STALE_EPOCH;
+        Map<String, PreferenceRecord> scoped = values.computeIfAbsent(scope, ignored -> new LinkedHashMap<>());
+        if (!scoped.containsKey(key) && scoped.size() >= RoomMemoryStore.MAX_EXPLICIT_RECORDS_PER_SCOPE) {
+            return MemoryWriteOutcome.CAPACITY_REACHED;
         }
-        putPreference(scope, key, value);
-        return true;
+        lastWriteTimestamp = Math.max(System.currentTimeMillis(), lastWriteTimestamp + 1);
+        scoped.put(key, new PreferenceRecord(key, value, lastWriteTimestamp, true));
+        return MemoryWriteOutcome.SAVED;
+    }
+
+    @Override
+    public synchronized boolean deletePreferenceChecked(MemoryScope scope, String key, long epochValue) {
+        return deletePreferenceDetailed(scope, key, epochValue) == MemoryDeleteOutcome.DELETED;
+    }
+
+    @Override
+    public synchronized MemoryDeleteOutcome deletePreferenceDetailed(MemoryScope scope,
+            String key, long epochValue) {
+        if (scope == null) return MemoryDeleteOutcome.INVALID_REQUEST;
+        if (!MemoryKeyCatalog.isReadablePreferenceKey(key)) return MemoryDeleteOutcome.INVALID_KEY;
+        if (epochValue != epoch.get()) return MemoryDeleteOutcome.STALE_EPOCH;
+        Map<String, PreferenceRecord> scoped = values.get(scope);
+        return scoped != null && scoped.remove(PreferenceReferences.resolve(scope, key, scoped.keySet())) != null
+                ? MemoryDeleteOutcome.DELETED : MemoryDeleteOutcome.NOT_FOUND;
     }
 }

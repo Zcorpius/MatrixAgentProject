@@ -51,8 +51,9 @@ public final class AuditRedactor {
     };
     /** 把整条 observation 全脱敏的 capability 集合——value 不该进 Trajectory/UI/Log。 */
     private static final Set<String> FULL_REDACT_CAPABILITIES = new HashSet<>(Arrays.asList(
-            "memory.preference.save", "memory.preference.get",
-            "memory.semantic.save", "memory.semantic.get"));
+            "memory.preference.save", "memory.preference.get", "memory.preference.list", "memory.preference.delete",
+            "memory.semantic.save", "memory.semantic.get", "memory.semantic.delete",
+            "memory.episodic.get", "memory.episodic.delete"));
 
     /** memory.preference.* observation 脱敏后的 message 占位符,测试与 UI 渲染都会用。 */
     public static final String MEMORY_MESSAGE_PLACEHOLDER = "[user memory preference redacted]";

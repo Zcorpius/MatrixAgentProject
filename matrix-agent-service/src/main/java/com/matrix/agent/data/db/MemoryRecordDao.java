@@ -28,8 +28,18 @@ public interface MemoryRecordDao {
      * <p>zone 必传,SQL 不再退化为 userId-only。召回算法接入时直接调此方法,
      * 不允许调用方在 caller 侧手动过滤 zone。
      */
-    @Query("SELECT * FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer")
+    @Query("SELECT * FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer ORDER BY capturedAtMs DESC, key ASC LIMIT 1024")
     List<MemoryRecordEntity> queryByUserZoneLayer(String userId, String zone, String layer);
+
+    /** Directory intentionally has no recall limit and reads no values; legacy imports may exceed the save cap. */
+    @Query("SELECT key FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer ORDER BY key ASC")
+    List<String> queryKeysByUserZoneLayer(String userId, String zone, String layer);
+
+    @Query("SELECT COUNT(*) FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer")
+    int countByUserZoneLayer(String userId, String zone, String layer);
+
+    @Query("DELETE FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer AND key = :key")
+    int deleteByKey(String userId, String zone, String layer, String key);
 
     @Query("SELECT * FROM memory_record WHERE userId = :userId AND zone = :zone AND layer = :layer AND key = :key LIMIT 1")
     MemoryRecordEntity queryByKey(String userId, String zone, String layer, String key);

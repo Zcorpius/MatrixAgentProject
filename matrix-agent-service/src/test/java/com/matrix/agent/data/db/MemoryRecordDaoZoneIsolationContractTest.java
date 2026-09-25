@@ -111,6 +111,13 @@ public final class MemoryRecordDaoZoneIsolationContractTest {
 
     /** Fake MemoryRecordDao:in-memory Map,模拟 queryByUserZoneLayer 的 (userId, zone) 过滤。 */
     private static final class FakeMemoryRecordDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final Map<String, MemoryRecordEntity> store = new LinkedHashMap<>();
 
         @Override
@@ -162,6 +169,12 @@ public final class MemoryRecordDaoZoneIsolationContractTest {
 
     /** Fake SessionHistoryDao:in-memory Map,模拟 queryByUserZone 的 (userId, zone) 过滤。 */
     private static final class FakeSessionHistoryDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final Map<String, SessionHistoryEntity> store = new LinkedHashMap<>();
 
         @Override

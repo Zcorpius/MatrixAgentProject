@@ -18,7 +18,10 @@ import androidx.annotation.NonNull;
  */
 @Entity(tableName = "memory_record",
         primaryKeys = {"userId", "zone", "layer", "key"},
-        indices = {@Index(value = {"userId", "layer"}, name = "idx_memory_user_layer")})
+        indices = {
+                @Index(value = {"userId", "layer"}, name = "idx_memory_user_layer"),
+                @Index(value = {"userId", "zone", "layer", "capturedAtMs"},
+                        name = "idx_memory_scope_layer_time")})
 public final class MemoryRecordEntity {
     @NonNull
     public String userId;

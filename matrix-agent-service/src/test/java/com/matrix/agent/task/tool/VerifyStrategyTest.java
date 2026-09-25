@@ -69,8 +69,8 @@ public final class VerifyStrategyTest {
     @Test
     public void readbackGetVerifiesPreferenceExists() {
         InMemoryMemoryStore memory = new InMemoryMemoryStore();
-        memory.putPreference(new MemoryScope("demo-driver", VehicleZone.DRIVER),
-                "preferred_temperature", "24");
+        memory.putPreferenceChecked(new MemoryScope("demo-driver", VehicleZone.DRIVER),
+                "preferred_temperature", "24", memory.currentEpoch());
         ToolCall call = new ToolCall("memory.preference.save",
                 args("key", "preferred_temperature", "value", "24"));
         ProviderContext ctx = newContextWithCall(call, new HashMap<>(), new HashMap<>(), memory);

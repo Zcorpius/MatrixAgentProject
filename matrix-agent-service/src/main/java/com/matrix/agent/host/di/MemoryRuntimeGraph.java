@@ -26,6 +26,8 @@ import com.matrix.agent.data.memory.SessionContextWorkingMemory;
 import com.matrix.agent.session.SessionManager;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -49,14 +51,14 @@ final class MemoryRuntimeGraph {
         store = createStoreSafely(context, database, degradedRef, databaseExecutor);
         degraded = degradedRef.get();
 
-        EpisodicMemorySourceImpl episodicImpl = database == null
+        EpisodicMemorySourceImpl episodicImpl = degraded
                 ? null : new EpisodicMemorySourceImpl(database.sessionHistoryDao());
         EpisodicMemorySource episodic = episodicImpl == null
                 ? new EmptyEpisodicMemorySource() : episodicImpl;
-        SemanticMemorySource semantic = database == null
+        SemanticMemorySource semantic = degraded
                 ? new EmptySemanticMemorySource()
                 : new SemanticMemorySourceImpl(database.memoryRecordDao());
-        writer = database == null ? MemoryWriter.NOOP : new RoomMemoryWriter(
+        writer = degraded ? MemoryWriter.NOOP : new RoomMemoryWriter(
                 database.sessionHistoryDao(), database.memoryRecordDao(), episodicImpl,
                 database::runInTransaction);
         recaller = new MemoryRouter(new SessionContextWorkingMemory(sessions), episodic, semantic,
@@ -73,18 +75,45 @@ final class MemoryRuntimeGraph {
         if (database == null) {
             Log.w(TAG, "[MemoryGraph] encrypted store unavailable; using volatile memory");
             memoryDegradedRef.set(true);
-            return new InMemoryMemoryStore();
+            return new DegradedMemoryStore(appContext);
         }
         try {
             MemoryRecordDao dao = database.memoryRecordDao();
             RoomMemoryStore.TransactionRunner txRunner = database::runInTransaction;
-            RoomMemoryMigrator.fromSharedPreferences(appContext, dao, txRunner).migrate();
-            return new RoomMemoryStore(dao, txRunner, databaseExecutor);
+            FutureTask<Boolean> migration = new FutureTask<>(() -> {
+                if (!RoomMemoryMigrator.fromSharedPreferences(appContext, dao, txRunner).migrate()) return false;
+                // Also runs for devices that already upgraded to v14 before this fix.
+                txRunner.runInTransaction(() -> database.sessionHistoryDao().deleteSanitizedLegacyRows());
+                return true;
+            });
+            databaseExecutor.execute(migration);
+            if (!migration.get(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("legacy memory migration incomplete");
+            }
+            RoomMemoryStore encryptedStore = new RoomMemoryStore(database, databaseExecutor);
+            encryptedStore.currentEpoch(); // fail closed before assembling any persistent sources/writer
+            return encryptedStore;
         } catch (Exception error) {
             Log.w(TAG, "[MemoryGraph] encrypted store initialization failed; using volatile memory",
                     error);
             memoryDegradedRef.set(true);
-            return new InMemoryMemoryStore();
+            return new DegradedMemoryStore(appContext);
+        }
+    }
+
+    private static final class DegradedMemoryStore extends InMemoryMemoryStore {
+        private final Context context;
+
+        DegradedMemoryStore(Context context) { this.context = context; }
+
+        @Override public synchronized long clearUserDataAndBump(String user1, String user2) {
+            return clearUsersAndBump(java.util.List.of(user1, user2));
+        }
+
+        @Override public synchronized long clearUsersAndBump(java.util.List<String> users) {
+            PendingUserDataReset.mark(context);
+            super.clearUsersAndBump(users);
+            throw new IllegalStateException("encrypted storage unavailable; reset pending recovery");
         }
     }
 }

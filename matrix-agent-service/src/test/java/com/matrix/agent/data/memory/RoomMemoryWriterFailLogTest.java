@@ -49,9 +49,9 @@ public final class RoomMemoryWriterFailLogTest {
                 new Trajectory(1L), 1L);
 
         // 不抛 —— fail-log
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
         // 还要再调一次,确认多次失败都吞掉
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
         assertTrue("多次 fail-log 都吞掉", true);
     }
 
@@ -61,8 +61,7 @@ public final class RoomMemoryWriterFailLogTest {
         ThrowingMemoryDao memoryDao = new ThrowingMemoryDao();
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
-        boolean accepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "allergy.peanut", "严重", 1.0, "sess-001", 0L);
+        boolean accepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-001", 0L), "allergy.peanut", "严重", 1.0);
 
         assertFalse("Dao throw → writeSemantic 返回 false", accepted);
     }
@@ -73,7 +72,7 @@ public final class RoomMemoryWriterFailLogTest {
         ThrowingMemoryDao memoryDao = new ThrowingMemoryDao();
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
-        String value = writer.readSemantic("demo-driver", "DRIVER", "any.key");
+        String value = writer.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "any.key");
 
         assertNull("Dao throw → readSemantic 返回 null", value);
     }
@@ -85,9 +84,9 @@ public final class RoomMemoryWriterFailLogTest {
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
         // null 参数不抛 —— 直接 return / return false / return null
-        writer.writeEpisodic(EpisodicTestSupport.write(null, null, 0L));
-        assertFalse(writer.writeSemantic(null, null, null, "v", 1.0, "s", 0L));
-        assertNull(writer.readSemantic(null, null, null));
+        writer.writeEpisodic(null, EpisodicTestSupport.write(null, null, 0L));
+        assertFalse(writer.writeSemantic(MemoryTestRequests.from(null, null, "s", 0L), null, "v", 1.0));
+        assertNull(writer.readSemantic(MemoryTestRequests.from(null, null, null, 0L), null));
     }
 
     @Test
@@ -102,11 +101,17 @@ public final class RoomMemoryWriterFailLogTest {
                 request.getRequestId(), TaskState.SUCCEEDED, StopReason.DONE,
                 new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
         assertEquals("Dao insert 1 行(episodicSource=null 不影响)", 1, sessionDao.store.size());
     }
 
     private static final class ThrowingSessionDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         @Override public void insert(SessionHistoryEntity entity) {
             throw new RuntimeException("simulated SQL failure on insert");
         }
@@ -122,6 +127,13 @@ public final class RoomMemoryWriterFailLogTest {
     }
 
     private static final class ThrowingMemoryDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         @Override public void upsert(MemoryRecordEntity entity) {
             throw new RuntimeException("simulated SQL failure on upsert");
         }
@@ -136,6 +148,12 @@ public final class RoomMemoryWriterFailLogTest {
     }
 
     private static final class FakeSessionDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final List<SessionHistoryEntity> store = new ArrayList<>();
         @Override public void insert(SessionHistoryEntity entity) { store.add(entity); }
         @Override public List<SessionHistoryEntity> queryByUserZone(String u, String z, int l) {
@@ -148,6 +166,13 @@ public final class RoomMemoryWriterFailLogTest {
     }
 
     private static final class FakeMemoryDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         @Override public void upsert(MemoryRecordEntity entity) { }
         @Override public List<MemoryRecordEntity> queryByUserZoneLayer(String u, String z, String l) {
             return Collections.emptyList();

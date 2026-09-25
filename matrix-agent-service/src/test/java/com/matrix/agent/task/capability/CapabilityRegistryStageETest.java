@@ -25,7 +25,7 @@ public final class CapabilityRegistryStageETest {
     @Test
     public void toToolDefinitionsNoZoneReturnsAll() {
         List<ToolDefinition> tools = CapabilityRegistry.createDemoRegistry().toToolDefinitions();
-        assertEquals(12, tools.size());
+        assertEquals(17, tools.size());
     }
 
     /** toToolDefinitions(null) 等价于默认——不过滤。 */
@@ -33,7 +33,7 @@ public final class CapabilityRegistryStageETest {
     public void toToolDefinitionsWithNullZoneReturnsAll() {
         List<ToolDefinition> tools = CapabilityRegistry.createDemoRegistry()
                 .toToolDefinitions(null);
-        assertEquals(12, tools.size());
+        assertEquals(17, tools.size());
     }
 
     /** toToolDefinitions(DRIVER) 含 driver-allowed capability(climate 写 + 查询等)。 */

@@ -65,12 +65,12 @@ public final class DefaultPromptBuilderPiiProjectionTest {
     @Test
     public void episodicLayerValueAlwaysDenied() {
         List<MemorySnippet> snippets = Arrays.asList(
-                MemorySnippet.of(MemoryLayer.EPISODIC, scope, "session#abcdef12", "导航回家"));
+                MemorySnippet.of(MemoryLayer.EPISODIC, scope, "recent_task.navigation.succeeded", "导航回家"));
 
         String text = format(snippets);
 
-        assertTrue("episodic 仍展示 key", text.contains("session#abcdef12"));
-        assertTrue("episodic 显示查询提示", text.contains("(已保存,请用工具查询)"));
+        assertTrue("episodic 仅展示安全类别", text.contains("recent_task.navigation.succeeded"));
+        assertTrue("episodic 明确不足以还原细节", text.contains("不足以还原历史细节"));
         assertFalse("episodic value 永不投影", text.contains("导航回家"));
     }
 
@@ -93,8 +93,7 @@ public final class DefaultPromptBuilderPiiProjectionTest {
 
         String text = format(snippets);
 
-        assertTrue("working 仍展示 key", text.contains("turn.last_query"));
-        assertTrue("working 显示查询提示", text.contains("(已保存,请用工具查询)"));
+        assertFalse("working 占位符不可投影", text.contains("turn.last_query"));
         assertFalse("working value 永不投影", text.contains("查电量"));
     }
 
@@ -136,7 +135,7 @@ public final class DefaultPromptBuilderPiiProjectionTest {
         assertTrue("必须有 </memory_context> 闭标签", text.contains("</memory_context>"));
         assertFalse("V0.5.4 后不应再有 <trusted_memory>", text.contains("<trusted_memory>"));
         assertTrue("必须有底部提示文案",
-                text.contains("若需查询详情或更新,请调用 memory.semantic.get / memory.preference.get"));
+                text.contains("若需查询详情或更新,请调用相应 memory.* 工具"));
     }
 
     private String format(List<MemorySnippet> snippets) {
