@@ -12,46 +12,46 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.matrix.agent.data.audit.ClearOutcome;
 import com.matrix.agent.data.audit.RoomAuditRepository;
-import com.matrix.agent.platform.AndroidKeyStoreMasterKeyProvider;
-import com.matrix.agent.platform.MasterKeyProvider;
 
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-/**
- * RoomAuditRepository.clearByUserZone 在 SQLCipher 真库上的
- * 写入 → 按 scope 删 → close/reopen 持久化端到端验证。
- *
- * <p>对照 {@code RoomAuditRepositoryClearByUserZoneInstrumentedTest}(inMemory,验证 Room schema
- * 与 DAO 行为)与 {@code SmokeTest}(验证 SQLCipher + KeyStore 链路能打开),本测试补第三层:
- * 真实 {@link MatrixDatabase#getInstance(Context, MasterKeyProvider)} SQLCipher 单例,
- * 验证"删除持久"——close 后重开同一加密库,被删的行仍空,保留的行仍在。
- *
- * <p>reopen 路径覆盖核心契约:AndroidKeyStoreMasterKeyProvider 从 SP 加载
- * 同一 AES-GCM 加密的 passphrase,SupportFactory 用同 passphrase 解密 SQLCipher 文件,
- * 不能因 Keystore/SP 偏好持久化失败而"无法读旧库"。
- *
- * <p>测试数据隔离:每个 case 用 unique requestId 前缀(本类时间戳),不依赖数据库初始为空。
- * SmokeTest 等其他 androidTest case 可能已写入 trajectory,本测试只断言自己 insert 的行。
- */
+/** SQLCipher audit persistence on a dedicated file; never opens the production DB. */
 @RunWith(AndroidJUnit4.class)
 public final class RoomAuditRepositorySqlCipherInstrumentedTest {
     /** 唯一前缀,避免与其他 androidTest case 数据混淆。 */
     private static final String PREFIX = "sqlcipher-" + System.currentTimeMillis() + "-";
 
-    @After
-    public void tearDown() {
-        // 清 MatrixDatabase 单例——让后续 androidTest case 重新 getInstance 触发 fresh load。
-        // 注意:不删 matrix_agent.db 文件(SQLCipher 数据持久是本测试验证的目标)。
-        MatrixDatabase.resetForTest();
+    private Context context;
+    private String dbName;
+    private byte[] passphrase;
+    private MatrixDatabase current;
+
+    @org.junit.Before public void setUp() {
+        context = ApplicationProvider.getApplicationContext();
+        dbName = "audit-review-test-" + java.util.UUID.randomUUID() + ".db";
+        passphrase = new byte[32];
+        new java.security.SecureRandom().nextBytes(passphrase);
+        System.loadLibrary("sqlcipher");
+    }
+
+    private MatrixDatabase open() {
+        current = androidx.room.Room.databaseBuilder(context, MatrixDatabase.class, dbName)
+                .openHelperFactory(new net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase.clone()))
+                .allowMainThreadQueries().build();
+        return current;
+    }
+
+    @After public void tearDown() {
+        if (current != null) current.close();
+        context.deleteDatabase(dbName);
+        java.util.Arrays.fill(passphrase, (byte) 0);
     }
 
     @Test
     public void sqlCipherPersistSurvivesReopen() throws Exception {
-        Context context = ApplicationProvider.getApplicationContext();
-        MasterKeyProvider key1 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db1 = MatrixDatabase.getInstance(context, key1);
+        MatrixDatabase db1 = open();
         TrajectoryDao dao1 = db1.trajectoryDao();
         String driverReq = PREFIX + "persist-driver";
         dao1.insert(newTrajectory(driverReq, "demo-driver", "DRIVER"));
@@ -60,12 +60,10 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
                 driverReq,
                 dao1.queryByRequestScoped("demo-driver", "DRIVER", driverReq).requestId);
 
-        // close + resetForTest + 重开
+        // 关闭再打开
         db1.close();
-        MatrixDatabase.resetForTest();
 
-        MasterKeyProvider key2 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db2 = MatrixDatabase.getInstance(context, key2);
+        MatrixDatabase db2 = open();
         TrajectoryDao dao2 = db2.trajectoryDao();
 
         TrajectoryEntity reloaded = dao2.queryByRequestScoped("demo-driver", "DRIVER", driverReq);
@@ -76,9 +74,7 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
 
     @Test
     public void sqlCipherClearByUserZonePersistsAcrossReopen() {
-        Context context = ApplicationProvider.getApplicationContext();
-        MasterKeyProvider key1 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db1 = MatrixDatabase.getInstance(context, key1);
+        MatrixDatabase db1 = open();
         TrajectoryDao dao1 = db1.trajectoryDao();
 
         String driverReq = PREFIX + "clear-driver";
@@ -86,9 +82,8 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
         dao1.insert(newTrajectory(driverReq, "demo-driver", "DRIVER"));
         dao1.insert(newTrajectory(passengerReq, "demo-passenger", "PASSENGER"));
 
-        // 用 RoomAuditRepository 5 参路径(SQLCipher 真库 + transaction)
-        RoomAuditRepository repo = new RoomAuditRepository(db1, dao1,
-                db1.sessionHistoryDao(), db1.memoryRecordDao());
+        // 审计两表事务(SQLCipher 真库)
+        RoomAuditRepository repo = new RoomAuditRepository(db1, dao1, db1.auditEventDao());
         ClearOutcome outcome = repo.clearByUserZone("demo-driver", "DRIVER");
         assertEquals("clearByUserZone 应 SUCCESS",
                 ClearOutcome.Status.SUCCESS, outcome.getStatus());
@@ -99,12 +94,10 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
         assertNotNull("passenger 应保留",
                 dao1.queryByRequestScoped("demo-passenger", "PASSENGER", passengerReq));
 
-        // close + resetForTest + 重开,验证删除持久
+        // 关闭再打开,验证删除持久
         db1.close();
-        MatrixDatabase.resetForTest();
 
-        MasterKeyProvider key2 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db2 = MatrixDatabase.getInstance(context, key2);
+        MatrixDatabase db2 = open();
         TrajectoryDao dao2 = db2.trajectoryDao();
 
         assertNull("reopen 后 driver 行仍空(删除持久)",
@@ -117,10 +110,8 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
     }
 
     @Test
-    public void sqlCipherThreeTablesClearedAtomicallyPersists() {
-        Context context = ApplicationProvider.getApplicationContext();
-        MasterKeyProvider key1 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db1 = MatrixDatabase.getInstance(context, key1);
+    public void sqlCipherAuditClearPreservesMemoryAcrossReopen() {
+        MatrixDatabase db1 = open();
 
         TrajectoryDao trajectoryDao = db1.trajectoryDao();
         SessionHistoryDao sessionDao = db1.sessionHistoryDao();
@@ -131,27 +122,23 @@ public final class RoomAuditRepositorySqlCipherInstrumentedTest {
         sessionDao.insert(newSession("demo-driver", "DRIVER", "session-" + suffix, 100L));
         memoryDao.upsert(newMemory("demo-driver", "DRIVER", "key-" + suffix));
 
-        RoomAuditRepository repo = new RoomAuditRepository(db1, trajectoryDao, sessionDao, memoryDao);
+        RoomAuditRepository repo = new RoomAuditRepository(db1, trajectoryDao, db1.auditEventDao());
         ClearOutcome outcome = repo.clearByUserZone("demo-driver", "DRIVER");
         assertEquals(ClearOutcome.Status.SUCCESS, outcome.getStatus());
-        assertEquals("3 张表都尝试", 3, outcome.getTablesAttempted());
-        assertEquals("3 张表都成功", 3, outcome.getTablesSucceeded());
-        assertTrue("3 表都删了至少 1 行", outcome.getRowsDeleted() >= 3);
+        assertEquals(2, outcome.getTablesAttempted());
+        assertEquals(2, outcome.getTablesSucceeded());
+        assertEquals(1, outcome.getRowsDeleted());
 
-        // close + resetForTest + 重开,验证 3 表删除持久
+        // 关闭再打开，验证审计删除持久且记忆仍保留
         db1.close();
-        MatrixDatabase.resetForTest();
 
-        MasterKeyProvider key2 = new AndroidKeyStoreMasterKeyProvider(context);
-        MatrixDatabase db2 = MatrixDatabase.getInstance(context, key2);
+        MatrixDatabase db2 = open();
 
         assertTrue("reopen 后 trajectory driver zone 仍空",
                 db2.trajectoryDao().queryBySessionScoped(
                         "demo-driver", "DRIVER", "session-" + suffix, 10).isEmpty());
-        assertTrue("reopen 后 session_history driver zone 仍空",
-                db2.sessionHistoryDao().queryByUserZone("demo-driver", "DRIVER", 10).isEmpty());
-        assertTrue("reopen 后 memory_record driver zone 仍空",
-                db2.memoryRecordDao().queryByUserZoneLayer("demo-driver", "DRIVER", "preference").isEmpty());
+        assertEquals(1, db2.sessionHistoryDao().queryByUserZone("demo-driver", "DRIVER", 10).size());
+        assertEquals(1, db2.memoryRecordDao().queryByUserZoneLayer("demo-driver", "DRIVER", "preference").size());
         db2.close();
     }
 

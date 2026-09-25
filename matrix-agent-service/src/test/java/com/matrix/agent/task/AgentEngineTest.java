@@ -260,7 +260,7 @@ public final class AgentEngineTest {
 
     @Test
     public void memoryIsWrittenAndReadBack() {
-        AgentOutcome saved = engine.execute(new AgentRequest("记住我喜欢24度", Actor.DRIVER));
+        AgentOutcome saved = engine.execute(AgentRequest.builder("记住我喜欢24度", Actor.DRIVER).memorySaveAllowed(true).build());
         AgentOutcome read = engine.execute(new AgentRequest("我喜欢多少度", Actor.DRIVER));
 
         assertEquals(TaskState.SUCCEEDED, saved.getFinalState());
@@ -1003,12 +1003,12 @@ public final class AgentEngineTest {
      */
     @Test
     public void internalResultsHoldRealMemoryValueWhileAuditResultsRedacted() {
-        AgentOutcome saved = engine.execute(new AgentRequest("记住我喜欢24度", Actor.DRIVER));
+        AgentOutcome saved = engine.execute(AgentRequest.builder("记住我喜欢24度", Actor.DRIVER).memorySaveAllowed(true).build());
 
         // 内部可信域:真实值
         assertEquals("24", saved.getInternalResults().get(0).getObservedState().get("preferred_temperature"));
         assertTrue("internal message must contain real value",
-                saved.getInternalResults().get(0).getMessage().contains("24℃"));
+                saved.getInternalResults().get(0).getMessage().contains("已保存这项偏好"));
         // Audit 视图(派生自 Trajectory):占位符
         assertEquals(AuditRedactor.MEMORY_MESSAGE_PLACEHOLDER,
                 saved.getResults().get(0).getMessage());
@@ -1105,7 +1105,7 @@ public final class AgentEngineTest {
      */
     @Test
     public void memoryPreferenceValueIsRedactedBySchema() {
-        AgentOutcome outcome = engine.execute(new AgentRequest("记住我喜欢24度", Actor.DRIVER));
+        AgentOutcome outcome = engine.execute(AgentRequest.builder("记住我喜欢24度", Actor.DRIVER).memorySaveAllowed(true).build());
 
         for (AgentIteration iter : outcome.getTrajectory().getIterations()) {
             for (AgentIteration.ToolCallSnapshot snapshot : iter.getToolCalls()) {
@@ -1190,7 +1190,7 @@ public final class AgentEngineTest {
 
         // 先保存一个偏好,然后再触发 get
         engine.execute(AgentRequest.builder("记住我喜欢24度", Actor.DRIVER)
-                .sessionId("redact-check").build());
+                .sessionId("redact-check").memorySaveAllowed(true).build());
         AgentOutcome outcome = createEngine(gateway, provider)
                 .execute(AgentRequest.builder("我喜欢多少度", Actor.DRIVER)
                         .sessionId("redact-check").build());

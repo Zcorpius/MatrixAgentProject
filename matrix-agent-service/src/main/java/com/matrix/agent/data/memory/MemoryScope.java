@@ -18,12 +18,11 @@ import java.util.Objects;
  * <p><b>双维度隔离边界</b>:
  * <ul>
  *   <li>PREFERENCE 层({@link LegacyPreferenceMemorySource}):以本 scope 过滤。</li>
- *   <li>WORKING 层({@link SessionContextWorkingMemory}):按 sessionId 隔离,sessionId
- *       已拆为 "demo-driver" / "demo-passenger",等价于 userId 隔离。</li>
- *   <li>EPISODIC / SEMANTIC:占位返回空,接 Room 时启用 zone 维度。</li>
+ *   <li>WORKING 层只投影 owner/zone 绑定会话中的核验结构化状态。</li>
+ *   <li>EPISODIC / SEMANTIC:Room 查询同时按 userId 与规范 zone 过滤。</li>
  * </ul>
- * 同一 userId 在主驾屏 / 副驾屏的 Preference 已独立。老版本遗留数据固定在 GLOBAL，
- * 不会被错误投射进任一座舱。
+ * 同一 userId 在主驾屏 / 副驾屏的 Preference 独立。已确认归属的旧数据在 v14
+ * 迁移中映射到对应座舱；无法确认归属的旧行不进入可召回域。
  */
 public final class MemoryScope {
     private final String userId;

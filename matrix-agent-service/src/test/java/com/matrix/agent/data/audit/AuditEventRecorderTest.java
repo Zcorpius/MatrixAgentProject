@@ -170,6 +170,8 @@ public final class AuditEventRecorderTest {
     }
 
     private static final class FakeDao implements AuditEventDao {
+        @Override public int deleteByUser(String userId) { return 0; }
+
         final List<AuditEventEntity> store = new ArrayList<>();
 
         @Override
@@ -210,6 +212,8 @@ public final class AuditEventRecorderTest {
     }
 
     private static final class ThrowingDao implements AuditEventDao {
+        @Override public int deleteByUser(String userId) { return 0; }
+
         @Override public void insert(AuditEventEntity entity) {
             throw new RuntimeException("simulated SQL failure");
         }

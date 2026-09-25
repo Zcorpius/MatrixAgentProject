@@ -73,17 +73,22 @@ public final class MemorySavePromptInjectionRejectionTest {
         final AtomicInteger writeCount = new AtomicInteger();
 
         @Override
-        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
+        public void writeEpisodic(com.matrix.agent.identity.AgentRequest request, com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(com.matrix.agent.identity.AgentRequest request, String key, String value, double score) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            String sourceSessionId = request.getSessionId();
+            long requestEpoch = request.getEpoch();
             writeCount.incrementAndGet();
             return true;
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(com.matrix.agent.identity.AgentRequest request, String key) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
             return null;
         }
     }

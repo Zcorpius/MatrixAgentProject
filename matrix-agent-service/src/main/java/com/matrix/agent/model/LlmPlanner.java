@@ -10,6 +10,7 @@ import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.identity.ActorUsers;
 import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.memory.MemoryLayer;
+import com.matrix.agent.data.memory.MemoryKeyCatalog;
 import com.matrix.agent.data.memory.MemoryRecaller;
 import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
@@ -148,16 +149,13 @@ public final class LlmPlanner {
         String preferenceBlock = preferenceKeysFor(scope);
         if (memoryRecaller == null) return preferenceBlock;
         try {
-            List<MemorySnippet> recalled = memoryRecaller.recall(scope, null, "", 8);
+            List<MemorySnippet> recalled = memoryRecaller.recall(scope, request.getSessionId(), request.getText(), 8);
             if (recalled == null || recalled.isEmpty()) return preferenceBlock;
-            StringBuilder extra = new StringBuilder();
-            for (MemorySnippet snippet : recalled) {
-                if (snippet.getLayer() == MemoryLayer.PREFERENCE) continue;
-                extra.append("\n- [").append(snippet.getLayer().wireValue()).append("] ")
-                        .append(snippet.getKey());
-            }
-            if (extra.length() == 0) return preferenceBlock;
-            return preferenceBlock + "\n其他已召回的 Memory:" + extra;
+            List<MemorySnippet> extra = recalled.stream()
+                    .filter(snippet -> snippet.getLayer() != MemoryLayer.PREFERENCE).toList();
+            if (extra.isEmpty()) return preferenceBlock;
+            return preferenceBlock + "\n其他已召回的 Memory:"
+                    + com.matrix.agent.task.prompt.DefaultPromptBuilder.formatRecalledMemory(extra);
         } catch (Exception error) {
             Log.w(TAG, "[LlmPlanner] memoryRecaller lookup failed: " + error.getMessage());
             return preferenceBlock;
@@ -173,10 +171,21 @@ public final class LlmPlanner {
             Log.d(TAG, "[LlmPlanner] savedKeys scope=" + scope + " -> empty");
                 return "（无）";
             }
-            Set<String> sorted = new TreeSet<>(all.keySet());
-            String joined = String.join(", ", sorted);
+            Set<String> sorted = new TreeSet<>();
+            for (String key : all.keySet()) {
+                String projected = MemoryKeyCatalog.promptKey(MemoryLayer.PREFERENCE, key);
+                if (projected != null) sorted.add(projected);
+            }
+            StringBuilder joinedBuilder = new StringBuilder();
+            int count = 0;
+            for (String key : sorted) {
+                if (count >= 8 || joinedBuilder.length() + key.length() > 512) break;
+                if (count++ > 0) joinedBuilder.append(", ");
+                joinedBuilder.append(key);
+            }
+            String joined = joinedBuilder.toString();
             Log.d(TAG, "[LlmPlanner] savedKeys scope=" + scope
-                    + " count=" + sorted.size() + " keys=" + joined);
+                    + " count=" + sorted.size());
             return "查询时必须使用这些精确字符串之一:[" + joined + "]";
         } catch (Exception error) {
             Log.w(TAG, "[LlmPlanner] savedKeys lookup failed: " + error.getMessage());

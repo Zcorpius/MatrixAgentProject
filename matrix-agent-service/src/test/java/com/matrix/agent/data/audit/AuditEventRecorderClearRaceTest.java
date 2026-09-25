@@ -196,6 +196,8 @@ public final class AuditEventRecorderClearRaceTest {
     }
 
     private static final class FakeDao implements AuditEventDao {
+        @Override public int deleteByUser(String userId) { return 0; }
+
         final List<AuditEventEntity> store = new ArrayList<>();
 
         @Override

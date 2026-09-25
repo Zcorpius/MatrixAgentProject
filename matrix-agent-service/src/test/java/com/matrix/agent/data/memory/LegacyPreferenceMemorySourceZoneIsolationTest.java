@@ -14,8 +14,8 @@ public final class LegacyPreferenceMemorySourceZoneIsolationTest {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
         MemoryScope driver = new MemoryScope("same-account", VehicleZone.DRIVER);
         MemoryScope passenger = new MemoryScope("same-account", VehicleZone.PASSENGER);
-        store.putPreference(driver, "seat", "driver-profile");
-        store.putPreference(passenger, "seat", "passenger-profile");
+        store.putPreferenceChecked(driver, "seat", "driver-profile", store.currentEpoch());
+        store.putPreferenceChecked(passenger, "seat", "passenger-profile", store.currentEpoch());
 
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 

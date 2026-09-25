@@ -106,8 +106,8 @@ public final class AgentEngineMemoryRecallerIntegrationTest {
                 gateway.capturedSystemPrompt.contains("[preference] user.preference.temperature"));
         assertTrue("systemPrompt 必须含 EPISODIC snippet key",
                 gateway.capturedSystemPrompt.contains("[episodic] session.last_navigation"));
-        assertTrue("systemPrompt 必须含 WORKING snippet key",
-                gateway.capturedSystemPrompt.contains("[working] turn.last_query"));
+        assertTrue("systemPrompt 不应含 Working 占位 key",
+                !gateway.capturedSystemPrompt.contains("[working] turn.last_query"));
     }
 
     /**

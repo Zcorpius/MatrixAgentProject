@@ -18,6 +18,7 @@ public final class UserDataResetCoordinator {
     private static final String TAG = "MatrixAgent";
     private static final String DRIVER_USER = ActorUsers.USER_DRIVER;
     private static final String PASSENGER_USER = ActorUsers.USER_PASSENGER;
+    private static final String GLOBAL_USER = ActorUsers.USER_GLOBAL;
 
     private final MemoryStore memoryStore;
     private final SessionManager sessionManager;
@@ -27,6 +28,9 @@ public final class UserDataResetCoordinator {
     private volatile AuditEventRecorder auditEventRecorder = AuditEventRecorder.NOOP;
     /** 对话表清理（clearUserData 覆盖范围）；null 时记 warn 不阻塞主流程。 */
     private volatile Runnable conversationClearHook;
+    private volatile java.util.function.BooleanSupplier legacyMemoryClearHook;
+    private volatile Runnable resetBeginHook;
+    private volatile Runnable resetCompleteHook;
 
     public UserDataResetCoordinator(MemoryStore memoryStore, SessionManager sessionManager,
             AuditRepository auditRepository, InFlightTaskRegistry inFlightTasks) {
@@ -42,6 +46,13 @@ public final class UserDataResetCoordinator {
     }
     public void setConversationClearHook(Runnable hook) {
         conversationClearHook = hook;
+    }
+    public void setLegacyMemoryClearHook(java.util.function.BooleanSupplier hook) {
+        legacyMemoryClearHook = hook;
+    }
+    public void setResetLifecycleHooks(Runnable begin, Runnable complete) {
+        resetBeginHook = begin;
+        resetCompleteHook = complete;
     }
     public synchronized void addConversationClearHook(Runnable hook) {
         if (hook == null) return;
@@ -64,31 +75,97 @@ public final class UserDataResetCoordinator {
     }
 
     public ClearUserDataOutcome clear() {
-        if (memoryStore == null) throw new IllegalStateException("memory store unavailable");
+        Runnable beginHook = resetBeginHook;
+        if (beginHook != null) beginHook.run();
+        ClearOutcome unattempted = ClearOutcome.notApplicable();
+        ClearUserDataOutcome.DomainStatus pending = beginHook == null
+                ? ClearUserDataOutcome.DomainStatus.FAILED
+                : ClearUserDataOutcome.DomainStatus.PENDING;
+        if (memoryStore == null) {
+            return new ClearUserDataOutcome(unattempted, unattempted, unattempted,
+                    pending, pending, pending, pending, pending);
+        }
         Log.i(TAG, "[Reset] begin activeTasks=" + inFlightTasks.size());
         inFlightTasks.cancelAll();
-        long epoch = memoryStore.clearUserDataAndBump(DRIVER_USER, PASSENGER_USER);
+        long epoch;
+        try {
+            epoch = memoryStore.clearUsersAndBump(
+                    ActorUsers.allKnownUserIds());
+        } catch (RuntimeException failure) {
+            Log.w(TAG, "[Reset] memory clear incomplete cause="
+                    + failure.getClass().getSimpleName());
+            return new ClearUserDataOutcome(unattempted, unattempted, unattempted,
+                    pending, pending, pending, pending, pending);
+        }
+        java.util.function.BooleanSupplier legacyHook = legacyMemoryClearHook;
+        try {
+            if (legacyHook != null && !legacyHook.getAsBoolean()) {
+                throw new IllegalStateException("legacy memory source could not be cleared");
+            }
+        } catch (RuntimeException failure) {
+            return new ClearUserDataOutcome(unattempted, unattempted, unattempted,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.FAILED, pending, pending, pending);
+        }
         AuditEventRecorder recorder = auditEventRecorder;
-        try { recorder.advanceEpoch(epoch); } catch (Throwable ignored) { }
         SteerMailbox mailbox = steerMailbox;
-        if (mailbox != null) mailbox.advanceEpoch(epoch);
-        inFlightTasks.awaitDrain(1_000L);
-        if (mailbox != null) mailbox.clearAll();
-        sessionManager.clear();
-        // 对话正文与 link 属于同级用户数据。钩子失败不能伪装成完整清理：主流程无法回滚
-        // 已清 memory，但必须向调用者暴露失败，避免敏感对话悄然残留。
-        Runnable conversationHook = conversationClearHook;
-        if (conversationHook != null) {
-            conversationHook.run();
-        } else {
-            Log.w(TAG, "[Reset] conversation clear hook unavailable");
+        try {
+            recorder.advanceEpoch(epoch);
+            if (mailbox != null) mailbox.advanceEpoch(epoch);
+            inFlightTasks.awaitDrain(1_000L);
+            if (mailbox != null) mailbox.clearAll();
+            sessionManager.clear();
+            Runnable conversationHook = conversationClearHook;
+            if (conversationHook != null) {
+                conversationHook.run();
+            } else if (legacyHook != null) {
+                throw new IllegalStateException("conversation clear hook unavailable");
+            }
+        } catch (RuntimeException failure) {
+            Log.w(TAG, "[Reset] conversation/session clear incomplete cause="
+                    + failure.getClass().getSimpleName());
+            return new ClearUserDataOutcome(unattempted, unattempted, unattempted,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.FAILED, pending, pending);
         }
         try {
             recorder.dropByUserZone(DRIVER_USER, "DRIVER", epoch);
             recorder.dropByUserZone(PASSENGER_USER, "PASSENGER", epoch);
-        } catch (Throwable ignored) { }
-        return new ClearUserDataOutcome(clearAudit(DRIVER_USER, "DRIVER"),
-                clearAudit(PASSENGER_USER, "PASSENGER"));
+            recorder.dropByUserZone(GLOBAL_USER, "GLOBAL", epoch);
+        } catch (RuntimeException failure) {
+            Log.w(TAG, "[Reset] queued audit clear incomplete cause="
+                    + failure.getClass().getSimpleName());
+            return new ClearUserDataOutcome(unattempted, unattempted, unattempted,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.CLEARED,
+                    ClearUserDataOutcome.DomainStatus.FAILED, pending);
+        }
+        ClearUserDataOutcome outcome = new ClearUserDataOutcome(clearAudit(DRIVER_USER, "DRIVER"),
+                clearAudit(PASSENGER_USER, "PASSENGER"), clearAudit(GLOBAL_USER, "GLOBAL"),
+                ClearUserDataOutcome.DomainStatus.CLEARED,
+                ClearUserDataOutcome.DomainStatus.CLEARED,
+                ClearUserDataOutcome.DomainStatus.CLEARED,
+                ClearUserDataOutcome.DomainStatus.PENDING, pending);
+        ClearUserDataOutcome.DomainStatus auditStatus = outcome.getDriverAudit().isFailure()
+                || outcome.getPassengerAudit().isFailure() || outcome.getGlobalAudit().isFailure()
+                ? ClearUserDataOutcome.DomainStatus.FAILED
+                : ClearUserDataOutcome.DomainStatus.CLEARED;
+        ClearUserDataOutcome.DomainStatus markerStatus = pending;
+        if (auditStatus == ClearUserDataOutcome.DomainStatus.CLEARED) {
+            try {
+                if (resetCompleteHook != null) resetCompleteHook.run();
+                markerStatus = ClearUserDataOutcome.DomainStatus.CLEARED;
+            } catch (RuntimeException failure) {
+                Log.w(TAG, "[Reset] completion marker pending cause="
+                        + failure.getClass().getSimpleName());
+            }
+        }
+        return new ClearUserDataOutcome(outcome.getDriverAudit(), outcome.getPassengerAudit(),
+                outcome.getGlobalAudit(), ClearUserDataOutcome.DomainStatus.CLEARED,
+                ClearUserDataOutcome.DomainStatus.CLEARED,
+                ClearUserDataOutcome.DomainStatus.CLEARED, auditStatus, markerStatus);
     }
 
     private ClearOutcome clearAudit(String userId, String zone) {

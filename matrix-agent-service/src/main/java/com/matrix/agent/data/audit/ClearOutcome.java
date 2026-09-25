@@ -7,7 +7,7 @@ package com.matrix.agent.data.audit;
  * 指出"偏好和会话已删、Audit 可能仍在,但用户得到完整成功提示"的语义错位。
  *
  * <p>本类把"删了几张表 / 部分失败 / 完全失败 / 不适用"四态显式化,让 Repository
- * 能组合出 {@link com.matrix.agent.data.ClearUserDataOutcome} 透传给 ViewModel,
+ * 能组合出 {@link com.matrix.agent.task.scheduler.ClearUserDataOutcome} 透传给 ViewModel,
  * ViewModel 据此选择"已清空" vs "上下文已清,审计删除失败,请稍后重试点击清空"文案。
  *
  * <p><b>fail-open vs fail-closed 边界</b>:
@@ -96,7 +96,7 @@ public final class ClearOutcome {
 
     /** PARTIAL_FAILURE 或 FAILURE 视为 audit 维度失败,ViewModel 应提示用户重试。 */
     public boolean isFailure() {
-        return status == Status.PARTIAL_FAILURE || status == Status.FAILURE;
+        return status != Status.SUCCESS;
     }
 
     @Override

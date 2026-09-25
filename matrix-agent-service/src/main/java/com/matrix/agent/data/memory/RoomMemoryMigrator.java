@@ -14,23 +14,20 @@ import java.util.Map;
 /**
  * SharedPreferences 历史 preference → Room memory_record 一次性迁移。
  *
- * <p>启动期由 MemoryRuntimeGraph 调用一次,迁移完成后清空 SP 文件
- * (避免双源失步)。迁移幂等——已迁移(SP 为空)直接跳过。
+ * <p>启动期由 MemoryRuntimeGraph 调用。Room 中的完成标记是一次性导入边界；
+ * 标记存在时即使旧 SP 清除失败也绝不重放数据，并且持久化装配会显式降级直到残留 SP 可清除。
  *
  * <p><b>迁移策略</b>(原子 transaction + 条件 clear SP):
  * <ul>
- *   <li>SP key 格式 {@code userId + "." + key}——切分出 userId / prefKey,写入 Room
- *       memory_record(userId, zone="global", layer="preference", key=prefKey, value)。</li>
+ *   <li>SP key 格式 {@code userId + "." + key}。可确认的 demo-driver/passenger
+ *       分别进入 driver/passenger；其他历史 owner 保持 global 域。</li>
  *   <li>SP EPOCH_KEY(值 Long/Integer)→ Room memory_record(__system__, __system__, preference,
  *       __epoch__, long.toString(value))。RoomMemoryStore 构造时 queryByKey 加载。</li>
- *   <li>SP 历史 zone-less 偏好 zone 默认 "global"(与 MemoryScope.ofLegacy 一致)。</li>
  *   <li><b>全部 entities 收集后用同一次 Room transaction 写入</b>——任一 upsert 失败 transaction
  *       rollback,<b>SP 不清空</b>(下次启动重试);仅当 transaction 全部成功才 {@code spSource.clear()}。</li>
  * </ul>
  *
- * <p><b>失败场景</b>:Room transaction 抛异常(SQLCipher 不可用 / 磁盘满 / 单条 upsert 约束冲突)
- * → catch + log + <b>不清空 SP</b>,启动继续。RoomMemoryStore 仍构造(基于现有 Room 数据),
- * SP 留下次启动重试——迁移幂等。
+ * <p><b>失败场景</b>:事务或 SP 清除失败时返回 false；装配层不会暴露持久化记忆源。
  *
  * <p><b>测试性</b>:SP 读写通过 {@link SpSource} 抽象,JVM 测试注入 in-memory fake;
  * 生产环境通过 {@link #fromSharedPreferences} 工厂方法包装真实 {@link SharedPreferences}。
@@ -39,6 +36,7 @@ public final class RoomMemoryMigrator {
     private static final String TAG = "MatrixAgent";
     public static final String SP_FILE_NAME = "matrix_agent_memory";
     public static final String SP_EPOCH_KEY = "__epoch__";
+    public static final String MIGRATION_MARKER_KEY = "__legacy_migration_complete__";
 
     /** SP 数据源抽象——让 Migrator 在 JVM 测试里可注入 in-memory fake。 */
     public interface SpSource {
@@ -75,17 +73,29 @@ public final class RoomMemoryMigrator {
         }, dao, transactionRunner);
     }
 
+    public static boolean clearLegacySharedPreferences(Context context) {
+        return context.getApplicationContext().getSharedPreferences(SP_FILE_NAME,
+                Context.MODE_PRIVATE).edit().clear().commit();
+    }
+
     /**
-     * 执行 SP → Room 迁移——幂等,失败 best-effort 不抛,SP 保留供下次重试。
+     * 执行 SP → Room 迁移。返回 false 表示残留来源尚未安全处理，调用方必须降级。
      *
      * <p>全部 entities 收集后用同一次 Room transaction 写入,任一失败 transaction
      * rollback + SP 不清空,杜绝"部分写入成功后 SP 被清空"的数据丢失窗口。
      */
-    public void migrate() {
+    public boolean migrate() {
         Map<String, ?> all = spSource.getAll();
+        if (migrationCompleted()) {
+            if (!all.isEmpty() && !spSource.clear()) {
+                Log.w(TAG, "[RoomMemoryMigrator] legacy source could not be removed; import remains disabled");
+                return false;
+            }
+            return true;
+        }
         if (all.isEmpty()) {
-            Log.i(TAG, "[RoomMemoryMigrator] SP empty, skip");
-            return;
+            markComplete();
+            return true;
         }
 
         long spEpoch = 0L;
@@ -113,45 +123,66 @@ public final class RoomMemoryMigrator {
             entities.add(buildEpochEntity(spEpoch));
         }
 
-        if (entities.isEmpty()) {
-            // SP 仅含非法格式 entries —— 视为已迁移,清 SP 避免下次重复扫
-            boolean cleared = spSource.clear();
-            Log.i(TAG, "[RoomMemoryMigrator] no valid entities, spCleared=" + cleared);
-            return;
-        }
-
         try {
-            if (transactionRunner != null) {
-                transactionRunner.runInTransaction(() -> {
-                    for (MemoryRecordEntity entity : entities) {
-                        dao.upsert(entity);
-                    }
-                });
-            } else {
+            if (transactionRunner == null) throw new IllegalStateException("migration requires transaction");
+            transactionRunner.runInTransaction(() -> {
+                if (migrationCompleted()) return;
                 for (MemoryRecordEntity entity : entities) {
-                    dao.upsert(entity);
+                    MemoryRecordEntity existing = dao.queryByKey(entity.userId, entity.zone,
+                            entity.layer, entity.key);
+                    if (existing == null) {
+                        dao.upsert(entity);
+                    } else if (RoomMemoryStore.EPOCH_KEY.equals(entity.key)) {
+                        long oldEpoch = Long.parseLong(entity.value);
+                        long currentEpoch = Long.parseLong(existing.value);
+                        if (oldEpoch > currentEpoch) dao.upsert(entity);
+                    }
                 }
-            }
+                dao.upsert(markerEntity());
+            });
         } catch (Exception ex) {
             Log.w(TAG, "[RoomMemoryMigrator] migrate transaction FAILED, SP retained for retry"
                     + " entities=" + entities.size() + " cause=" + ex.getMessage());
-            return;
+            return false;
         }
 
         boolean cleared = spSource.clear();
         Log.i(TAG, "[RoomMemoryMigrator] migrated prefs=" + entities.size()
                 + " epoch=" + spEpoch + " spCleared=" + cleared);
+        return cleared;
     }
 
     private MemoryRecordEntity buildPreferenceEntity(String userId, String key, String value) {
         MemoryRecordEntity entity = new MemoryRecordEntity();
         entity.userId = userId;
-        entity.zone = RoomMemoryStore.DEFAULT_ZONE;
+        entity.zone = "demo-driver".equals(userId) ? "driver"
+                : "demo-passenger".equals(userId) ? "passenger" : RoomMemoryStore.DEFAULT_ZONE;
         entity.layer = RoomMemoryStore.PREFERENCE_LAYER;
         entity.key = key;
         entity.value = value;
         entity.capturedAtMs = System.currentTimeMillis();
         return entity;
+    }
+
+    private boolean migrationCompleted() {
+        return dao.queryByKey(RoomMemoryStore.SYSTEM_USER, RoomMemoryStore.SYSTEM_ZONE,
+                RoomMemoryStore.PREFERENCE_LAYER, MIGRATION_MARKER_KEY) != null;
+    }
+
+    private void markComplete() {
+        if (transactionRunner == null) throw new IllegalStateException("migration requires transaction");
+        transactionRunner.runInTransaction(() -> dao.upsert(markerEntity()));
+    }
+
+    public static MemoryRecordEntity markerEntity() {
+        MemoryRecordEntity marker = new MemoryRecordEntity();
+        marker.userId = RoomMemoryStore.SYSTEM_USER;
+        marker.zone = RoomMemoryStore.SYSTEM_ZONE;
+        marker.layer = RoomMemoryStore.PREFERENCE_LAYER;
+        marker.key = MIGRATION_MARKER_KEY;
+        marker.value = "1";
+        marker.capturedAtMs = System.currentTimeMillis();
+        return marker;
     }
 
     private MemoryRecordEntity buildEpochEntity(long epochValue) {

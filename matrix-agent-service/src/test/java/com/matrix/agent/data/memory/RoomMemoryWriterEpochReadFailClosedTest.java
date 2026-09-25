@@ -65,7 +65,7 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
         // 不抛 —— fail-log;不写 —— fail-closed
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("throwing memoryDao → sessionDao.insert 必须 0 次(readEpoch 失败 → 事务内 return)",
                 0, sessionDao.insertCount.get());
@@ -77,8 +77,7 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
         ThrowingMemoryDao memoryDao = new ThrowingMemoryDao();
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
-        boolean accepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "allergy.peanut", "严重", 1.0, "s1", 0L);
+        boolean accepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "s1", 0L), "allergy.peanut", "严重", 1.0);
 
         assertFalse("throwing memoryDao → writeSemantic 返回 false(fail-closed)", accepted);
         assertEquals("memoryDao.upsert 必须 0 次(readEpoch 失败 → 事务内 return)",
@@ -98,7 +97,7 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("row 缺失 + requestEpoch=0 → 合法初始,sessionDao.insert 1 次",
                 1, sessionDao.insertCount.get());
@@ -106,6 +105,12 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
     }
 
     private static final class CountingSessionDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final AtomicInteger insertCount = new AtomicInteger();
         final List<SessionHistoryEntity> store = new ArrayList<>();
         @Override public void insert(SessionHistoryEntity entity) {
@@ -126,6 +131,13 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
      * (readEpoch 失败时 upsert 0 次,断言会暴露"路径错误")。
      */
     private static final class ThrowingMemoryDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final AtomicInteger upsertCount = new AtomicInteger();
         @Override public void upsert(MemoryRecordEntity entity) {
             upsertCount.incrementAndGet();
@@ -143,6 +155,13 @@ public final class RoomMemoryWriterEpochReadFailClosedTest {
 
     /** 空 store 的 Fake DAO——queryByKey 永远返回 null(row 缺失 → 0L 合法初始路径)。 */
     private static final class FakeEmptyMemoryDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         @Override public void upsert(MemoryRecordEntity entity) { }
         @Override public List<MemoryRecordEntity> queryByUserZoneLayer(String u, String z, String l) {
             return Collections.emptyList();

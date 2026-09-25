@@ -17,6 +17,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import com.matrix.agent.data.db.MatrixDatabase;
+import com.matrix.agent.identity.VehicleZone;
 
 /**
  * RoomMemoryWriter 真实 Room _Impl.java SQL 验证
@@ -61,25 +62,28 @@ public final class MemorySemanticSaveIntegrationTest {
         RoomMemoryWriter writer = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
 
-        boolean accepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "allergy.peanut", "严重过敏", 1.0, "sess-001", 0L);
+        boolean accepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-001", 0L), "allergy.peanut", "严重过敏", 1.0);
         assertTrue(accepted);
 
-        String value = writer.readSemantic("demo-driver", "DRIVER", "allergy.peanut");
+        String value = writer.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "allergy.peanut");
         assertEquals("严重过敏", value);
+        assertEquals("driver", db.memoryRecordDao().queryByKey("demo-driver", "driver",
+                "semantic", "allergy.peanut").zone);
+        assertEquals("allergy.peanut", new SemanticMemorySourceImpl(db.memoryRecordDao())
+                .recallSemantic(new MemoryScope("demo-driver", VehicleZone.DRIVER),
+                        "我对花生过敏吗", 5).get(0).getKey());
     }
 
     @Test
     public void valueSurvivesWriterRecreate() {
         RoomMemoryWriter writer1 = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
-        writer1.writeSemantic("demo-driver", "DRIVER",
-                "fact.daughter_name", "小红", 1.0, "sess-001", 0L);
+        writer1.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-001", 0L), "fact.daughter_name", "小红", 1.0);
 
         // 模拟 process 重启:writer 重新构造,database 仍是同一个 Room 实例
         RoomMemoryWriter writer2 = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
-        String value = writer2.readSemantic("demo-driver", "DRIVER", "fact.daughter_name");
+        String value = writer2.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "fact.daughter_name");
 
         assertEquals("小红", value);
     }
@@ -89,10 +93,10 @@ public final class MemorySemanticSaveIntegrationTest {
         RoomMemoryWriter writer = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
 
-        writer.writeSemantic("demo-driver", "DRIVER", "work.role", "产品经理", 1.0, "sess-001", 0L);
-        writer.writeSemantic("demo-driver", "DRIVER", "work.role", "工程师", 1.0, "sess-002", 0L);
+        writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-001", 0L), "work.role", "产品经理", 1.0);
+        writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-002", 0L), "work.role", "工程师", 1.0);
 
-        String value = writer.readSemantic("demo-driver", "DRIVER", "work.role");
+        String value = writer.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "work.role");
         assertEquals("REPLACE 应覆盖旧值", "工程师", value);
     }
 
@@ -100,11 +104,11 @@ public final class MemorySemanticSaveIntegrationTest {
     public void userZoneIsolation() {
         RoomMemoryWriter writer = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
-        writer.writeSemantic("demo-driver", "DRIVER", "allergy.peanut", "过敏", 1.0, "s1", 0L);
-        writer.writeSemantic("demo-passenger", "PASSENGER", "allergy.peanut", "无", 1.0, "s2", 0L);
+        writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "s1", 0L), "allergy.peanut", "过敏", 1.0);
+        writer.writeSemantic(MemoryTestRequests.from("demo-passenger", "PASSENGER", "s2", 0L), "allergy.peanut", "无", 1.0);
 
-        String driverValue = writer.readSemantic("demo-driver", "DRIVER", "allergy.peanut");
-        String passengerValue = writer.readSemantic("demo-passenger", "PASSENGER", "allergy.peanut");
+        String driverValue = writer.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "allergy.peanut");
+        String passengerValue = writer.readSemantic(MemoryTestRequests.from("demo-passenger", "PASSENGER", null, 0L), "allergy.peanut");
 
         assertEquals("driver / passenger 同 key 隔离", "过敏", driverValue);
         assertEquals("driver / passenger 同 key 隔离", "无", passengerValue);
@@ -115,7 +119,7 @@ public final class MemorySemanticSaveIntegrationTest {
         RoomMemoryWriter writer = new RoomMemoryWriter(
                 db.sessionHistoryDao(), db.memoryRecordDao(), null, db::runInTransaction);
 
-        String value = writer.readSemantic("demo-driver", "DRIVER", "not.existing");
+        String value = writer.readSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", null, 0L), "not.existing");
         assertNull(value);
     }
 }

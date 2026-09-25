@@ -32,28 +32,28 @@ public final class PreferenceMemorySourceBridgeTest {
     @Test
     public void returnsAllPreferencesUpToMaxItems() {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
-        store.putPreference("demo-driver", "home_address", "公司");
-        store.putPreference("demo-driver", "preferred_temperature", "24");
-        store.putPreference("demo-driver", "favorite_music", "jazz");
+        store.putPreferenceChecked("demo-driver", "home_address", "公司", store.currentEpoch());
+        store.putPreferenceChecked("demo-driver", "preferred_temperature", "24", store.currentEpoch());
+        store.putPreferenceChecked("demo-driver", "favorite_music", "jazz", store.currentEpoch());
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 
         List<MemorySnippet> result = source.recallPreference(
-                MemoryScope.ofLegacy("demo-driver"), "查电量", 2);
+                MemoryScope.ofLegacy("demo-driver"), "我家地址和温度", 2);
 
         assertEquals(2, result.size());
         assertEquals(MemoryLayer.PREFERENCE, result.get(0).getLayer());
-        assertEquals("home_address", result.get(0).getKey());
-        assertEquals("公司", result.get(0).getValue());
-        assertEquals("preferred_temperature", result.get(1).getKey());
-        assertEquals("24", result.get(1).getValue());
+        assertEquals("preferred_temperature", result.get(0).getKey());
+        assertEquals("24", result.get(0).getValue());
+        assertEquals("home_address", result.get(1).getKey());
+        assertEquals("公司", result.get(1).getValue());
     }
 
     @Test
     public void preferenceKeySetMatchesGetAllPreferences() {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
-        store.putPreference("demo-driver", "k1", "v1");
-        store.putPreference("demo-driver", "k2", "v2");
-        store.putPreference("demo-driver", "k3", "v3");
+        store.putPreferenceChecked("demo-driver", "k1", "v1", store.currentEpoch());
+        store.putPreferenceChecked("demo-driver", "k2", "v2", store.currentEpoch());
+        store.putPreferenceChecked("demo-driver", "k3", "v3", store.currentEpoch());
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 
         List<MemorySnippet> result = source.recallPreference(
@@ -67,10 +67,36 @@ public final class PreferenceMemorySourceBridgeTest {
     }
 
     @Test
+    public void relevanceThenExplicitOriginThenRecencyControlsRanking() {
+        InMemoryMemoryStore store = new InMemoryMemoryStore() {
+            @Override public java.util.List<PreferenceRecord> getPreferenceRecords(MemoryScope scope) {
+                return java.util.List.of(
+                        new PreferenceRecord("home_address", "旧值", 500, false),
+                        new PreferenceRecord("preferred_temperature", "23", 100, true),
+                        new PreferenceRecord("work_address", "公司", 900, false),
+                        new PreferenceRecord("common_destinations", "学校", 200, true));
+            }
+        };
+        LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
+
+        List<MemorySnippet> relevant = source.recallPreference(
+                MemoryScope.ofLegacy("demo-driver"), "温度是多少", 4);
+        assertEquals("preferred_temperature", relevant.get(0).getKey());
+        assertEquals(100, relevant.get(0).getCapturedAtMillis());
+
+        List<MemorySnippet> fallback = source.recallPreference(
+                MemoryScope.ofLegacy("demo-driver"), "查询电量", 4);
+        assertEquals("common_destinations", fallback.get(0).getKey());
+        assertEquals("preferred_temperature", fallback.get(1).getKey());
+        assertEquals("work_address", fallback.get(2).getKey());
+        assertEquals("home_address", fallback.get(3).getKey());
+    }
+
+    @Test
     public void userIdIsolationPreserved() {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
-        store.putPreference("demo-driver", "shared_key", "driver-value");
-        store.putPreference("demo-passenger", "shared_key", "passenger-value");
+        store.putPreferenceChecked("demo-driver", "shared_key", "driver-value", store.currentEpoch());
+        store.putPreferenceChecked("demo-passenger", "shared_key", "passenger-value", store.currentEpoch());
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 
         List<MemorySnippet> driverResult = source.recallPreference(
@@ -89,7 +115,7 @@ public final class PreferenceMemorySourceBridgeTest {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
         MemoryScope driver = new MemoryScope("demo-driver", VehicleZone.DRIVER);
         MemoryScope passenger = new MemoryScope("demo-driver", VehicleZone.PASSENGER);
-        store.putPreference(driver, "home", "公司");
+        store.putPreferenceChecked(driver, "home", "公司", store.currentEpoch());
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 
         List<MemorySnippet> driverScoped = source.recallPreference(
@@ -108,7 +134,7 @@ public final class PreferenceMemorySourceBridgeTest {
     @Test
     public void maxItemsZeroReturnsEmpty() {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
-        store.putPreference("demo-driver", "k", "v");
+        store.putPreferenceChecked("demo-driver", "k", "v", store.currentEpoch());
         LegacyPreferenceMemorySource source = new LegacyPreferenceMemorySource(store);
 
         List<MemorySnippet> result = source.recallPreference(

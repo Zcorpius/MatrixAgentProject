@@ -71,7 +71,7 @@ public final class DefaultPromptBuilderTest {
         assertTrue("召回段必须含标题", memoryText.contains("已召回的 Memory"));
         assertTrue("召回段必须含 [preference] key", memoryText.contains("[preference] user.preference.temperature"));
         assertTrue("召回段必须含 [episodic] key", memoryText.contains("[episodic] session.last_cmd"));
-        assertTrue("召回段必须含 [working] key", memoryText.contains("[working] turn.last_query"));
+        assertTrue("Working 占位 key 不可进入 prompt", !memoryText.contains("[working] turn.last_query"));
         // 不含 value——避免 prompt injection
         assertTrue("召回段不应含 snippet value",
                 !memoryText.contains("\"24\"") && !memoryText.contains("导航回家") && !memoryText.contains("查电量"));

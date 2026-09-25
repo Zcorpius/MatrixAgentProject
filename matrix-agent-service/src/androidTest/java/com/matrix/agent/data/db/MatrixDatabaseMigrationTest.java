@@ -441,4 +441,95 @@ public final class MatrixDatabaseMigrationTest {
         count.close();
         db.close();
     }
+
+    @Test
+    public void migrate13To14CanonicalizesZonesAndSanitizesLegacyTrajectory() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 13);
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('demo-driver','DRIVER','semantic','allergy.peanut','花生过敏',1,100,NULL)");
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('demo-driver','driver','semantic','allergy.peanut','较新的值',1,200,NULL)");
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('demo-driver','','preference','preferred_temperature','24',1,100,NULL)");
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('unknown-user','','preference','home_address','隔离值',1,100,NULL)");
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('unknown-user','MYSTERY','semantic','fact.note','隔离值',1,100,NULL)");
+        db.execSQL("INSERT INTO memory_record VALUES "
+                + "('__system__','__system__','preference','__epoch__','7',0,100,NULL)");
+        db.execSQL("INSERT INTO session_history VALUES "
+                + "('demo-driver','DRIVER','old-session',100,'DRIVER','SUCCEEDED','DONE',50,1,"
+                + "'{\"iterations\":[{\"assistantContent\":\"secret-address\"}]}')");
+        db.execSQL("INSERT INTO session_history VALUES "
+                + "('unknown-user','MYSTERY','unknown-session',100,'DRIVER','SUCCEEDED','DONE',50,1,"
+                + "'{\"iterations\":[{\"assistantContent\":\"secret-address\"}]}')");
+        db.close();
+
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 14, true,
+                MatrixDatabase.MIGRATION_13_14);
+        Cursor canonical = db.query("SELECT value FROM memory_record WHERE userId='demo-driver' "
+                + "AND zone='driver' AND layer='semantic' AND `key`='allergy.peanut'");
+        assertTrue(canonical.moveToFirst());
+        assertEquals("较新的值", canonical.getString(0));
+        canonical.close();
+        Cursor emptyZones = db.query("SELECT COUNT(*) FROM memory_record WHERE zone='' "
+                + "OR (zone != lower(zone) AND userId != '__system__')");
+        assertTrue(emptyZones.moveToFirst());
+        assertEquals(0, emptyZones.getInt(0));
+        emptyZones.close();
+        Cursor driverPref = db.query("SELECT value FROM memory_record WHERE userId='demo-driver' "
+                + "AND zone='driver' AND `key`='preferred_temperature'");
+        assertTrue(driverPref.moveToFirst());
+        assertEquals("24", driverPref.getString(0));
+        driverPref.close();
+        Cursor unknown = db.query("SELECT COUNT(*) FROM memory_record WHERE userId='unknown-user'");
+        assertTrue(unknown.moveToFirst());
+        assertEquals(0, unknown.getInt(0));
+        unknown.close();
+        Cursor invalidZones = db.query("SELECT COUNT(*) FROM memory_record WHERE "
+                + "userId != '__system__' AND zone NOT IN ('driver','passenger','global')");
+        assertTrue(invalidZones.moveToFirst());
+        assertEquals(0, invalidZones.getInt(0));
+        invalidZones.close();
+        Cursor epoch = db.query("SELECT value FROM memory_record WHERE userId='__system__' "
+                + "AND zone='__system__' AND `key`='__epoch__'");
+        assertTrue(epoch.moveToFirst());
+        assertEquals("7", epoch.getString(0));
+        epoch.close();
+        Cursor invalidSessions = db.query("SELECT COUNT(*) FROM session_history WHERE "
+                + "zone NOT IN ('driver','passenger','global') OR zone != lower(zone)");
+        assertTrue(invalidSessions.moveToFirst());
+        assertEquals(0, invalidSessions.getInt(0));
+        invalidSessions.close();
+        Cursor history = db.query("SELECT trajectoryJson FROM session_history WHERE "
+                + "userId='demo-driver' AND zone='driver'");
+        assertTrue(history.moveToFirst());
+        assertTrue(!history.getString(0).contains("secret-address"));
+        history.close();
+        db.close();
+    }
+    @Test public void equalTimestampMigrationPrefersCanonicalRowsRegardlessOfInsertOrder() throws IOException {
+        SupportSQLiteDatabase db = helper.createDatabase(TEST_DB_NAME, 13);
+        // Lowercase goes first deliberately; uppercase and remapped global must not replace it.
+        for (String zone : java.util.List.of("driver", "DRIVER", "global", "GLOBAL", "")) {
+            db.execSQL("INSERT INTO memory_record VALUES (?,?,'semantic','fact.city',?,1,100,NULL)",
+                    new Object[]{"demo-driver", zone, "value-" + zone});
+            db.execSQL("INSERT INTO session_history VALUES (?,?, 'tie',100,'DRIVER',?,'DONE',50,1,'[]')",
+                    new Object[]{"demo-driver", zone, "driver".equals(zone) ? "SUCCEEDED" : "FAILED"});
+        }
+        db.close();
+        db = helper.runMigrationsAndValidate(TEST_DB_NAME, 14, true, MatrixDatabase.MIGRATION_13_14);
+        try (Cursor rows = db.query("SELECT value FROM memory_record WHERE key='fact.city'")) {
+            assertEquals(1, rows.getCount());
+            assertTrue(rows.moveToFirst());
+            assertEquals("value-driver", rows.getString(0));
+        }
+        try (Cursor rows = db.query("SELECT finalState FROM session_history WHERE sessionId='tie'")) {
+            assertEquals(1, rows.getCount());
+            assertTrue(rows.moveToFirst());
+            assertEquals("SUCCEEDED", rows.getString(0));
+        }
+        db.close();
+    }
+
 }

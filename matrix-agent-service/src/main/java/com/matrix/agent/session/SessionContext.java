@@ -32,6 +32,13 @@ public final class SessionContext {
         return lastZone;
     }
 
+    /** A single atomic, bounded state projection for Working memory. */
+    public synchronized String verifiedClimateSnapshot() {
+        if (lastTemperature == null || lastTemperature < 16 || lastTemperature > 30) return null;
+        if (!"driver".equals(lastZone) && !"passenger".equals(lastZone)) return null;
+        return lastZone + ":" + lastTemperature;
+    }
+
     public synchronized void rememberTemperature(int temperature, String zone) {
         this.lastTemperature = temperature;
         this.lastZone = zone;

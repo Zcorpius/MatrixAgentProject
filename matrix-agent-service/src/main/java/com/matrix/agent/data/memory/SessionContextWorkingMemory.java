@@ -1,18 +1,16 @@
 package com.matrix.agent.data.memory;
 
-import com.matrix.agent.session.SessionContext;
-
 import com.matrix.agent.session.SessionManager;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Working Memory 默认实现——包装 SessionManager。
  *
- * <p>取 sessionId 对应的 SessionContext recentTurns,倒序(最近优先)取前 maxItems 条转 MemorySnippet。
- * sessionId 为 null 或 session 不存在时返回空列表(不抛)。
+ * <p>Only projects a verified, bounded climate state. Redacted turn placeholders are never
+ * useful memory and never enter a model prompt.
  *
  * <p>线程安全:依赖 SessionManager.getRecentTurns 的内部同步。
  */
@@ -26,16 +24,18 @@ public final class SessionContextWorkingMemory implements WorkingMemorySource {
 
     @Override
     public List<MemorySnippet> recallWorking(MemoryScope scope, String sessionId, String userText, int maxItems) {
-        if (sessionId == null || maxItems <= 0) return Collections.emptyList();
-        List<String> turns = sessionManager.getRecentTurns(sessionId);
-        if (turns.isEmpty()) return Collections.emptyList();
-        List<MemorySnippet> result = new ArrayList<>();
-        int limit = Math.min(maxItems, turns.size());
-        for (int i = turns.size() - 1; i >= 0 && result.size() < limit; i--) {
-            String turn = turns.get(i);
-            result.add(new MemorySnippet(MemoryLayer.WORKING, scope, "turn-" + i, turn,
-                    1.0, 0L, sessionId));
+        if (scope == null || sessionId == null || maxItems <= 0 || userText == null) {
+            return Collections.emptyList();
         }
-        return Collections.unmodifiableList(result);
+        String query = userText.toLowerCase(Locale.ROOT);
+        if (!(query.contains("温度") || query.contains("空调") || query.contains("多少度")
+                || query.contains("climate") || query.contains("temperature"))) {
+            return Collections.emptyList();
+        }
+        String snapshot = sessionManager.getClimateSnapshotScoped(sessionId,
+                scope.getUserId(), scope.getZone());
+        if (snapshot == null) return Collections.emptyList();
+        return List.of(new MemorySnippet(MemoryLayer.WORKING, scope,
+                "last_climate_temperature", snapshot, 1.0, 0L, sessionId));
     }
 }

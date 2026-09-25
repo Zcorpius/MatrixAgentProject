@@ -41,6 +41,10 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
     private static final double KEYWORD_HIT_BONUS = 1.0;
     /** 关键词命中 key 比 value 加权更高(更精确)。 */
     private static final double KEYWORD_HIT_KEY_MULTIPLIER = 2.0;
+    private static final Set<String> STOP_TERMS = Set.of("我的", "什么", "怎么", "多少",
+            "请问", "告诉", "记住", "保存", "之前", "现在", "可以", "这个", "那个",
+            "我们", "你们", "是否", "已经", "what", "the", "about", "please",
+            "remember", "tell", "me", "my");
 
     private final MemoryRecordDao dao;
     private final int limit;
@@ -75,25 +79,31 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
         if (rows == null || rows.isEmpty()) return Collections.emptyList();
 
         Set<String> queryTokens = tokenize(userText);
+        if (queryTokens.isEmpty() && (userText == null || userText.isBlank())) {
+            return Collections.emptyList();
+        }
         List<Scored> scored = new ArrayList<>(rows.size());
         for (MemoryRecordEntity row : rows) {
-            double score = computeScore(row, queryTokens);
-            scored.add(new Scored(row, score));
+            double evidence = matchEvidence(row, queryTokens, userText);
+            if (evidence > 0) scored.add(new Scored(row, evidence + row.score));
         }
         // 排序:score 高 → 低;同 score 时按 capturedAtMs 近 → 远
         Collections.sort(scored, new Comparator<Scored>() {
             @Override
             public int compare(Scored a, Scored b) {
                 if (Double.compare(b.score, a.score) != 0) return Double.compare(b.score, a.score);
-                return Long.compare(b.row.capturedAtMs, a.row.capturedAtMs);
+                int time = Long.compare(b.row.capturedAtMs, a.row.capturedAtMs);
+                return time != 0 ? time : a.row.key.compareTo(b.row.key);
             }
         });
 
         List<MemorySnippet> out = new ArrayList<>(Math.min(scored.size(), effectiveLimit));
         for (int i = 0; i < scored.size() && out.size() < effectiveLimit; i++) {
-            MemoryRecordEntity row = scored.get(i).row;
-            out.add(MemorySnippet.of(MemoryLayer.SEMANTIC, scope, row.key,
-                    row.value == null ? "" : row.value));
+            Scored hit = scored.get(i);
+            MemoryRecordEntity row = hit.row;
+            out.add(new MemorySnippet(MemoryLayer.SEMANTIC, scope, row.key,
+                    row.value == null ? "" : row.value, hit.score,
+                    row.capturedAtMs, row.sourceSessionId));
         }
         return Collections.unmodifiableList(out);
     }
@@ -118,7 +128,9 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
                     tokens.add(current.toString().toLowerCase(Locale.ROOT));
                     current.setLength(0);
                 }
-                tokens.add(String.valueOf(c));
+                if (i + 1 < text.length() && isChinese(text.charAt(i + 1))) {
+                    tokens.add(text.substring(i, i + 2));
+                }
             } else if (Character.isLetterOrDigit(c)) {
                 current.append(c);
             } else {
@@ -132,10 +144,10 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
         if (current.length() > 0) {
             tokens.add(current.toString().toLowerCase(Locale.ROOT));
         }
-        // 过滤过短 token(1 字符的中文 token 保留——中文单字往往有意义)
+        // Single-character CJK matches are too broad for personal-memory retrieval.
         Set<String> filtered = new LinkedHashSet<>();
         for (String t : tokens) {
-            if (t.length() >= 2 || (t.length() == 1 && isChinese(t.charAt(0)))) {
+            if (t.length() >= 2 && !STOP_TERMS.contains(t)) {
                 filtered.add(t);
             }
         }
@@ -146,23 +158,37 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
         return c >= 0x4E00 && c <= 0x9FFF;
     }
 
-    private static double computeScore(MemoryRecordEntity row, Set<String> queryTokens) {
-        if (queryTokens.isEmpty()) {
-            // 无 query → 用静态 score(预填的优先级)
-            return row.score;
-        }
-        double score = row.score;
+    private static double matchEvidence(MemoryRecordEntity row, Set<String> queryTokens,
+            String userText) {
+        double score = MemoryKeyCatalog.relevance(row.key, userText);
         String keyLower = row.key == null ? "" : row.key.toLowerCase(Locale.ROOT);
         String valueLower = row.value == null ? "" : row.value.toLowerCase(Locale.ROOT);
         for (String token : queryTokens) {
-            if (keyLower.contains(token)) {
+            if (containsTerm(keyLower, token)) {
                 score += KEYWORD_HIT_BONUS * KEYWORD_HIT_KEY_MULTIPLIER;
             }
-            if (valueLower.contains(token)) {
+            if (containsTerm(valueLower, token)) {
                 score += KEYWORD_HIT_BONUS;
             }
         }
         return score;
+    }
+
+    private static boolean containsTerm(String text, String token) {
+        if (token.isEmpty()) return false;
+        if (isChinese(token.charAt(0))) return text.contains(token);
+        for (int index = text.indexOf(token); index >= 0;
+                index = text.indexOf(token, index + 1)) {
+            int end = index + token.length();
+            boolean left = index == 0 || !isAsciiWord(text.charAt(index - 1));
+            boolean right = end == text.length() || !isAsciiWord(text.charAt(end));
+            if (left && right) return true;
+        }
+        return false;
+    }
+
+    private static boolean isAsciiWord(char value) {
+        return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9');
     }
 
     private static final class Scored {

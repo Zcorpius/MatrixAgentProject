@@ -56,7 +56,7 @@ public final class RoomMemoryMigratorFailureTest {
         dao.clearFailures();
         new RoomMemoryMigrator(sp, dao, dao.transactionalRunner()).migrate();
         assertTrue("第二次启动成功时 SP 清空", sp.cleared);
-        assertEquals("两条偏好都迁到 Room", 2, dao.store.size());
+        assertEquals("两条偏好及迁移标记", 3, dao.store.size());
     }
 
     @Test
@@ -86,7 +86,7 @@ public final class RoomMemoryMigratorFailureTest {
         new RoomMemoryMigrator(sp, dao, dao.transactionalRunner()).migrate();
 
         assertTrue("全部成功时 SP 必须清空", sp.cleared);
-        assertEquals("3 entities 全部入库(2 prefs + 1 epoch)", 3, dao.store.size());
+        assertEquals("2 prefs + epoch + marker", 4, dao.store.size());
     }
 
     @Test
@@ -129,6 +129,13 @@ public final class RoomMemoryMigratorFailureTest {
     }
 
     private static final class FailingMemoryRecordDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final Map<String, MemoryRecordEntity> store = new LinkedHashMap<>();
         final Map<String, RuntimeException> failures = new LinkedHashMap<>();
         // transaction buffer:body 抛异常时不 commit,模拟 Room runInTransaction rollback 语义

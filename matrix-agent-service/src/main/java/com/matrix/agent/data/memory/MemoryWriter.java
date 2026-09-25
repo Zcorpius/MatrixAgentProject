@@ -1,30 +1,12 @@
 package com.matrix.agent.data.memory;
 
+import com.matrix.agent.identity.AgentRequest;
+
 /**
- * Memory 写入路径——Episodic 自动 + Semantic 显式。
- *
- * <p>预建 {@code session_history} / {@code memory_record} 表后,接入了
- * Episodic / Semantic 召回(只读),但**生产路径无任何写入**——召回测试通过是因为
- * fake DAO 测试期塞数据,真实 APK 两表永远空。本接口是写入入口。
- *
- * <p><b>写入策略</b>(用户选择"Episodic 全自动,Semantic 仅显式"):
- * <ul>
- *   <li>{@link #writeEpisodic(EpisodicWrite)} —— task 侧适配器完成终态过滤和摘要构建后
- *       调用,把任务终态写 session_history 表。fail-log(异常仅 Log.w,不向上传播)。</li>
- *   <li>{@link #writeSemantic(String, String, String, String, double, String, long)} —— 仅由
- *       {@code memory.semantic.save} capability handler 调用,用户显式要求长期记住的
- *       事实/知识(如"我对花生过敏")。返回写入是否成功(供 handler 转 ToolResult)。</li>
- *   <li>{@link #readSemantic(String, String, String)} —— {@code memory.semantic.get} capability
- *       handler 调用,精确 key 查询。null 表示无记录。</li>
- * </ul>
- *
- * <p><b>epoch 原子性</b>:写入接口新增 {@code requestEpoch} 参数。实现
- * 必须在**同一 Room 事务**内"读 __system__ epoch 行 + 比较 + insert/upsert",否则仍有
- * check-then-act race(clearUserData 在另一线程 bump epoch + 清两表,Java 内存比较挡不住)。
- * {@code requestEpoch != currentEpoch} 时事务内 return 不写(fail-log 模式)。
- *
- * <p><b>fail-log 语义</b>:Memory 写入失败仅 Log.w + 计数,不影响主路径(audit fail-open 不变)。
- * database=null 时退 {@link #NOOP},与 NoopAuditRepository 同模式。
+ * Persistence boundary for automatic episodic events and explicitly saved semantic facts.
+ * Operations accept a bound {@link AgentRequest}. Semantic scope is derived inside the Writer;
+ * an episodic command must match the same request in every identity field.
+ * Writes and deletes compare the request epoch with the database epoch in one transaction.
  */
 public interface MemoryWriter {
 
@@ -34,42 +16,64 @@ public interface MemoryWriter {
      * <p>实现必须 fail-log(仅 Log.w + 计数,不向上传播)——保证主任务路径不被 Memory 拖累。
      * 幂等:同 (userId, zone, sessionId, startedAtMillis) 主键重复时 REPLACE。
      *
-     * <p>事务内 epoch gate 不变：{@code write.requestEpoch} 与
+     * <p>Writer first checks that every owner/session/epoch field in the command matches
+     * the bound request. 事务内 epoch gate 不变：{@code write.requestEpoch} 与
      * clearUserDataAndBump 自增后的 currentEpoch 不匹配时事务内 return 不写。
      */
-    void writeEpisodic(EpisodicWrite write);
+    void writeEpisodic(AgentRequest request, EpisodicWrite write);
 
     /**
      * Semantic 显式写入:仅由 save_semantic capability handler 调用。
      *
-     * @param requestEpoch 任务入口捕获的 epoch,与 currentEpoch 不匹配时事务内 return 不写
      * @return 写入是否成功(供 handler 转 ToolResult)
      */
-    boolean writeSemantic(String userId, String zone, String key, String value,
-            double score, String sourceSessionId, long requestEpoch);
+    boolean writeSemantic(AgentRequest request, String key, String value, double score);
+
+    default MemoryWriteOutcome writeSemanticDetailed(AgentRequest request, String key,
+            String value, double score) {
+        return writeSemantic(request, key, value, score)
+                ? MemoryWriteOutcome.SAVED : MemoryWriteOutcome.STORAGE_FAILURE;
+    }
 
     /**
      * Semantic 显式读取:save_semantic.get / 模型查询路径调用。
      *
      * @return value 或 null(无记录)
      */
-    String readSemantic(String userId, String zone, String key);
+    String readSemantic(AgentRequest request, String key);
+
+    /** Delete one semantic key under the same epoch gate as writes. */
+    default boolean deleteSemantic(AgentRequest request, String key) {
+        return deleteSemanticDetailed(request, key)
+                == MemoryDeleteOutcome.DELETED;
+    }
+
+    default MemoryDeleteOutcome deleteSemanticDetailed(AgentRequest request, String key) {
+        return MemoryDeleteOutcome.STORAGE_FAILURE;
+    }
+
+    /** Owner-bound exact lookup; returns validated event facts as JSON, or null. */
+    default String readEpisodic(AgentRequest request, String eventId) { return null; }
+
+    /** Deletes one owner-bound event under the same epoch transaction gate as writes. */
+    default MemoryDeleteOutcome deleteEpisodic(AgentRequest request, String eventId) {
+        return MemoryDeleteOutcome.STORAGE_FAILURE;
+    }
 
     /** Singleton NOOP,database=null 时使用,与 NoopAuditRepository.INSTANCE 同模式。 */
     MemoryWriter NOOP = new MemoryWriter() {
         @Override
-        public void writeEpisodic(EpisodicWrite write) {
+        public void writeEpisodic(AgentRequest request, EpisodicWrite write) {
             // Noop:database=null 时无持久化层,与 auditRepository fail-open 语义一致。
         }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(AgentRequest request, String key, String value, double score) {
             return false;
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(AgentRequest request, String key) {
             return null;
         }
     };

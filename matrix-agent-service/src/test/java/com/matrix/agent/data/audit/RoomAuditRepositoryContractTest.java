@@ -228,6 +228,8 @@ public final class RoomAuditRepositoryContractTest {
 
     /** Fake TrajectoryDao:in-memory Map,模拟 Room insert + query 行为。 */
     private static final class FakeTrajectoryDao implements com.matrix.agent.data.db.TrajectoryDao {
+        @Override public int deleteByUser(String userId) { return 0; }
+
         final Map<String, TrajectoryEntity> store = new LinkedHashMap<>();
         boolean throwOnNextInsert = false;
 

@@ -69,7 +69,7 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 5L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 5L));
 
         assertEquals("同 epoch → session_history 1 行", 1, sessionDao.store.size());
     }
@@ -86,7 +86,7 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 5L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 5L));
 
         assertEquals("不同 epoch → session_history 0 行(事务内拒绝)",
                 0, sessionDao.store.size());
@@ -99,14 +99,13 @@ public final class RoomMemoryWriterEpochGateTest {
         seedEpoch(memoryDao, 3L);
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
-        boolean accepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "allergy.peanut", "严重", 1.0, "sess-1", 3L);
+        boolean accepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-1", 3L), "allergy.peanut", "严重", 1.0);
 
         assertTrue("同 epoch → writeSemantic 返回 true", accepted);
         // memoryDao 含 1 行 __epoch__ + 1 行 semantic = 2 行
         assertEquals("memory_record 含 __epoch__ + semantic 共 2 行", 2, memoryDao.store.size());
         MemoryRecordEntity semanticRow = memoryDao.queryByKey(
-                "demo-driver", "DRIVER", "semantic", "allergy.peanut");
+                "demo-driver", "driver", "semantic", "allergy.peanut");
         assertTrue("semantic 行存在", semanticRow != null);
         assertEquals("严重", semanticRow.value);
     }
@@ -118,8 +117,7 @@ public final class RoomMemoryWriterEpochGateTest {
         seedEpoch(memoryDao, 4L);
         RoomMemoryWriter writer = new RoomMemoryWriter(sessionDao, memoryDao, null, syncRunner());
 
-        boolean accepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "allergy.peanut", "严重", 1.0, "sess-1", 3L);
+        boolean accepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "sess-1", 3L), "allergy.peanut", "严重", 1.0);
 
         assertFalse("不同 epoch → writeSemantic 返回 false", accepted);
         assertEquals("memory_record 不应新增(stale 写入被拒)",
@@ -140,15 +138,20 @@ public final class RoomMemoryWriterEpochGateTest {
         AgentOutcome outcomeA = new AgentOutcome(requestA.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(requestA, outcomeA, 2L));
-        boolean semanticAccepted = writer.writeSemantic(
-                "demo-driver", "DRIVER", "fact.x", "y", 1.0, "a", 2L);
+        writer.writeEpisodic(requestA, EpisodicTestSupport.write(requestA, outcomeA, 2L));
+        boolean semanticAccepted = writer.writeSemantic(MemoryTestRequests.from("demo-driver", "DRIVER", "a", 2L), "fact.x", "y", 1.0);
 
         assertEquals("episodic 写入被拒", 0, sessionDao.store.size());
         assertFalse("semantic 写入被拒", semanticAccepted);
     }
 
     private static final class FakeSessionHistoryDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final List<SessionHistoryEntity> store = new ArrayList<>();
         @Override public void insert(SessionHistoryEntity entity) { store.add(entity); }
         @Override public List<SessionHistoryEntity> queryByUserZone(String u, String z, int l) {
@@ -161,6 +164,13 @@ public final class RoomMemoryWriterEpochGateTest {
     }
 
     private static final class FakeMemoryRecordDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final List<MemoryRecordEntity> store = new ArrayList<>();
         @Override public void upsert(MemoryRecordEntity entity) {
             // REPLACE 语义:同主键先删后插(简化实现)

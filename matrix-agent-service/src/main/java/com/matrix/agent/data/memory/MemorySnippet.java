@@ -45,6 +45,7 @@ public final class MemorySnippet {
 
     @Override
     public String toString() {
-        return "MemorySnippet{layer=" + layer + ", key=" + key + ", score=" + score + "}";
+        return "MemorySnippet{layer=" + layer + ", keyLen=" + key.length()
+                + ", score=" + score + "}";
     }
 }

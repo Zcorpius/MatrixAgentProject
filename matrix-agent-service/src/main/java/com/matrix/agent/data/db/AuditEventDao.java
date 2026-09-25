@@ -35,4 +35,7 @@ public interface AuditEventDao {
      */
     @Query("DELETE FROM audit_event WHERE userId = :userId AND zone = :zone")
     int deleteByUserZone(String userId, String zone);
+
+    @Query("DELETE FROM audit_event WHERE userId = :userId")
+    int deleteByUser(String userId);
 }
