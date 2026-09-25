@@ -1,6 +1,7 @@
 package com.matrix.agent.session;
 
 import android.util.Log;
+import com.matrix.agent.identity.VehicleZone;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,6 +57,45 @@ public final class SessionManager {
         return entry.context;
     }
 
+    /** Binds a task session to one occupant before any memory can be read from it. */
+    public synchronized SessionContext bindOrCreate(String sessionId, String userId,
+            VehicleZone zone) {
+        if (userId == null || userId.isBlank() || zone == null) {
+            throw new IllegalArgumentException("session owner required");
+        }
+        getOrCreate(sessionId);
+        SessionEntry entry = sessions.get(sessionId);
+        if (entry.ownerUserId == null) {
+            // An unbound legacy session may contain turns from another actor; discard them.
+            entry = new SessionEntry(new SessionContext(), clock.getAsLong(), userId, zone);
+            sessions.put(sessionId, entry);
+        } else if (!entry.ownerUserId.equals(userId) || entry.zone != zone) {
+            throw new IllegalStateException("session belongs to a different occupant");
+        }
+        return entry.context;
+    }
+
+    public synchronized List<String> getRecentTurnsScoped(String sessionId, String userId,
+            VehicleZone zone) {
+        removeExpired(clock.getAsLong());
+        SessionEntry entry = sessions.get(sessionId);
+        if (entry == null || entry.ownerUserId == null || !entry.ownerUserId.equals(userId)
+                || entry.zone != zone) return Collections.emptyList();
+        entry.lastAccessMillis = clock.getAsLong();
+        return entry.context.getRecentTurns();
+    }
+
+    /** Returns only the verified climate state of an owner-bound, unexpired session. */
+    public synchronized String getClimateSnapshotScoped(String sessionId, String userId,
+            VehicleZone zone) {
+        removeExpired(clock.getAsLong());
+        SessionEntry entry = sessions.get(sessionId);
+        if (entry == null || entry.ownerUserId == null || !entry.ownerUserId.equals(userId)
+                || entry.zone != zone) return null;
+        entry.lastAccessMillis = clock.getAsLong();
+        return entry.context.verifiedClimateSnapshot();
+    }
+
     public synchronized List<String> getRecentTurns(String sessionId) {
         long now = clock.getAsLong();
         removeExpired(now);
@@ -109,11 +149,20 @@ public final class SessionManager {
 
     private static final class SessionEntry {
         private final SessionContext context;
+        private final String ownerUserId;
+        private final VehicleZone zone;
         private long lastAccessMillis;
 
         private SessionEntry(SessionContext context, long lastAccessMillis) {
+            this(context, lastAccessMillis, null, null);
+        }
+
+        private SessionEntry(SessionContext context, long lastAccessMillis,
+                String ownerUserId, VehicleZone zone) {
             this.context = context;
             this.lastAccessMillis = lastAccessMillis;
+            this.ownerUserId = ownerUserId;
+            this.zone = zone;
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.matrix.agent.identity;
 
 import android.util.Log;
+import java.util.LinkedHashSet;
+import java.util.List;
 
 /**
  * Actor → userId 字面量映射工具。
@@ -30,5 +32,13 @@ public final class ActorUsers {
     public static String userIdOf(AgentRequest request) {
         if (request == null) return USER_GLOBAL;
         return userIdOf(request.getActor());
+    }
+
+    /** One owner inventory for memory, conversation, audit and deferred reset. */
+    public static List<String> allKnownUserIds() {
+        LinkedHashSet<String> users = new LinkedHashSet<>();
+        for (Actor actor : Actor.values()) users.add(userIdOf(actor));
+        users.add(USER_GLOBAL);
+        return List.copyOf(users);
     }
 }

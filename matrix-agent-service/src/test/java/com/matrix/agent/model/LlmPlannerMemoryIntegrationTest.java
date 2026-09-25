@@ -63,7 +63,7 @@ public final class LlmPlannerMemoryIntegrationTest {
     /** recaller=null:maintain 旧版行为——仅 preference key 列表。 */
     @Test
     public void nullRecallerKeepsV043Behavior() {
-        memoryStore.putPreference(driverScope(), "preferred_temperature", "24");
+        memoryStore.putPreferenceChecked(driverScope(), "preferred_temperature", "24", memoryStore.currentEpoch());
         CapturingLlmClient client = new CapturingLlmClient();
         LlmPlanner planner = newPlanner(client, null);
 
@@ -81,12 +81,16 @@ public final class LlmPlannerMemoryIntegrationTest {
     /** recaller 返回非 PREFERENCE snippet:userPrompt 末尾必须含 [layer] key 列表。 */
     @Test
     public void recallerAppendsNonPreferenceSnippets() {
-        memoryStore.putPreference(driverScope(), "preferred_temperature", "24");
+        memoryStore.putPreferenceChecked(driverScope(), "preferred_temperature", "24", memoryStore.currentEpoch());
         MemoryScope scope = new MemoryScope("demo-driver", VehicleZone.DRIVER);
         // 用 stub recaller 直接返回非 PREFERENCE snippet(模拟 Episodic/Semantic 召回)
-        MemoryRecaller stub = (s, sid, text, max) -> Arrays.asList(
+        MemoryRecaller stub = (s, sid, text, max) -> {
+            assertEquals("planner-memory", sid);
+            assertEquals("把主驾温度调到我喜欢", text);
+            return Arrays.asList(
                 MemorySnippet.of(MemoryLayer.EPISODIC, scope, "session.last_cmd", "导航回家"),
-                MemorySnippet.of(MemoryLayer.WORKING, scope, "turn.last_query", "查电量"));
+                MemorySnippet.of(MemoryLayer.WORKING, scope, "last_climate_temperature", "driver:24"));
+        };
 
         CapturingLlmClient client = new CapturingLlmClient();
         LlmPlanner planner = newPlanner(client, stub);
@@ -101,13 +105,13 @@ public final class LlmPlannerMemoryIntegrationTest {
         assertTrue("必须含 EPISODIC snippet key",
                 client.capturedUserPrompt.contains("[episodic] session.last_cmd"));
         assertTrue("必须含 WORKING snippet key",
-                client.capturedUserPrompt.contains("[working] turn.last_query"));
+                client.capturedUserPrompt.contains("[working] last_climate_temperature: 主驾 24°C"));
     }
 
     /** recaller 返回的 PREFERENCE snippet 不重复出现(preferenceKeysFor 已包含)。 */
     @Test
     public void recallerPreferenceLayerIsSkippedToAvoidDuplication() {
-        memoryStore.putPreference(driverScope(), "preferred_temperature", "24");
+        memoryStore.putPreferenceChecked(driverScope(), "preferred_temperature", "24", memoryStore.currentEpoch());
         MemoryScope scope = new MemoryScope("demo-driver", VehicleZone.DRIVER);
         MemoryRecaller stub = (s, sid, text, max) -> Arrays.asList(
                 MemorySnippet.of(MemoryLayer.PREFERENCE, scope, "preferred_temperature", "24"),

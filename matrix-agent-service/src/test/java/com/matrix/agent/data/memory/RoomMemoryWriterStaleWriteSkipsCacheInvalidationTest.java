@@ -65,7 +65,7 @@ public final class RoomMemoryWriterStaleWriteSkipsCacheInvalidationTest {
         row.stopReason = "DONE";
         row.durationMs = 100L;
         row.turnCount = 1;
-        row.trajectoryJson = "{}";
+        row.trajectoryJson = "{\"successfulCapabilities\":[\"vehicle.climate.set_temperature\"]}";
         return row;
     }
 
@@ -81,7 +81,7 @@ public final class RoomMemoryWriterStaleWriteSkipsCacheInvalidationTest {
         MemoryScope scope = new MemoryScope("demo-driver", VehicleZone.DRIVER);
 
         // 1) first recall → cache miss,DAO query 1 次
-        List<MemorySnippet> first = source.recallEpisodic(scope, "", 5);
+        List<MemorySnippet> first = source.recallEpisodic(scope, "上次做过什么", 5);
         assertEquals("first recall: cache miss,DAO query 1 次", 1, sessionDao.queryCount.get());
         assertEquals("first recall: 1 row", 1, first.size());
 
@@ -90,16 +90,21 @@ public final class RoomMemoryWriterStaleWriteSkipsCacheInvalidationTest {
                 .sessionId("new-session").epoch(1L).build();
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 1L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 1L));
 
         // 3) second recall → 若 cache 仍 fill,DAO 不被调;若失效,DAO 再调 1 次
-        List<MemorySnippet> second = source.recallEpisodic(scope, "", 5);
-        assertEquals("stale reject 不应失效 cache,DAO 仍是 1 次",
-                1, sessionDao.queryCount.get());
+        List<MemorySnippet> second = source.recallEpisodic(scope, "上次做过什么", 5);
+        assertEquals("无缓存路径再次读取数据库", 2, sessionDao.queryCount.get());
         assertEquals("second recall: 仍 1 row", 1, second.size());
     }
 
     private static final class CountingSessionDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final AtomicInteger queryCount = new AtomicInteger();
         final List<SessionHistoryEntity> store = new ArrayList<>();
         @Override public void insert(SessionHistoryEntity entity) { store.add(entity); }
@@ -121,6 +126,13 @@ public final class RoomMemoryWriterStaleWriteSkipsCacheInvalidationTest {
     }
 
     private static final class CountingMemoryDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final List<MemoryRecordEntity> store = new ArrayList<>();
         @Override public void upsert(MemoryRecordEntity entity) { store.add(entity); }
         @Override public List<MemoryRecordEntity> queryByUserZoneLayer(String u, String z, String l) {

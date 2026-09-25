@@ -11,6 +11,7 @@ import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.contract.schema.SchemaValidator;
 import com.matrix.agent.contract.ToolDefinition;
 import com.matrix.agent.contract.schema.CanonicalSchema;
+import com.matrix.agent.data.memory.MemoryKeyCatalog;
 import com.matrix.agent.identity.*;
 import com.matrix.agent.intent.*;
 import com.matrix.agent.vehicle.*;
@@ -229,14 +230,18 @@ public final class CapabilityRegistry {
                                 "屏幕亮度必须在 1% 到 100% 之间"))
                         .build())
                 .register(CapabilityDefinition.builder("memory.preference.save", RiskLevel.R1_LOW_RISK_WRITE)
-                        .description("把用户告诉系统要记住的偏好或个人设置存起来（例如：用户说「记住我喜欢24度」、「我家在XX」、「常去公司」）。需要 key 和 value").writeOperation(true)
+                        .description("仅在用户明确要求保存时，把本轮同一句中提到的偏好或个人设置存起来（例如「记住我喜欢24度」「记住我家在XX」）。需要 key 和 value").writeOperation(true)
                         .parameterSchema(CanonicalSchema.object()
                                 .description("记忆偏好 save 参数")
                                 .property("key", CanonicalSchema.string()
                                         .description("偏好键，常用约定：preferred_temperature / preferred_seat_level / home_address / common_destinations")
+                                        .pattern(MemoryKeyCatalog.PREFERENCE_PATTERN)
+                                        .maxLength(MemoryKeyCatalog.MAX_KEY_LENGTH)
+                                        .sensitive(true).sensitivePlaceholder("<memory>")
                                         .build())
                                 .property("value", CanonicalSchema.string()
                                         .description("偏好值")
+                                        .maxLength(2048)
                                         // Memory Value 是用户私人事实(温度/家地址/常去地),
                                         // Audit 视图全脱敏——主驾副驾可能共用 Android User,UI 查看者未必是数据所有者。
                                         .sensitive(true).sensitivePlaceholder("<memory>").build())
@@ -250,6 +255,7 @@ public final class CapabilityRegistry {
                                 .description("记忆偏好 get 参数")
                                 .property("key", CanonicalSchema.string()
                                         .description("偏好键，常用约定：preferred_temperature / preferred_seat_level / home_address / common_destinations")
+                                        .maxLength(2048)
                                         // key 本身可能暴露"用户保存过哪些敏感事实"——home_address 等
                                         // 命名直接进 Audit 也不合适,Audit 视图同样替换为 <memory>。
                                         .sensitive(true).sensitivePlaceholder("<memory>").build())
@@ -257,13 +263,31 @@ public final class CapabilityRegistry {
                                 .additionalProperties(false)
                                 .build())
                         .validator(args -> requireKeys(args, "key")).build())
+                .register(CapabilityDefinition.builder("memory.preference.list", RiskLevel.R0_READ_ONLY)
+                        .description("列出当前乘员的偏好目录，不返回内容。旧版键显示为稳定 legacy: 别名；用返回的 key 调用 get 读取，用户明确选择该 key 后调用 delete 删除。每页最多20条，有 next_after 时可继续")
+                        .parameterSchema(CanonicalSchema.object()
+                                .property("after", CanonicalSchema.string()
+                                        .description("上一页 next_after；首页省略")
+                                        .maxLength(com.matrix.agent.data.memory.PreferenceReferences.MAX_REFERENCE_LENGTH)
+                                        .sensitive(true).sensitivePlaceholder("<memory>").build())
+                                .additionalProperties(false).build()).build())
+                .register(CapabilityDefinition.builder("memory.preference.delete", RiskLevel.R1_LOW_RISK_WRITE)
+                        .description("仅当用户明确要求忘记指定偏好时，删除当前乘员的一条偏好。需要 key")
+                        .writeOperation(true)
+                        .parameterSchema(CanonicalSchema.object()
+                                .property("key", CanonicalSchema.string()
+                                        .description("要忘记的精确偏好键或 list 返回的 legacy: 别名")
+                                        .maxLength(2048)
+                                        .sensitive(true).sensitivePlaceholder("<memory>").build())
+                                .required("key").additionalProperties(false).build())
+                        .validator(args -> requireKeys(args, "key")).build())
                 // Semantic 记忆层——用户**明确要求长期记住**的事实/知识,
                 // 区别于 preference(存偏好如温度/座椅),semantic 存事实性知识(如「我女儿叫小红」、
                 // 「我对花生过敏」)。PII key(home_address / contact_phone / id_card 等)写入会被
                 // 接受,但投影路径不进 prompt(只附"已保存,请用工具查询"),
                 // 模型需通过 memory.semantic.get 查询读取。
                 .register(CapabilityDefinition.builder("memory.semantic.save", RiskLevel.R1_LOW_RISK_WRITE)
-                        .description("把用户**明确要求长期记住**的事实或知识存到语义层（例如：用户说「记住我女儿叫小红」、「我对花生过敏」、「我在公司是产品经理」）。区别于 memory.preference.save（存偏好如温度/座椅）,memory.semantic.save 存事实性知识。需要 key 和 value")
+                        .description("仅在用户明确要求长期记住时，把本轮同一句中提到的事实存到语义层（例如「记住我女儿叫小红」「记住我对花生过敏」）。偏好用 memory.preference.save。需要 key 和 value")
                         .writeOperation(true)
                         .parameterSchema(CanonicalSchema.object()
                                 .description("记忆语义 save 参数")
@@ -274,8 +298,8 @@ public final class CapabilityRegistry {
                                                 + "请改用 family.* / fact.* 等命名空间。Schema 强制 pattern + maxLength(64)")
                                         // namespace 白名单 + 字符集 + 长度上限。
                                         // 用户硬约束:"memory.semantic.save 只接受明确支持的 key namespace"。
-                                        .pattern("^(family|allergy|work|fact)\\.[A-Za-z0-9_.]+$")
-                                        .maxLength(64)
+                                        .pattern(MemoryKeyCatalog.SEMANTIC_PATTERN)
+                                        .maxLength(MemoryKeyCatalog.MAX_KEY_LENGTH)
                                         .build())
                                 .property("value", CanonicalSchema.string()
                                         .description("事实值(最多 2048 字符)。空字符串 / 纯空白被拒,超长被拒"
@@ -299,11 +323,40 @@ public final class CapabilityRegistry {
                                 .description("记忆语义 get 参数")
                                 .property("key", CanonicalSchema.string()
                                         .description("语义键")
+                                        .pattern(MemoryKeyCatalog.SEMANTIC_PATTERN)
+                                        .maxLength(MemoryKeyCatalog.MAX_KEY_LENGTH)
                                         .sensitive(true).sensitivePlaceholder("<memory>").build())
                                 .required("key")
                                 .additionalProperties(false)
                                 .build())
                         .validator(args -> requireKeys(args, "key")).build())
+                .register(CapabilityDefinition.builder("memory.semantic.delete", RiskLevel.R1_LOW_RISK_WRITE)
+                        .description("仅当用户明确要求忘记指定事实时，删除当前乘员的一条语义记忆。需要 key")
+                        .writeOperation(true)
+                        .parameterSchema(CanonicalSchema.object()
+                                .property("key", CanonicalSchema.string()
+                                        .pattern(MemoryKeyCatalog.SEMANTIC_PATTERN)
+                                        .maxLength(MemoryKeyCatalog.MAX_KEY_LENGTH)
+                                        .sensitive(true).sensitivePlaceholder("<memory>").build())
+                                .required("key").additionalProperties(false).build())
+                        .validator(args -> requireKeys(args, "key")).build())
+                .register(CapabilityDefinition.builder("memory.episodic.get", RiskLevel.R0_READ_ONLY)
+                        .description("查询近期任务事件的已核验细节。仅在用户询问历史事件时使用；event_id 是召回键 recent.* 的最后一段")
+                        .parameterSchema(CanonicalSchema.object()
+                                .property("event_id", CanonicalSchema.string()
+                                        .pattern("[0-9a-f]{32}").maxLength(32)
+                                        .sensitive(true).sensitivePlaceholder("<event-id>").build())
+                                .required("event_id").additionalProperties(false).build())
+                        .validator(args -> requireKeys(args, "event_id")).build())
+                .register(CapabilityDefinition.builder("memory.episodic.delete", RiskLevel.R1_LOW_RISK_WRITE)
+                        .description("删除用户明确指定编号的历史事件。先从召回键 recent.* 最后一段取得 event_id，向用户展示编号并让其指定要忘记的编号；不允许用笼统的忘记请求删除任意事件")
+                        .writeOperation(true)
+                        .parameterSchema(CanonicalSchema.object()
+                                .property("event_id", CanonicalSchema.string()
+                                        .pattern("[0-9a-f]{32}").maxLength(32)
+                                        .sensitive(true).sensitivePlaceholder("<event-id>").build())
+                                .required("event_id").additionalProperties(false).build())
+                        .validator(args -> requireKeys(args, "event_id")).build())
                 .register(CapabilityDefinition.builder("knowledge.answer", RiskLevel.R0_READ_ONLY)
                         .description("回答与车辆状态、用户个人偏好都无关的常识性问题（例如：「今天几号」、「水的沸点」）。不要用此能力查询用户偏好或车辆状态——那些必须用 memory.preference.get 或 vehicle.info.* 系列。需要 question")
                         .parameterSchema(CanonicalSchema.object()

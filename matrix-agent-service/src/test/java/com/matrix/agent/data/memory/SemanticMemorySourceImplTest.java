@@ -38,7 +38,7 @@ public final class SemanticMemorySourceImplTest {
         // home_address (key=home_address, value=北京):
         //   "高速" 不在; "回家" 不在 → 0.5 (静态)
         // preferred_temp: 0.5 + "高速"不在 + "回家"不在 → 1.0(实际0score字段默认0)
-        assertEquals("返回 3 条", 3, result.size());
+        assertEquals("只返回有检索证据的候选", 2, result.size());
         assertTrue("最高分是 preferred_route (高速命中)", result.get(0).getKey().contains("preferred_route"));
     }
 
@@ -57,22 +57,28 @@ public final class SemanticMemorySourceImplTest {
     }
 
     @Test
-    public void noMatchReturnsAllRowsSortedByStaticScore() {
+    public void noMatchReturnsEmptyRegardlessOfStaticScore() {
         FakeDao dao = new FakeDao();
         dao.add("user-d", "driver", "semantic", "k1", "v1", 0.3, 100L);
         dao.add("user-d", "driver", "semantic", "k2", "v2", 0.8, 200L);
         dao.add("user-d", "driver", "semantic", "k3", "v3", 0.5, 300L);
         SemanticMemorySourceImpl source = new SemanticMemorySourceImpl(dao, 5);
 
-        // 无 query → 全部返回,按 row.score 排序
+        // 无 query → 不提供相关性证据，不能用静态 score 补满名额。
         List<MemorySnippet> result = source.recallSemantic(
                 new MemoryScope("user-d", VehicleZone.DRIVER), "", 5);
 
-        assertEquals(3, result.size());
-        // score 高在前:k2(0.8) > k3(0.5) > k1(0.3)
-        assertTrue(result.get(0).getKey().contains("k2"));
-        assertTrue(result.get(1).getKey().contains("k3"));
-        assertTrue(result.get(2).getKey().contains("k1"));
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void englishSubstringIsNotEvidence() {
+        FakeDao dao = new FakeDao();
+        dao.add("user-d", "driver", "semantic", "fact.vehicle", "car", 1.0, 100L);
+        SemanticMemorySourceImpl source = new SemanticMemorySourceImpl(dao);
+
+        assertTrue(source.recallSemantic(new MemoryScope("user-d", VehicleZone.DRIVER),
+                "carpet", 5).isEmpty());
     }
 
     @Test
@@ -89,14 +95,14 @@ public final class SemanticMemorySourceImplTest {
     @Test
     public void differentUserZoneReturnsDifferentResults() {
         FakeDao dao = new FakeDao();
-        dao.add("user-d", "driver", "semantic", "driver-key", "v", 1.0, 100L);
-        dao.add("user-p", "passenger", "semantic", "passenger-key", "v", 1.0, 200L);
+        dao.add("user-d", "driver", "semantic", "driver-key", "driver memory", 1.0, 100L);
+        dao.add("user-p", "passenger", "semantic", "passenger-key", "passenger memory", 1.0, 200L);
         SemanticMemorySourceImpl source = new SemanticMemorySourceImpl(dao, 5);
 
         List<MemorySnippet> driverResult = source.recallSemantic(
-                new MemoryScope("user-d", VehicleZone.DRIVER), "v", 5);
+                new MemoryScope("user-d", VehicleZone.DRIVER), "memory", 5);
         List<MemorySnippet> passengerResult = source.recallSemantic(
-                new MemoryScope("user-p", VehicleZone.PASSENGER), "v", 5);
+                new MemoryScope("user-p", VehicleZone.PASSENGER), "memory", 5);
 
         assertEquals("driver 命中 driver-key", 1, driverResult.size());
         assertTrue(driverResult.get(0).getKey().contains("driver-key"));
@@ -106,14 +112,19 @@ public final class SemanticMemorySourceImplTest {
 
     @Test
     public void tokenizeFiltersShortNonChineseTokens() {
-        // "a 大 测" → a 单字符非中文过滤, 大/测 单字中文保留
-        java.util.Set<String> tokens = SemanticMemorySourceImpl.tokenize("a 大 测");
-        assertTrue(tokens.contains("大"));
-        assertTrue(tokens.contains("测"));
-        // a 不在(单字符非中文)
+        java.util.Set<String> tokens = SemanticMemorySourceImpl.tokenize("a 大测");
+        assertTrue(tokens.contains("大测"));
+        assertTrue(!tokens.contains("大"));
     }
 
     private static final class FakeDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final List<MemoryRecordEntity> store = new ArrayList<>();
 
         void add(String userId, String zone, String layer, String key, String value,
@@ -182,6 +193,13 @@ public final class SemanticMemorySourceImplTest {
     }
 
     private static final class ThrowingDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         @Override public void upsert(MemoryRecordEntity entity) { }
         @Override public List<MemoryRecordEntity> queryByUserZoneLayer(String userId, String zone, String layer) {
             throw new RuntimeException("simulated SQL failure");

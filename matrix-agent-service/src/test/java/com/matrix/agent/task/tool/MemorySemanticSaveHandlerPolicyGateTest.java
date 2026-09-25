@@ -44,7 +44,7 @@ public final class MemorySemanticSaveHandlerPolicyGateTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("查天气", Actor.DRIVER)
                         .occupantZone(VehicleZone.DRIVER)
@@ -67,7 +67,7 @@ public final class MemorySemanticSaveHandlerPolicyGateTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .occupantZone(VehicleZone.DRIVER)
@@ -88,7 +88,7 @@ public final class MemorySemanticSaveHandlerPolicyGateTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .memorySaveAllowed(true)
@@ -130,17 +130,22 @@ public final class MemorySemanticSaveHandlerPolicyGateTest {
         }
 
         @Override
-        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
+        public void writeEpisodic(com.matrix.agent.identity.AgentRequest request, com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(com.matrix.agent.identity.AgentRequest request, String key, String value, double score) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            String sourceSessionId = request.getSessionId();
+            long requestEpoch = request.getEpoch();
             writeCount.incrementAndGet();
             return writeResult;
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(com.matrix.agent.identity.AgentRequest request, String key) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
             return null;
         }
     }

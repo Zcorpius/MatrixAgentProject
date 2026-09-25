@@ -79,8 +79,13 @@ public final class MockCapabilityProvider implements CapabilityProvider {
         handlers.put("navigation.start_route", new NavigationStartRouteHandler());
         handlers.put("memory.preference.save", new MemoryPreferenceSaveHandler());
         handlers.put("memory.preference.get", new MemoryPreferenceGetHandler());
+        handlers.put("memory.preference.list", new MemoryPreferenceListHandler());
+        handlers.put("memory.preference.delete", new MemoryPreferenceDeleteHandler());
         handlers.put("memory.semantic.save", new MemorySemanticSaveHandler());
         handlers.put("memory.semantic.get", new MemorySemanticGetHandler());
+        handlers.put("memory.semantic.delete", new MemorySemanticDeleteHandler());
+        handlers.put("memory.episodic.get", new MemoryEpisodicGetHandler());
+        handlers.put("memory.episodic.delete", new MemoryEpisodicDeleteHandler());
         handlers.put("knowledge.answer", new KnowledgeAnswerHandler());
     }
 
@@ -243,26 +248,39 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             long started = System.nanoTime();
             String key = String.valueOf(ctx.getCall().argument("key"));
             String value = String.valueOf(ctx.getCall().argument("value"));
+            if (!ctx.getRequest().isMemorySaveAllowed()
+                    || !MemoryKeyCatalog.isPreferenceKey(key)
+                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getText())) {
+                return new ToolResult(ToolResult.Status.POLICY_REJECTED,
+                        "memory.preference.save", "记忆保存需要用户明确指定内容",
+                        Collections.emptyMap(), false, elapsedMillis(started));
+            }
             // 带 epoch 校验的 putPreference——clearUserData 自增 epoch 后,
             // 旧 epoch 的 Provider 写入会被 MemoryStore 拒绝 (return false),杜绝陈旧写回。
             long requestEpoch = ctx.getRequest().getEpoch();
-            boolean accepted = ctx.getMemoryStore().putPreferenceChecked(
+            MemoryWriteOutcome outcome = ctx.getMemoryStore().putPreferenceDetailed(
                     ctx.memoryScope(), key, value, requestEpoch);
-            Map<String, Object> readback = new LinkedHashMap<>();
-            readback.put(key, ctx.getMemoryStore().getPreference(ctx.memoryScope(), key));
-            boolean verified = accepted && verifyStrategy.verify(ctx);
+            boolean accepted = outcome == MemoryWriteOutcome.SAVED;
             Log.d(TAG, "[Provider] memory.save user=" + ctx.userId()
                     + " key=" + SafeLog.TOOL_ARGS_PLACEHOLDER
                     + " value=" + SafeLog.TOOL_ARGS_PLACEHOLDER
                     + " epoch=" + requestEpoch
                     + " accepted=" + accepted);
             if (!accepted) {
-                return result("memory.preference.save",
-                        "memory preference rejected: stale epoch (clearUserData occurred)",
-                        readback, false, started);
+                return memoryWriteFailure("memory.preference.save", outcome, started);
+            }
+            Map<String, Object> readback = new LinkedHashMap<>();
+            boolean verified;
+            try {
+                readback.put(key, ctx.getMemoryStore().getPreference(ctx.memoryScope(), key));
+                readback.put("memoryOutcome", MemoryWriteOutcome.SAVED.name());
+                verified = verifyStrategy.verify(ctx);
+            } catch (RuntimeException readFailure) {
+                verified = false;
             }
             return result("memory.preference.save",
-                    "已记住你的温度偏好：" + value + "℃", readback, verified, started);
+                    verified ? "已保存这项偏好" : "偏好已写入，但读取验证失败",
+                    readback, verified, started);
         }
     }
 
@@ -280,18 +298,81 @@ public final class MockCapabilityProvider implements CapabilityProvider {
                 return new ToolResult(
                         ToolResult.Status.EXECUTION_FAILED,
                         "memory.preference.get",
-                        "还没有保存温度偏好",
+                        "还没有保存这项偏好",
                         Collections.emptyMap(),
                         false,
                         elapsedMillis(started));
             }
             Map<String, Object> readback = new LinkedHashMap<>();
-            readback.put(key, value);
+            // Historical keys can contain markup or controls. They remain addressable for
+            // deletion, but must never be echoed into a model-visible tool result.
+            readback.put(MemoryKeyCatalog.isPreferenceKey(key) || PreferenceReferences.isAlias(key) ? key : "legacy_preference", value);
             boolean verified = verifyStrategy.verify(ctx);
             Log.d(TAG, "[Provider] memory.get user=" + ctx.userId()
-                    + " key=" + key + " -> found");
+                    + " key=" + SafeLog.TOOL_ARGS_PLACEHOLDER + " -> found");
             return result("memory.preference.get",
-                    "你保存的温度偏好是 " + value + "℃", readback, verified, started);
+                    "已读取这项偏好：" + value, readback, verified, started);
+        }
+    }
+
+    /** Pagination uses a stable reference cursor, so deleting one row never renumbers others. */
+    private static final class MemoryPreferenceListHandler implements CapabilityHandler {
+        @Override public ToolResult execute(ProviderContext ctx) {
+            long started = System.nanoTime();
+            Object rawAfter = ctx.getCall().argument("after");
+            String after = rawAfter == null ? "" : String.valueOf(rawAfter);
+            if (!after.isEmpty() && !MemoryKeyCatalog.isPreferenceKey(after)
+                    && !PreferenceReferences.isAlias(after)) {
+                return ToolResult.rejected("memory.preference.list", "无效记忆列表游标");
+            }
+            try {
+                java.util.SortedMap<String, String> ordered = new java.util.TreeMap<>();
+                for (String key : ctx.getMemoryStore().getPreferenceKeys(ctx.memoryScope())) {
+                    String reference = PreferenceReferences.forKey(ctx.memoryScope(), key);
+                    if (ordered.putIfAbsent(reference, key) != null) {
+                        // A conflicting directory is deterministic, not a transient storage outage.
+                        // Do not return a partial page or suggest retrying/erasing unrelated memories.
+                        return new ToolResult(ToolResult.Status.EXECUTION_FAILED, "memory.preference.list",
+                                "记忆目录存在引用冲突，无法安全列举；需要修复目录后再使用",
+                                Map.of("memoryOutcome", "REFERENCE_CONFLICT"),
+                                false, elapsedMillis(started));
+                    }
+                }
+                java.util.List<Map<String, Object>> items = new java.util.ArrayList<>();
+                String last = null;
+                boolean hasMore = false;
+                for (Map.Entry<String, String> entry : ordered.entrySet()) {
+                    if (entry.getKey().compareTo(after) <= 0) continue;
+                    if (items.size() == 20) { hasMore = true; break; }
+                    last = entry.getKey();
+                    items.add(Map.of("key", last, "legacy", PreferenceReferences.isAlias(last)));
+                }
+                Map<String, Object> page = new LinkedHashMap<>();
+                page.put("items", items);
+                if (hasMore) page.put("next_after", last);
+                return result("memory.preference.list", "偏好目录（可按 key 读取或明确要求删除）："
+                        + new org.json.JSONObject(page), page, true, started);
+            } catch (RuntimeException failure) {
+                return new ToolResult(ToolResult.Status.EXECUTION_FAILED, "memory.preference.list",
+                        "记忆目录暂时不可用，请重试", Map.of("memoryOutcome", "STORAGE_FAILURE"),
+                        false, elapsedMillis(started));
+            }
+        }
+    }
+
+    private static final class MemoryPreferenceDeleteHandler implements CapabilityHandler {
+        @Override public ToolResult execute(ProviderContext ctx) {
+            long started = System.nanoTime();
+            String key = String.valueOf(ctx.getCall().argument("key"));
+            if (!MemoryKeyCatalog.isReadablePreferenceKey(key)
+                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getText())) {
+                return new ToolResult(ToolResult.Status.POLICY_REJECTED,
+                        "memory.preference.delete", "删除记忆需要用户明确指定目标",
+                        Collections.emptyMap(), false, elapsedMillis(started));
+            }
+            MemoryDeleteOutcome deleted = ctx.getMemoryStore().deletePreferenceDetailed(ctx.memoryScope(),
+                    key, ctx.getRequest().getEpoch());
+            return memoryDeleteResult("memory.preference.delete", deleted, started);
         }
     }
 
@@ -334,30 +415,29 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             }
             String key = String.valueOf(ctx.getCall().argument("key"));
             String value = String.valueOf(ctx.getCall().argument("value"));
-            String zone = ctx.getRequest().getOccupantZone() == null
-                    ? "" : ctx.getRequest().getOccupantZone().name();
-            String sessionId = ctx.getRequest().getSessionId();
+            if (!MemoryKeyCatalog.isSemanticKey(key)
+                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getText())) {
+                return new ToolResult(ToolResult.Status.POLICY_REJECTED,
+                        "memory.semantic.save", "记忆保存需要用户明确指定内容",
+                        Collections.emptyMap(), false, elapsedMillis(started));
+            }
             long requestEpoch = ctx.getRequest().getEpoch();
-            boolean accepted = ctx.getMemoryWriter().writeSemantic(
-                    ctx.userId(), zone, key, value, 1.0, sessionId, requestEpoch);
+            MemoryWriteOutcome outcome = ctx.getMemoryWriter().writeSemanticDetailed(
+                    ctx.getRequest(), key, value, 1.0);
+            boolean accepted = outcome == MemoryWriteOutcome.SAVED;
             Log.d(TAG, "[Provider] memory.semantic.save user=" + ctx.userId()
                     + " key=" + SafeLog.TOOL_ARGS_PLACEHOLDER
                     + " value=" + SafeLog.TOOL_ARGS_PLACEHOLDER
                     + " epoch=" + requestEpoch
                     + " accepted=" + accepted);
             if (!accepted) {
-                return new ToolResult(
-                        ToolResult.Status.EXECUTION_FAILED,
-                        "memory.semantic.save",
-                        "semantic memory write failed (database unavailable / dao error / stale epoch)",
-                        Collections.emptyMap(),
-                        false,
-                        elapsedMillis(started));
+                return memoryWriteFailure("memory.semantic.save", outcome, started);
             }
             Map<String, Object> readback = new LinkedHashMap<>();
             readback.put(key, "<memory>");
+            readback.put("memoryOutcome", MemoryWriteOutcome.SAVED.name());
             return result("memory.semantic.save",
-                    "已记住：" + key, readback, true, started);
+                    "已保存这条事实", readback, true, started);
         }
     }
 
@@ -374,9 +454,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
         public ToolResult execute(ProviderContext ctx) {
             long started = System.nanoTime();
             String key = String.valueOf(ctx.getCall().argument("key"));
-            String zone = ctx.getRequest().getOccupantZone() == null
-                    ? "" : ctx.getRequest().getOccupantZone().name();
-            String value = ctx.getMemoryWriter().readSemantic(ctx.userId(), zone, key);
+            String value = ctx.getMemoryWriter().readSemantic(ctx.getRequest(), key);
             if (value == null) {
                 Log.d(TAG, "[Provider] memory.semantic.get user=" + ctx.userId()
                         + " key=" + SafeLog.TOOL_ARGS_PLACEHOLDER + " -> not found");
@@ -395,6 +473,104 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             return result("memory.semantic.get",
                     "已找到这条记忆：" + value, readback, true, started);
         }
+    }
+
+    private static final class MemorySemanticDeleteHandler implements CapabilityHandler {
+        @Override public ToolResult execute(ProviderContext ctx) {
+            long started = System.nanoTime();
+            String key = String.valueOf(ctx.getCall().argument("key"));
+            if (!MemoryKeyCatalog.isSemanticKey(key)
+                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getText())) {
+                return new ToolResult(ToolResult.Status.POLICY_REJECTED,
+                        "memory.semantic.delete", "删除记忆需要用户明确指定目标",
+                        Collections.emptyMap(), false, elapsedMillis(started));
+            }
+            MemoryDeleteOutcome deleted = ctx.getMemoryWriter().deleteSemanticDetailed(
+                    ctx.getRequest(), key);
+            return memoryDeleteResult("memory.semantic.delete", deleted, started);
+        }
+    }
+
+    private static final class MemoryEpisodicGetHandler implements CapabilityHandler {
+        @Override public ToolResult execute(ProviderContext ctx) {
+            long started = System.nanoTime();
+            String eventId = String.valueOf(ctx.getCall().argument("event_id"));
+            if (!EpisodicFactCodec.validEventId(eventId)) {
+                return ToolResult.rejected("memory.episodic.get", "无效事件编号");
+            }
+            String detail = ctx.getMemoryWriter().readEpisodic(ctx.getRequest(), eventId);
+            if (detail == null) {
+                return new ToolResult(ToolResult.Status.EXECUTION_FAILED,
+                        "memory.episodic.get", "没有找到该事件", Collections.emptyMap(),
+                        false, elapsedMillis(started));
+            }
+            return result("memory.episodic.get", "已找到事件：" + detail,
+                    Collections.emptyMap(), true, started);
+        }
+    }
+
+    private static final class MemoryEpisodicDeleteHandler implements CapabilityHandler {
+        @Override public ToolResult execute(ProviderContext ctx) {
+            long started = System.nanoTime();
+            String eventId = String.valueOf(ctx.getCall().argument("event_id"));
+            if (!EpisodicFactCodec.validEventId(eventId)
+                    || !MemoryKeyCatalog.episodicDeleteAuthorized(eventId, ctx.getRequest().getText())) {
+                return new ToolResult(ToolResult.Status.POLICY_REJECTED,
+                        "memory.episodic.delete", "请先查询历史事件，再明确指定要删除的事件编号",
+                        Collections.emptyMap(), false, elapsedMillis(started));
+            }
+            return memoryDeleteResult("memory.episodic.delete",
+                    ctx.getMemoryWriter().deleteEpisodic(ctx.getRequest(), eventId), started);
+        }
+    }
+
+    private static ToolResult memoryWriteFailure(String capability, MemoryWriteOutcome outcome,
+            long started) {
+        String message = switch (outcome) {
+            case STALE_EPOCH -> "数据已清理，本次旧请求未保存；请重新提出保存请求";
+            case CAPACITY_REACHED -> "记忆容量已满，请先删除不再需要的条目，再保存新记忆";
+            case INVALID_KEY -> "记忆键格式无效，未保存";
+            case INVALID_VALUE -> "记忆内容为空、超长或格式无效，未保存";
+            case INVALID_REQUEST -> "记忆请求身份或会话无效，未保存";
+            default -> "记忆存储暂时不可用，未保存，请稍后重试";
+        };
+        ToolResult.Status status = outcome == MemoryWriteOutcome.STALE_EPOCH
+                || outcome == MemoryWriteOutcome.INVALID_KEY || outcome == MemoryWriteOutcome.INVALID_VALUE
+                || outcome == MemoryWriteOutcome.INVALID_REQUEST ? ToolResult.Status.POLICY_REJECTED
+                : ToolResult.Status.EXECUTION_FAILED;
+        return new ToolResult(status, capability, message, Map.of("memoryOutcome", outcome.name()),
+                false, elapsedMillis(started));
+    }
+
+    private static ToolResult memoryDeleteResult(String capability, MemoryDeleteOutcome outcome,
+            long started) {
+        ToolResult.Status status;
+        String message;
+        switch (outcome) {
+            case DELETED:
+                status = ToolResult.Status.SUCCESS;
+                message = "已忘记这条记忆";
+                break;
+            case NOT_FOUND:
+                status = ToolResult.Status.EXECUTION_FAILED;
+                message = "未找到这条记忆";
+                break;
+            case STALE_EPOCH:
+                status = ToolResult.Status.POLICY_REJECTED;
+                message = "清理后旧请求不能再修改记忆";
+                break;
+            case INVALID_KEY:
+            case INVALID_REQUEST:
+            case TARGET_NOT_AUTHORIZED:
+                status = ToolResult.Status.POLICY_REJECTED;
+                message = "删除目标无效或未获明确授权，请重新指定";
+                break;
+            default:
+                status = ToolResult.Status.EXECUTION_FAILED;
+                message = "记忆存储暂时不可用，删除失败，请重试";
+        }
+        return new ToolResult(status, capability, message, Map.of("memoryOutcome", outcome.name()),
+                status == ToolResult.Status.SUCCESS, elapsedMillis(started));
     }
 
     private static final class KnowledgeAnswerHandler implements CapabilityHandler {

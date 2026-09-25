@@ -19,6 +19,10 @@ import java.util.List;
  */
 @Dao
 public interface SessionHistoryDao {
+    /** Migration stubs contain no recallable facts and need no indefinite retention. */
+    @Query("DELETE FROM session_history WHERE trajectoryJson = '{\"legacySanitized\":true}'")
+    int deleteSanitizedLegacyRows();
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insert(SessionHistoryEntity entity);
 
@@ -38,4 +42,16 @@ public interface SessionHistoryDao {
      */
     @Query("DELETE FROM session_history WHERE userId = :userId AND zone = :zone")
     int deleteByUserZone(String userId, String zone);
+
+    @Query("DELETE FROM session_history WHERE userId = :userId")
+    int deleteByUser(String userId);
+
+    @Query("DELETE FROM session_history WHERE userId = :userId AND zone = :zone AND startedAtMillis < :cutoff")
+    int deleteOlderThan(String userId, String zone, long cutoff);
+
+    @Query("DELETE FROM session_history WHERE userId = :userId AND zone = :zone AND rowid NOT IN (SELECT rowid FROM session_history WHERE userId = :userId AND zone = :zone ORDER BY startedAtMillis DESC LIMIT :keep)")
+    int retainLatest(String userId, String zone, int keep);
+
+    @Query("DELETE FROM session_history WHERE userId = :userId AND zone = :zone AND sessionId = :sessionId AND startedAtMillis = :startedAtMillis")
+    int deleteExact(String userId, String zone, String sessionId, long startedAtMillis);
 }

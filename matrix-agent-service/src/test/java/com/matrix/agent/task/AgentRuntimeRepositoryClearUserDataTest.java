@@ -146,7 +146,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
         InMemoryMemoryStore memoryStore = new InMemoryMemoryStore();
         SessionManager sessionManager = new SessionManager();
         // 写入偏好 + session turn
-        memoryStore.putPreference("demo-driver", "preferred_temp", "22");
+        memoryStore.putPreferenceChecked("demo-driver", "preferred_temp", "22", memoryStore.currentEpoch());
         sessionManager.getOrCreate("demo-driver").addTurn("USER: hello | RESULT: OK");
 
         AgentRuntimeRepository repo = newRepositoryWithStores(b -> {}, mailbox, memoryStore,
@@ -415,13 +415,13 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
      */
     @Test
     public void clearUserDataDetailedReturnsNotApplicableWithNoopAudit() {
-        AgentRuntimeRepository repo = newRepository(b -> {}, null);
+        AgentRuntimeRepository repo = newRepositoryWithAudit(NoopAuditRepository.INSTANCE);
         ClearUserDataOutcome outcome = repo.clearUserDataDetailed();
         assertEquals("driver zone NoopAudit 应返回 NOT_APPLICABLE",
                 ClearOutcome.Status.NOT_APPLICABLE, outcome.getDriverAudit().getStatus());
         assertEquals("passenger zone NoopAudit 应返回 NOT_APPLICABLE",
                 ClearOutcome.Status.NOT_APPLICABLE, outcome.getPassengerAudit().getStatus());
-        assertFalse("NoopAudit 路径不应 auditFailed", outcome.auditFailed());
+        assertTrue("NoopAudit 无法证明持久审计已清理", outcome.auditFailed());
     }
 
     /**
@@ -451,6 +451,33 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
         AgentRuntimeRepository repo = newRepositoryWithAudit(failing);
         ClearUserDataOutcome outcome = repo.clearUserDataDetailed();
         assertTrue("audit 返回 FAILURE → outcome.auditFailed()=true", outcome.auditFailed());
+    }
+
+    @Test
+    public void detailedOutcomeIdentifiesPendingPersistentDomains() {
+        InMemoryMemoryStore failing = new InMemoryMemoryStore() {
+            @Override public synchronized long clearUsersAndBump(java.util.List<String> users) {
+                throw new IllegalStateException("database unavailable");
+            }
+        };
+        AgentRuntimeRepository repo = newRepositoryWithStores(b -> {}, null, failing,
+                new SessionManager());
+        ClearUserDataOutcome outcome = repo.clearUserDataDetailed();
+
+        assertEquals(ClearUserDataOutcome.DomainStatus.FAILED, outcome.memoryStatus());
+        assertEquals(ClearUserDataOutcome.DomainStatus.FAILED, outcome.conversationsStatus());
+        assertFalse(outcome.isComplete());
+    }
+
+    @Test
+    public void detailedOutcomeKeepsMemorySuccessSeparateFromLegacyFailure() {
+        AgentRuntimeRepository repo = newRepository(b -> {}, null);
+        repo.setLegacyMemoryClearHook(() -> false);
+        ClearUserDataOutcome outcome = repo.clearUserDataDetailed();
+
+        assertEquals(ClearUserDataOutcome.DomainStatus.CLEARED, outcome.memoryStatus());
+        assertEquals(ClearUserDataOutcome.DomainStatus.FAILED, outcome.legacySourceStatus());
+        assertFalse(outcome.isComplete());
     }
 
     /** 测试用 AuditRepository:clearByUserZone 抛 RuntimeException。 */
@@ -488,6 +515,18 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
         @Override
         public ClearOutcome clearByUserZone(String userId, String zone) {
             return ClearOutcome.failure("DAO exception");
+        }
+    }
+
+    private static final class SuccessfulAuditRepository implements AuditRepository {
+        @Override public void persist(com.matrix.agent.data.audit.AuditOutcomeEntry entry) { }
+        @Override public AuditRecord queryByRequest(String userId, String zone, String requestId) {
+            return null;
+        }
+        @Override public java.util.List<AuditRecord> queryBySession(String userId, String zone,
+                String sessionId, int limit) { return java.util.List.of(); }
+        @Override public ClearOutcome clearByUserZone(String userId, String zone) {
+            return ClearOutcome.success(0, 0, 0);
         }
     }
 
@@ -563,7 +602,7 @@ public final class AgentRuntimeRepositoryClearUserDataTest {
                 sessionManager, memoryStore, gateway, "test-gateway", budget, scheduler,
                 stateSource, registry,
                 com.matrix.agent.intent.KeywordIntentClassifier.INSTANCE,
-                NoopAuditRepository.INSTANCE);
+                new SuccessfulAuditRepository());
         if (mailbox != null) {
             repo.setSteerMailbox(mailbox);
         }

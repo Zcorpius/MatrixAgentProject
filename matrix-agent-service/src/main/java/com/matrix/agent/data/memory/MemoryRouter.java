@@ -1,19 +1,14 @@
 package com.matrix.agent.data.memory;
 
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Memory 召回入口实现——按 layer 优先级合并 4 层 source。
- *
- * <p>优先级:Working > Episodic > Semantic > Preference。每层调用时传入剩余 slots 数,
- * 保证总数不超过 maxItems 且优先级高的层先填满。
- *
- * <p>不做相似度打分、token 预算、去重——这些留给后续版本。
- * 只确保 4 层接口稳定、能产出 MemorySnippet 列表给 PromptBuilder / LlmPlanner。
- */
+/** Combines useful memory layers with a preference reserve and independent failure boundaries. */
 public final class MemoryRouter implements MemoryRecaller {
+    private static final String TAG = "MatrixAgent";
     private final WorkingMemorySource workingSource;
     private final EpisodicMemorySource episodicSource;
     private final SemanticMemorySource semanticSource;
@@ -36,20 +31,51 @@ public final class MemoryRouter implements MemoryRecaller {
         if (scope == null || maxItems <= 0) return Collections.emptyList();
         List<MemorySnippet> result = new ArrayList<>();
 
-        result.addAll(workingSource.recallWorking(scope, sessionId, userText, maxItems));
-        if (result.size() < maxItems) {
-            result.addAll(episodicSource.recallEpisodic(scope, userText, maxItems - result.size()));
-        }
-        if (result.size() < maxItems) {
-            result.addAll(semanticSource.recallSemantic(scope, userText, maxItems - result.size()));
-        }
-        if (result.size() < maxItems) {
-            result.addAll(preferenceSource.recallPreference(scope, userText, maxItems - result.size()));
-        }
+        // Fetch preferences once so other layers can borrow unused slots and preferences can
+        // fill the remainder without another storage read or unstable second ranking.
+        List<MemorySnippet> preferences = recallSafely(MemoryLayer.PREFERENCE, () ->
+                preferenceSource.recallPreference(scope, userText, maxItems));
+        append(result, Math.min(maxItems, 3), preferences, 0);
+        append(result, maxItems, recallSafely(MemoryLayer.WORKING, () ->
+                workingSource.recallWorking(scope, sessionId, userText,
+                        Math.min(maxItems - result.size(), 1))), 0);
+        append(result, maxItems, recallSafely(MemoryLayer.SEMANTIC, () -> semanticSource.recallSemantic(scope, userText,
+                Math.min(maxItems - result.size(), 4))), 0);
+        append(result, maxItems, recallSafely(MemoryLayer.EPISODIC, () -> episodicSource.recallEpisodic(scope, userText,
+                Math.min(maxItems - result.size(), 2))), 0);
+        append(result, maxItems, preferences, Math.min(preferences.size(), 3));
 
-        if (result.size() > maxItems) {
-            result = new ArrayList<>(result.subList(0, maxItems));
-        }
         return Collections.unmodifiableList(result);
+    }
+
+    private static List<MemorySnippet> recallSafely(MemoryLayer layer,
+            java.util.function.Supplier<List<MemorySnippet>> source) {
+        try {
+            List<MemorySnippet> items = source.get();
+            if (items == null) return Collections.emptyList();
+            List<MemorySnippet> usable = new ArrayList<>(items.size());
+            for (MemorySnippet item : items) {
+                if (item != null && MemoryKeyCatalog.promptKey(item.getLayer(), item.getKey()) != null
+                        && (item.getLayer() != MemoryLayer.WORKING
+                                || MemoryKeyCatalog.workingValueForPrompt(
+                                        item.getKey(), item.getValue()) != null)) {
+                    usable.add(item);
+                }
+            }
+            return usable;
+        } catch (RuntimeException failure) {
+            // One optional source may fail while already-recalled layers remain usable.
+            Log.w(TAG, "[MemoryRouter] recall layer=" + layer.wireValue()
+                    + " failed cause=" + failure.getClass().getSimpleName());
+            return Collections.emptyList();
+        }
+    }
+
+    private static void append(List<MemorySnippet> target, int maxItems,
+            List<MemorySnippet> items, int start) {
+        for (int i = start; i < items.size() && target.size() < maxItems; i++) {
+            MemorySnippet item = items.get(i);
+            target.add(item);
+        }
     }
 }

@@ -46,7 +46,7 @@ public final class MockCapabilityProviderSemanticHandlerTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .sessionId("sess-001")
@@ -61,9 +61,9 @@ public final class MockCapabilityProviderSemanticHandlerTest {
         assertEquals("memory.semantic.save", result.getCapabilityName());
         assertEquals("writeSemantic 调 1 次", 1, writer.writeCount.get());
         assertEquals("allergy.peanut", writer.lastKey);
-        assertEquals("严重过敏", writer.lastValue);
+        assertEquals("花生过敏", writer.lastValue);
         assertEquals("demo-driver", writer.lastUserId);
-        assertEquals("DRIVER", writer.lastZone);
+        assertEquals("driver", writer.lastZone);
         assertEquals("sess-001", writer.lastSessionId);
     }
 
@@ -76,7 +76,7 @@ public final class MockCapabilityProviderSemanticHandlerTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .memorySaveAllowed(true)
@@ -139,7 +139,7 @@ public final class MockCapabilityProviderSemanticHandlerTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         ToolResult result = provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .memorySaveAllowed(true)
@@ -194,11 +194,14 @@ public final class MockCapabilityProviderSemanticHandlerTest {
         }
 
         @Override
-        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
+        public void writeEpisodic(com.matrix.agent.identity.AgentRequest request, com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(com.matrix.agent.identity.AgentRequest request, String key, String value, double score) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            String sourceSessionId = request.getSessionId();
+            long requestEpoch = request.getEpoch();
             writeCount.incrementAndGet();
             lastKey = key;
             lastValue = value;
@@ -210,7 +213,9 @@ public final class MockCapabilityProviderSemanticHandlerTest {
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(com.matrix.agent.identity.AgentRequest request, String key) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
             readCount.incrementAndGet();
             lastKey = key;
             lastUserId = userId;

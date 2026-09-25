@@ -1,11 +1,15 @@
 package com.matrix.agent.data.memory;
 
 
+import com.matrix.agent.identity.VehicleZone;
+import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.identity.ActorUsers;
 
 import android.util.Log;
 
 import java.util.regex.Pattern;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
@@ -16,15 +20,14 @@ import com.matrix.agent.data.db.SessionHistoryEntity;
  * Room-backed MemoryWriter 实现。
  *
  * <p>持 {@link SessionHistoryDao} / {@link MemoryRecordDao} / {@link EpisodicMemorySourceImpl}
- * (均可空,fail-log)。database=null 时由 {@link com.matrix.agent.app.AppContainer} 装配
+ * (均可空,fail-log)。database=null 时由 {@link com.matrix.agent.host.di.AppContainer} 装配
  * {@link MemoryWriter#NOOP},本类不被实例化。
  *
  * <p><b>fail-log</b>:所有写入路径 try/catch 包裹,异常仅 Log.w,不向上传播。
  * 与 RoomAuditRepository fail-open 语义一致,但 Memory 不阻塞主路径。
  *
- * <p><b>缓存失效</b>:writeEpisodic 写入后必须调 {@link EpisodicMemorySourceImpl#invalidateCache()}
- * 失效 5min LRU——否则"任务结束 → 立即下一任务召回"读到旧值(注释明确)。
- * SemanticMemorySourceImpl 无缓存(直查 Dao),不需要失效。
+ * <p>Episodic and Semantic recall read through the DAO without a local result cache, so clear
+ * and per-key delete are visible on the next lookup.
  *
  * <p><b>epoch 原子性</b>:每个写入接口(episodic / semantic)都在
  * {@link RoomMemoryStore.TransactionRunner#runInTransaction(Runnable)} 内完成
@@ -36,30 +39,21 @@ import com.matrix.agent.data.db.SessionHistoryEntity;
  * <p>epoch 直接从 memory_record 的 __system__/__system__/preference/__epoch__ 行 SELECT,
  * 不走 RoomMemoryStore.epoch AtomicLong 缓存——数据库是单一权威,跨进程重启不丢。
  *
- * <p><b>调用方契约(尚无 enforcement)</b>:{@code writeSemantic / readSemantic}
- * 的 {@code userId / zone} 参数由调用方传入,本类不做"调用方身份与参数一致"校验。当前唯一调用方
- * {@code MockCapabilityProvider.MemorySemanticSaveHandler} 用 {@code ActorUsers.userIdOf(request)}
- * + {@code request.getOccupantZone().wireValue()} 推导,无实际越权路径。但未来真实 AAOS Provider
- * 或第三方插件若误传其他用户 / zone 的值,可能写入错误访问域。后续版本引入 {@code CallerContext}
- * (PolicyEngine 已持有的 request.userId / zone 透传到 Writer 入口)做 enforcement;仅在此
- * 标注契约——调用方必须传"当前 request 的 userId / zone"。
+ * <p>Semantic operations derive userId, zone, session and epoch inside this Writer from the
+ * bound AgentRequest. A Provider cannot supply a different owner string.
  */
 public final class RoomMemoryWriter implements MemoryWriter {
     private static final String TAG = "MatrixAgent";
 
     /**
-     * writer-side defence-in-depth——与 CapabilityRegistry.memory.semantic.save
-     * 的 schema pattern 同款。Schema 已强制,但即便 Provider 漏过(未来真实 AAOS Provider /
-     * 第三方实现 / 测试桩直接调 writer),Writer 仍 fail-closed 拒绝。
+     * Writer-side validation uses {@link MemoryKeyCatalog} for the same key contract as
+     * schema, Policy and prompt projection.
      *
      * <p>{@code SEMANTIC_VALUE_MAX_LEN = 2048} 是 Java char(UTF-16 code unit)数,
      * <b>不是</b> UTF-8 字节数。中文 / emoji 等 UTF-8 实际字节数最多 ~4 倍(最坏 8KB/行,
      * SQLite TEXT 无压力)。文档/UI 描述必须用"最多 2048 字符",不要用"≤ 2KB"——后者误导。
      * UTF-8 字节上限留后续版本视真实 PII 容量需求评估。
      */
-    private static final Pattern SEMANTIC_KEY_PATTERN =
-            Pattern.compile("^(family|allergy|work|fact)\\.[A-Za-z0-9_.]+$");
-    private static final int SEMANTIC_KEY_MAX_LEN = 64;
     private static final int SEMANTIC_VALUE_MAX_LEN = 2048;  // chars (UTF-16 code units), not UTF-8 bytes
     private static final int SOURCE_SESSION_ID_MAX_LEN = 128;
 
@@ -82,8 +76,13 @@ public final class RoomMemoryWriter implements MemoryWriter {
     }
 
     @Override
-    public void writeEpisodic(EpisodicWrite write) {
-        if (transactionRunner == null || sessionHistoryDao == null || write == null) return;
+    public void writeEpisodic(AgentRequest request, EpisodicWrite write) {
+        String rejection = episodicRejection(request, write);
+        if (rejection != null) {
+            Log.w(TAG, "[MemoryWriter] episodic rejected reason=" + rejection);
+            return;
+        }
+        VehicleZone canonicalZone = request.getOccupantZone();
         // task 侧适配器已经完成终态过滤（仅 SUCCEEDED/FAILED）和安全摘要构建。
         // 本层只承担事务内 epoch gate、实体写入与成功后的缓存失效。
         try {
@@ -106,7 +105,7 @@ public final class RoomMemoryWriter implements MemoryWriter {
                 }
                 SessionHistoryEntity row = new SessionHistoryEntity();
                 row.userId = write.userId;
-                row.zone = write.zone;
+                row.zone = canonicalZone.wireValue();
                 row.sessionId = write.sessionId;
                 row.startedAtMillis = write.startedAtMillis;
                 row.actor = write.actor;
@@ -114,22 +113,25 @@ public final class RoomMemoryWriter implements MemoryWriter {
                 row.stopReason = write.stopReason;
                 row.durationMs = write.durationMs;
                 row.turnCount = write.turnCount;
-                // trajectoryJson 列名保留(不改 schema),内容从完整 trajectory JSON
-                // 换成 EpisodicSummary JSON——仅 startedAt/finalState/durationMs/turnCount/
-                // successfulCapabilities ≤3,**不含 userText/assistantContent/arguments/result**。
+                // Column name is retained for compatibility. Payload is a versioned,
+                // bounded event summary; v2 includes up to three verified facts.
                 row.trajectoryJson = write.summaryJson;
                 sessionHistoryDao.insert(row);  // @Insert(REPLACE) 幂等
+                sessionHistoryDao.deleteOlderThan(write.userId, canonicalZone.wireValue(),
+                        System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L);
+                sessionHistoryDao.retainLatest(write.userId, canonicalZone.wireValue(), 100);
                 written[0] = true;
             });
-            // 仅在真写入后失效缓存——stale reject / fail-closed reject 都不触发 invalidate
+            // Retained for compatibility with the source's invalidation hook.
             if (written[0] && episodicSource != null) {
-                episodicSource.invalidateCache();  // 失效 5min LRU
+                episodicSource.invalidateCache();
             }
             if (written[0]) {
                 Log.i(TAG, "[MemoryWriter] episodic write OK req=" + write.requestId
                         + " state=" + write.finalState
                         + " requestEpoch=" + write.requestEpoch
-                        + " summaryBytes=" + write.summaryJson.length());
+                        + " summaryBytes=" + write.summaryJson.getBytes(
+                                java.nio.charset.StandardCharsets.UTF_8).length);
             } else {
                 Log.i(TAG, "[MemoryWriter] episodic write skipped req=" + write.requestId
                         + " (stale / fail-closed / row-missing mismatch)");
@@ -141,44 +143,51 @@ public final class RoomMemoryWriter implements MemoryWriter {
         }
     }
 
-    /**
-     * 契约:调用方必须传"当前 request 的 userId / zone"——本方法不做"调用方身份
-     * 与参数一致"校验。MockCapabilityProvider.MemorySemanticSaveHandler 推导正确无越权路径;
-     * 第三方 Provider 误传可串数据(后续版本加 CallerContext enforcement)。
-     */
+    /** First failed field only: no identifier, payload or exception message is logged. */
+    private String episodicRejection(AgentRequest request, EpisodicWrite write) {
+        if (transactionRunner == null || sessionHistoryDao == null) return "storage_unavailable";
+        if (request == null || request.getActor() == null) return "request_missing";
+        if (request.getOccupantZone() == null) return "zone_missing";
+        if (write == null) return "write_missing";
+        if (VehicleZone.parse(write.zone) != request.getOccupantZone()) return "zone_mismatch";
+        if (!ActorUsers.userIdOf(request).equals(write.userId)) return "owner_mismatch";
+        if (!request.getSessionId().equals(write.sessionId)) return "session_mismatch";
+        if (!request.getRequestId().equals(write.requestId)) return "request_id_mismatch";
+        if (!request.getActor().name().equals(write.actor)) return "actor_mismatch";
+        if (request.getEpoch() != write.requestEpoch) return "epoch_mismatch";
+        if (!EpisodicFactCodec.eventIdFor(request, write.startedAtMillis)
+                .equals(eventIdOf(write.summaryJson))) return "event_id_mismatch";
+        return isSafeEpisodicWrite(write) ? null : "invalid_summary";
+    }
+
     @Override
-    public boolean writeSemantic(String userId, String zone, String key, String value,
-            double score, String sourceSessionId, long requestEpoch) {
-        if (transactionRunner == null || memoryRecordDao == null
-                || userId == null || zone == null || key == null) {
-            return false;
-        }
-        // writer-side defence-in-depth。Schema 已强制 pattern/maxLength,
-        // 但 Provider / 测试桩可能绕过 PolicyEngine schema 校验直接调 writer,这层仍 fail-closed。
-        // 用户硬约束:"在 Schema / Policy / Writer 至少一层强制"。
-        if (!isAcceptableSemanticKey(key) || !isAcceptableSemanticValue(value)
-                || !isAcceptableScore(score) || !isAcceptableSourceSessionId(sourceSessionId)) {
-            Log.w(TAG, "[MemoryWriter] reject semantic write by validation"
-                    + " keyLen=" + key.length()
-                    + " valueLen=" + (value == null ? -1 : value.length())
-                    + " score=" + score
-                    + " sessionIdLen=" + (sourceSessionId == null ? -1 : sourceSessionId.length()));
-            return false;
-        }
+    public boolean writeSemantic(AgentRequest request, String key, String value, double score) {
+        return writeSemanticDetailed(request, key, value, score) == MemoryWriteOutcome.SAVED;
+    }
+
+    @Override
+    public MemoryWriteOutcome writeSemanticDetailed(AgentRequest request, String key, String value,
+            double score) {
+        if (!hasMemoryIdentity(request)
+                || !isAcceptableSourceSessionId(request.getSessionId())) return MemoryWriteOutcome.INVALID_REQUEST;
+        if (!isAcceptableSemanticKey(key)) return MemoryWriteOutcome.INVALID_KEY;
+        if (!isAcceptableSemanticValue(value) || !isAcceptableScore(score)) return MemoryWriteOutcome.INVALID_VALUE;
+        if (transactionRunner == null || memoryRecordDao == null) return MemoryWriteOutcome.STORAGE_FAILURE;
+        String userId = ActorUsers.userIdOf(request);
+        String zone = request.getOccupantZone().wireValue();
         try {
-            boolean[] ok = {false};
+            MemoryWriteOutcome[] outcome = {MemoryWriteOutcome.STORAGE_FAILURE};
             transactionRunner.runInTransaction(() -> {
-                Long currentEpochBoxed = readEpochFromSystemRow();
-                if (currentEpochBoxed == null) {
-                    Log.w(TAG, "[MemoryWriter] reject semantic write key=" + key
-                            + " reason=epoch_read_failed (fail-closed)");
-                    return;  // epoch 读取失败 → 事务内 return,ok[0] 仍为 false
+                Long current = readEpochFromSystemRow();
+                if (current == null) return;
+                if (request.getEpoch() != current) {
+                    outcome[0] = MemoryWriteOutcome.STALE_EPOCH;
+                    return;
                 }
-                long currentEpoch = currentEpochBoxed.longValue();
-                if (requestEpoch != currentEpoch) {
-                    Log.w(TAG, "[MemoryWriter] reject stale semantic write key=" + key
-                            + " requestEpoch=" + requestEpoch + " currentEpoch=" + currentEpoch
-                            + " (clearUserData 已发生,在途写入被事务内拒绝)");
+                if (memoryRecordDao.queryByKey(userId, zone, MemoryLayer.SEMANTIC.wireValue(), key) == null
+                        && memoryRecordDao.countByUserZoneLayer(userId, zone, MemoryLayer.SEMANTIC.wireValue())
+                        >= RoomMemoryStore.MAX_EXPLICIT_RECORDS_PER_SCOPE) {
+                    outcome[0] = MemoryWriteOutcome.CAPACITY_REACHED;
                     return;
                 }
                 MemoryRecordEntity row = new MemoryRecordEntity();
@@ -189,37 +198,161 @@ public final class RoomMemoryWriter implements MemoryWriter {
                 row.value = value;
                 row.score = score;
                 row.capturedAtMs = System.currentTimeMillis();
-                row.sourceSessionId = sourceSessionId;
-                memoryRecordDao.upsert(row);  // REPLACE 幂等
-                ok[0] = true;
+                row.sourceSessionId = request.getSessionId();
+                memoryRecordDao.upsert(row);
+                outcome[0] = MemoryWriteOutcome.SAVED;
             });
-            if (ok[0]) {
-                Log.i(TAG, "[MemoryWriter] semantic write OK key=" + key
-                        + " user=" + userId + " requestEpoch=" + requestEpoch);
-            }
-            return ok[0];
-        } catch (Exception ex) {
-            Log.w(TAG, "[MemoryWriter] semantic write FAILED key=" + key
-                    + " cause=" + ex.getClass().getSimpleName() + ": " + ex.getMessage());
-            return false;
+            return outcome[0];
+        } catch (RuntimeException failure) {
+            Log.w(TAG, "[MemoryWriter] semantic write failed cause=" + failure.getClass().getSimpleName());
+            return MemoryWriteOutcome.STORAGE_FAILURE;
         }
     }
 
-    /**
-     * 契约:同 {@link #writeSemantic}——调用方必须传当前 request 的 userId / zone。
-     */
     @Override
-    public String readSemantic(String userId, String zone, String key) {
-        if (memoryRecordDao == null || userId == null || zone == null || key == null) return null;
+    public String readSemantic(AgentRequest request, String key) {
+        if (!hasMemoryIdentity(request)) return null;
+        return readSemanticScoped(ActorUsers.userIdOf(request),
+                request.getOccupantZone().wireValue(), key);
+    }
+
+    private String readSemanticScoped(String userId, String zone, String key) {
+        if (memoryRecordDao == null || userId == null || userId.isBlank()
+                || RoomMemoryStore.SYSTEM_USER.equals(userId)
+                || zone == null || !isAcceptableSemanticKey(key)) return null;
+        VehicleZone canonicalZone = VehicleZone.parse(zone);
+        if (canonicalZone == null) return null;
         try {
-            MemoryRecordEntity row = memoryRecordDao.queryByKey(userId, zone,
+            MemoryRecordEntity row = memoryRecordDao.queryByKey(userId, canonicalZone.wireValue(),
                     MemoryLayer.SEMANTIC.wireValue(), key);
             return row == null ? null : row.value;
         } catch (Exception ex) {
-            Log.w(TAG, "[MemoryWriter] semantic read FAILED key=" + key
+            Log.w(TAG, "[MemoryWriter] semantic read FAILED keyLen=" + key.length()
                     + " cause=" + ex.getClass().getSimpleName() + ": " + ex.getMessage());
             return null;
         }
+    }
+
+    @Override
+    public MemoryDeleteOutcome deleteSemanticDetailed(AgentRequest request, String key) {
+        if (!hasMemoryIdentity(request)) return MemoryDeleteOutcome.INVALID_REQUEST;
+        return deleteSemanticScoped(ActorUsers.userIdOf(request),
+                request.getOccupantZone().wireValue(), key, request.getEpoch());
+    }
+
+    private MemoryDeleteOutcome deleteSemanticScoped(String userId, String zone, String key,
+            long requestEpoch) {
+        if (!isAcceptableSemanticKey(key)) return MemoryDeleteOutcome.INVALID_KEY;
+        VehicleZone canonicalZone = VehicleZone.parse(zone);
+        if (transactionRunner == null || memoryRecordDao == null || userId == null
+                || userId.isBlank() || RoomMemoryStore.SYSTEM_USER.equals(userId)
+                || canonicalZone == null || !isAcceptableSemanticKey(key)) {
+            return MemoryDeleteOutcome.STORAGE_FAILURE;
+        }
+        try {
+            MemoryDeleteOutcome[] outcome = {MemoryDeleteOutcome.STORAGE_FAILURE};
+            transactionRunner.runInTransaction(() -> {
+                Long current = readEpochFromSystemRow();
+                if (current == null) return;
+                if (current != requestEpoch) {
+                    outcome[0] = MemoryDeleteOutcome.STALE_EPOCH;
+                    return;
+                }
+                outcome[0] = memoryRecordDao.deleteByKey(userId, canonicalZone.wireValue(),
+                        MemoryLayer.SEMANTIC.wireValue(), key) > 0
+                        ? MemoryDeleteOutcome.DELETED : MemoryDeleteOutcome.NOT_FOUND;
+            });
+            return outcome[0];
+        } catch (Exception failure) {
+            Log.w(TAG, "[MemoryWriter] semantic delete failed cause="
+                    + failure.getClass().getSimpleName());
+            return MemoryDeleteOutcome.STORAGE_FAILURE;
+        }
+    }
+
+    @Override
+    public String readEpisodic(AgentRequest request, String eventId) {
+        SessionHistoryEntity row = findEpisodic(request, eventId);
+        if (row == null) return null;
+        try {
+            JSONObject stored = new JSONObject(row.trajectoryJson);
+            JSONObject projected = new JSONObject();
+            projected.put("eventKind", stored.getString("eventKind"));
+            projected.put("finalState", row.finalState);
+            projected.put("startedAtMillis", row.startedAtMillis);
+            projected.put("verifiedFacts", EpisodicFactCodec.project(
+                    stored.getJSONArray("verifiedFacts")));
+            return projected.toString();
+        } catch (Exception invalid) { return null; }
+    }
+
+    @Override
+    public MemoryDeleteOutcome deleteEpisodic(AgentRequest request, String eventId) {
+        if (!hasMemoryIdentity(request)) return MemoryDeleteOutcome.INVALID_REQUEST;
+        if (!EpisodicFactCodec.validEventId(eventId)) return MemoryDeleteOutcome.INVALID_KEY;
+        if (!MemoryKeyCatalog.episodicDeleteAuthorized(eventId, request.getText())) {
+            return MemoryDeleteOutcome.TARGET_NOT_AUTHORIZED;
+        }
+        if (transactionRunner == null || sessionHistoryDao == null) return MemoryDeleteOutcome.STORAGE_FAILURE;
+        try {
+            MemoryDeleteOutcome[] outcome = {MemoryDeleteOutcome.STORAGE_FAILURE};
+            transactionRunner.runInTransaction(() -> {
+                Long current = readEpochFromSystemRow();
+                if (current == null) return;
+                if (current != request.getEpoch()) {
+                    outcome[0] = MemoryDeleteOutcome.STALE_EPOCH;
+                    return;
+                }
+                SessionHistoryEntity row = findEpisodic(request, eventId);
+                if (row == null) {
+                    outcome[0] = MemoryDeleteOutcome.NOT_FOUND;
+                    return;
+                }
+                outcome[0] = sessionHistoryDao.deleteExact(row.userId, row.zone,
+                        row.sessionId, row.startedAtMillis) > 0
+                        ? MemoryDeleteOutcome.DELETED : MemoryDeleteOutcome.NOT_FOUND;
+            });
+            return outcome[0];
+        } catch (Exception failure) {
+            Log.w(TAG, "[MemoryWriter] episodic delete failed cause="
+                    + failure.getClass().getSimpleName());
+            return MemoryDeleteOutcome.STORAGE_FAILURE;
+        }
+    }
+
+    private SessionHistoryEntity findEpisodic(AgentRequest request, String eventId) {
+        if (!hasMemoryIdentity(request) || sessionHistoryDao == null
+                || !EpisodicFactCodec.validEventId(eventId)) return null;
+        try {
+            String user = ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            long cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1_000;
+            for (SessionHistoryEntity row : sessionHistoryDao.queryByUserZone(user, zone, 100)) {
+                try {
+                    if (row.startedAtMillis < cutoff || row.trajectoryJson == null
+                            || row.trajectoryJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2048) {
+                        continue;
+                    }
+                    JSONObject summary = new JSONObject(row.trajectoryJson);
+                    if (summary.optInt("eventSchemaVersion", -1) != EpisodicEventKind.SCHEMA_VERSION
+                            || !eventId.equals(summary.optString("eventId"))) continue;
+                    if (!EpisodicFactCodec.validFactsForCapabilities(
+                            summary.optJSONArray("verifiedFacts"),
+                            summary.optJSONArray("successfulCapabilities"))
+                            || EpisodicEventKind.fromWireValue(summary.optString("eventKind")) == null
+                            || summary.optLong("startedAtMillis", -1) != row.startedAtMillis
+                            || !("SUCCEEDED".equals(row.finalState) || "FAILED".equals(row.finalState))
+                            || !row.finalState.equals(summary.optString("finalState"))) continue;
+                    return row;
+                } catch (Exception invalidRow) {
+                    // One corrupt legacy row must not hide later events in the scoped window.
+                }
+            }
+        } catch (Exception failure) {
+            Log.w(TAG, "[MemoryWriter] episodic lookup failed cause="
+                    + failure.getClass().getSimpleName());
+        }
+        return null;
     }
 
     /**
@@ -244,8 +377,10 @@ public final class RoomMemoryWriter implements MemoryWriter {
             MemoryRecordEntity row = memoryRecordDao.queryByKey(
                     RoomMemoryStore.SYSTEM_USER, RoomMemoryStore.SYSTEM_ZONE,
                     RoomMemoryStore.PREFERENCE_LAYER, RoomMemoryStore.EPOCH_KEY);
-            if (row == null || row.value == null) return 0L;  // 合法初始
-            return Long.parseLong(row.value);
+            if (row == null) return 0L;  // 合法初始
+            if (row.value == null) return null;
+            long loaded = Long.parseLong(row.value);
+            return loaded < 0 ? null : loaded;
         } catch (Exception ex) {
             Log.w(TAG, "[MemoryWriter] readEpochFromSystemRow FAILED, fail-closed reject cause="
                     + ex.getClass().getSimpleName() + ": " + ex.getMessage());
@@ -253,16 +388,20 @@ public final class RoomMemoryWriter implements MemoryWriter {
         }
     }
 
+    /** Absence of an occupant scope never grants GLOBAL access, including malformed test objects. */
+    private static boolean hasMemoryIdentity(AgentRequest request) {
+        return request != null && request.getActor() != null && request.getOccupantZone() != null;
+    }
+
     // writer-side validation helpers。与 CapabilityRegistry.memory.semantic.save
     // schema 同款约束。Schema 已强制,但 writer 仍兜底防 Provider 漏检 / 第三方 Provider / 测试桩。
 
     private static boolean isAcceptableSemanticKey(String key) {
-        if (key.isEmpty() || key.length() > SEMANTIC_KEY_MAX_LEN) return false;
-        return SEMANTIC_KEY_PATTERN.matcher(key).matches();
+        return MemoryKeyCatalog.isSemanticKey(key);
     }
 
     private static boolean isAcceptableSemanticValue(String value) {
-        return value != null && !value.isEmpty() && value.length() <= SEMANTIC_VALUE_MAX_LEN;
+        return value != null && !value.isBlank() && value.length() <= SEMANTIC_VALUE_MAX_LEN;
     }
 
     private static boolean isAcceptableScore(double score) {
@@ -272,5 +411,77 @@ public final class RoomMemoryWriter implements MemoryWriter {
     private static boolean isAcceptableSourceSessionId(String sessionId) {
         if (sessionId == null) return true;  // 历史数据允许 null
         return sessionId.length() <= SOURCE_SESSION_ID_MAX_LEN;
+    }
+
+    private static boolean isSafeEpisodicWrite(EpisodicWrite write) {
+        if (write.userId == null || write.userId.isBlank()
+                || RoomMemoryStore.SYSTEM_USER.equals(write.userId)
+                || write.sessionId == null || write.sessionId.isBlank()
+                || write.sessionId.length() > SOURCE_SESSION_ID_MAX_LEN
+                || !("DRIVER".equals(write.actor) || "PASSENGER".equals(write.actor))
+                || (write.stopReason != null && !write.stopReason.isEmpty()
+                        && !isKnownStopReason(write.stopReason))
+                || write.summaryJson == null
+                || write.summaryJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2048
+                || write.durationMs < 0 || write.turnCount < 0
+                || !("SUCCEEDED".equals(write.finalState) || "FAILED".equals(write.finalState))) {
+            return false;
+        }
+        try {
+            JSONObject json = new JSONObject(write.summaryJson);
+            java.util.Iterator<String> keys = json.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (!java.util.Set.of("eventSchemaVersion", "eventKind", "eventId", "verifiedFacts", "startedAtMillis",
+                        "finalState", "durationMs", "turnCount", "successfulCapabilities",
+                        "truncated").contains(key)) {
+                    return false;
+                }
+            }
+            int version = json.optInt("eventSchemaVersion", -1);
+            if (!write.finalState.equals(json.optString("finalState"))
+                    || version != EpisodicEventKind.SCHEMA_VERSION
+                    || !json.has("eventKind")
+                    || json.optLong("startedAtMillis", -1) != write.startedAtMillis
+                    || json.optLong("durationMs", -1) != write.durationMs
+                    || json.optInt("turnCount", -1) != write.turnCount) return false;
+            if (version == EpisodicEventKind.SCHEMA_VERSION
+                    && !EpisodicFactCodec.validEventId(json.optString("eventId", null))) return false;
+            JSONArray capabilities = json.optJSONArray("successfulCapabilities");
+            if (version == EpisodicEventKind.SCHEMA_VERSION
+                    && !EpisodicFactCodec.validFactsForCapabilities(
+                            json.optJSONArray("verifiedFacts"), capabilities)) return false;
+            if (capabilities != null) {
+                if (capabilities.length() > 3) return false;
+                EpisodicEventKind derivedKind = null;
+                for (int i = 0; i < capabilities.length(); i++) {
+                    String capability = capabilities.optString(i, "");
+                    if (capability.length() > 64
+                            || !Pattern.matches("[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+", capability)
+                            || EpisodicEventKind.fromCapability(capability) == null) return false;
+                    if (derivedKind == null) derivedKind = EpisodicEventKind.fromCapability(capability);
+                }
+                if (derivedKind == null ? !json.isNull("eventKind")
+                        : !derivedKind.wireValue().equals(json.optString("eventKind"))) return false;
+            } else if (!json.optBoolean("truncated", false)) {
+                return false;
+            }
+            return true;
+        } catch (Exception invalid) {
+            return false;
+        }
+    }
+
+    private static boolean isKnownStopReason(String value) {
+        return value.length() <= 32 && Pattern.matches("[A-Z_]+", value);
+    }
+
+    private static String eventIdOf(String summaryJson) {
+        if (summaryJson == null || summaryJson.length() > 2048) return null;
+        try {
+            return new JSONObject(summaryJson).optString("eventId", null);
+        } catch (Exception invalid) {
+            return null;
+        }
     }
 }

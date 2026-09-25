@@ -46,7 +46,7 @@ public final class ModelApiClientContractTest {
         JSONObject request = ModelApiClient.buildOpenAiToolRequest(config, "system", "user", tools);
 
         assertEquals("auto", request.getString("tool_choice"));
-        assertEquals(12, request.getJSONArray("tools").length());
+        assertEquals(17, request.getJSONArray("tools").length());
         JSONObject climate = findFunction(request.getJSONArray("tools"),
                 "vehicle_climate_set_temperature");
         JSONObject parameters = climate.getJSONObject("parameters");
@@ -132,7 +132,7 @@ public final class ModelApiClientContractTest {
         // tools 是 [{functionDeclarations:[...]}]
         JSONArray functionDeclarations = request.getJSONArray("tools")
                 .getJSONObject(0).getJSONArray("functionDeclarations");
-        assertEquals(12, functionDeclarations.length());
+        assertEquals(17, functionDeclarations.length());
     }
 
     @Test
@@ -263,7 +263,7 @@ public final class ModelApiClientContractTest {
 
         // tool_choice 与 tool 数量保持原生协议
         assertEquals("auto", request.getString("tool_choice"));
-        assertEquals(12, request.getJSONArray("tools").length());
+        assertEquals(17, request.getJSONArray("tools").length());
 
         JSONArray messages = request.getJSONArray("messages");
         // system + user + assistant + tool + tool = 5 条

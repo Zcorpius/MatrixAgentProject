@@ -68,6 +68,7 @@ public final class AppContainer implements DownloadRuntime {
     private final MatrixExecutorRegistry executorRegistry;
     /** SQLCipher/database/download subgraph; separates persistence ownership from runtime wiring. */
     private final PersistenceRuntimeGraph persistenceGraph;
+    private final MatrixDatabase activeDatabase;
     private final DownloadRuntimeGraph downloadGraph;
     private final MatrixHttpClient httpClient;
     /**
@@ -112,13 +113,17 @@ public final class AppContainer implements DownloadRuntime {
         // MatrixDatabase 提前装配——audit + memory 共用同一 SQLCipher 实例
         // (getInstance 单例,keyProvider 失败 → database=null → audit/memory 均进入显式降级)。
         this.persistenceGraph = new PersistenceRuntimeGraph(appContext);
-        MatrixDatabase database = persistenceGraph.database();
-        this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
-                httpClient);
+        MatrixDatabase encryptedDatabase = PendingUserDataReset.databaseAfterRecovery(
+                appContext, persistenceGraph.database(),
+                executorRegistry.dbExecutor());
         // Memory graph owns the legacy migration plus the encrypted/volatile fallback boundary.
         // It is assembled before models because prompt construction needs the recaller.
-        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(appContext, database, sessionManager,
+        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(appContext, encryptedDatabase, sessionManager,
                 executorRegistry.dbExecutor());
+        MatrixDatabase database = memoryGraph.isDegraded() ? null : encryptedDatabase;
+        this.activeDatabase = database;
+        this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
+                httpClient);
         MemoryStore memoryStore = memoryGraph.store();
         MemoryRecaller memoryRecaller = memoryGraph.recaller();
         com.matrix.agent.data.memory.MemoryWriter memoryWriter = memoryGraph.writer();
@@ -208,6 +213,12 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.taskProgressSink = this.conversationProgressBridge;
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
+        agentRuntimeRepository.setLegacyMemoryClearHook(
+                () -> com.matrix.agent.data.memory.RoomMemoryMigrator
+                        .clearLegacySharedPreferences(appContext));
+        agentRuntimeRepository.setResetLifecycleHooks(
+                () -> PendingUserDataReset.mark(appContext),
+                () -> PendingUserDataReset.clearMarker(appContext));
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
         // 调试轨迹日志无条件开启。所有构建变体均只由显式 Gradle 属性
         // matrix.debugTraceUi 决定是否把已净化投影写入 SQLCipher 并允许 UI 订阅；
@@ -245,8 +256,7 @@ public final class AppContainer implements DownloadRuntime {
             conversationTaskSubmitter = new ConversationTaskSubmitter(
                     appClassifier, KeywordMemoryIntentDetector.INSTANCE, conversationAssembler);
             conversationClearHook = () -> {
-                conversationStore.clearForUsers(
-                        java.util.List.of(ActorUsers.USER_DRIVER, ActorUsers.USER_PASSENGER));
+                conversationStore.clearForUsers(ActorUsers.allKnownUserIds());
             };
             agentRuntimeRepository.setConversationClearHook(conversationClearHook);
         }
@@ -262,7 +272,7 @@ public final class AppContainer implements DownloadRuntime {
     public Context getAppContext() { return appContext; }
     /** SQLCipher-backed database; null means the explicit persistence-degraded mode is active. */
     @androidx.annotation.Nullable
-    public MatrixDatabase getMatrixDatabase() { return persistenceGraph.database(); }
+    public MatrixDatabase getMatrixDatabase() { return activeDatabase; }
     /** 端侧模型下载管理器（database=null 时为 null）。 */
     @androidx.annotation.Nullable
     public ModelDownloadManager getModelDownloadManager() { return downloadGraph.manager(); }

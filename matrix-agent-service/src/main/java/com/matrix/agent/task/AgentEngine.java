@@ -263,7 +263,10 @@ public final class AgentEngine {
                 "textChars=" + safeLength(request.getText())
                         + " deadlineMs=" + request.getDeadlineAtMillis());
         Trajectory trajectory = new Trajectory();
-        SessionContext sessionContext = sessionManager.getOrCreate(request.getSessionId());
+        SessionContext sessionContext = sessionManager.bindOrCreate(request.getSessionId(),
+                ActorUsers.userIdOf(request), request.getOccupantZone() == null
+                        ? com.matrix.agent.identity.VehicleZone.GLOBAL
+                        : request.getOccupantZone());
         Log.d(TAG, "[Engine] session context ready turns=" + sessionContext.getRecentTurns().size());
 
         TaskState preTerminal = cancellationState(request);

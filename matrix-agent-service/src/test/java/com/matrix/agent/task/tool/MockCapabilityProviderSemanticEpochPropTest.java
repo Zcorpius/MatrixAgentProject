@@ -47,7 +47,7 @@ public final class MockCapabilityProviderSemanticEpochPropTest {
 
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         provider.execute(
                 AgentRequest.builder("记住我对花生过敏", Actor.DRIVER)
                         .sessionId("sess-epoch-5")
@@ -68,10 +68,10 @@ public final class MockCapabilityProviderSemanticEpochPropTest {
                 new InMemoryMemoryStore(), writer);
 
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("key", "k1");
-        args.put("value", "v1");
+        args.put("key", "allergy.peanut");
+        args.put("value", "花生过敏");
         provider.execute(
-                AgentRequest.builder("保存这个", Actor.DRIVER)
+                AgentRequest.builder("记住我花生过敏", Actor.DRIVER)
                         .memorySaveAllowed(true).build(),
                 new ToolCall("memory.semantic.save", args));
 
@@ -86,18 +86,18 @@ public final class MockCapabilityProviderSemanticEpochPropTest {
 
         // 第一次:epoch=2
         Map<String, Object> args1 = new LinkedHashMap<>();
-        args1.put("key", "k1");
-        args1.put("value", "v1");
+        args1.put("key", "allergy.peanut");
+        args1.put("value", "花生过敏");
         provider.execute(
-                AgentRequest.builder("保存", Actor.DRIVER).epoch(2L).memorySaveAllowed(true).build(),
+                AgentRequest.builder("记住我花生过敏", Actor.DRIVER).epoch(2L).memorySaveAllowed(true).build(),
                 new ToolCall("memory.semantic.save", args1));
 
         // 第二次:epoch=3(模拟 clearUserData bump 后的新请求)
         Map<String, Object> args2 = new LinkedHashMap<>();
-        args2.put("key", "k2");
-        args2.put("value", "v2");
+        args2.put("key", "work.role");
+        args2.put("value", "工程师");
         provider.execute(
-                AgentRequest.builder("保存", Actor.DRIVER).epoch(3L).memorySaveAllowed(true).build(),
+                AgentRequest.builder("记住我的工作是工程师", Actor.DRIVER).epoch(3L).memorySaveAllowed(true).build(),
                 new ToolCall("memory.semantic.save", args2));
 
         assertEquals("2 次 save 都被调", 2, writer.writeCount.get());
@@ -109,18 +109,23 @@ public final class MockCapabilityProviderSemanticEpochPropTest {
         final AtomicLong lastRequestEpoch = new AtomicLong(-1L);
 
         @Override
-        public void writeEpisodic(com.matrix.agent.data.memory.EpisodicWrite write) { }
+        public void writeEpisodic(com.matrix.agent.identity.AgentRequest request, com.matrix.agent.data.memory.EpisodicWrite write) { }
 
         @Override
-        public boolean writeSemantic(String userId, String zone, String key, String value,
-                double score, String sourceSessionId, long requestEpoch) {
+        public boolean writeSemantic(com.matrix.agent.identity.AgentRequest request, String key, String value, double score) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
+            String sourceSessionId = request.getSessionId();
+            long requestEpoch = request.getEpoch();
             writeCount.incrementAndGet();
             lastRequestEpoch.set(requestEpoch);
             return true;
         }
 
         @Override
-        public String readSemantic(String userId, String zone, String key) {
+        public String readSemantic(com.matrix.agent.identity.AgentRequest request, String key) {
+            String userId = com.matrix.agent.identity.ActorUsers.userIdOf(request);
+            String zone = request.getOccupantZone().wireValue();
             return null;
         }
     }

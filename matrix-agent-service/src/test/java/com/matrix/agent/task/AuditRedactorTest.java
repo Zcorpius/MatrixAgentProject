@@ -150,8 +150,7 @@ public final class AuditRedactorTest {
         Map<String, Object> redacted = redactor.redactArguments("memory.preference.save", args);
 
         assertEquals("<memory>", redacted.get("value"));
-        // key 也是 sensitive(memory.preference.get.key 标了;save.key 没标 → 保留原值)
-        assertEquals("preferred_temperature", redacted.get("key"));
+        assertEquals("<memory>", redacted.get("key"));
     }
 
     /** navigation.start_route.destination 整体替换为 <destination>,无论原值是什么。 */

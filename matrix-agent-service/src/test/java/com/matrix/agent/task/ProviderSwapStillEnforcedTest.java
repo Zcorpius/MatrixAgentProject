@@ -67,7 +67,7 @@ public final class ProviderSwapStillEnforcedTest {
     private static Map<String, Object> saveArgs() {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         return args;
     }
 

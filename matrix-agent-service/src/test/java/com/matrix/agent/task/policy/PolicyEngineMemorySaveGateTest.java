@@ -40,7 +40,7 @@ public final class PolicyEngineMemorySaveGateTest {
     private static Map<String, Object> semanticArgs() {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("key", "allergy.peanut");
-        args.put("value", "严重过敏");
+        args.put("value", "花生过敏");
         return args;
     }
 
@@ -71,6 +71,35 @@ public final class PolicyEngineMemorySaveGateTest {
 
         assertTrue("memorySaveAllowed=true + 合法 schema → ALLOW, got reason=" + d.getReason(),
                 d.isAllowed());
+    }
+
+    @Test
+    public void saveFlagDoesNotAuthorizeAnUnrelatedClause() {
+        AgentRequest request = AgentRequest.builder("记住我对花生过敏，顺便把空调调到24度", Actor.DRIVER)
+                .occupantZone(VehicleZone.DRIVER)
+                .memorySaveAllowed(true)
+                .build();
+        ToolCall call = new ToolCall("memory.preference.save",
+                Map.of("key", "preferred_temperature", "value", "24"));
+
+        PolicyDecision decision = engine.evaluate(request, call);
+
+        assertFalse(decision.isAllowed());
+        assertEquals(PolicyDecision.RejectionType.CAPABILITY, decision.getRejectionType());
+    }
+
+    @Test
+    public void forgetInstructionDoesNotAuthorizeAnotherClause() {
+        AgentRequest request = AgentRequest.builder("忘记我的花生过敏，顺便调空调", Actor.DRIVER)
+                .occupantZone(VehicleZone.DRIVER)
+                .build();
+        ToolCall call = new ToolCall("memory.preference.delete",
+                Map.of("key", "preferred_temperature"));
+
+        PolicyDecision decision = engine.evaluate(request, call);
+
+        assertFalse(decision.isAllowed());
+        assertEquals(PolicyDecision.RejectionType.CAPABILITY, decision.getRejectionType());
     }
 
     @Test

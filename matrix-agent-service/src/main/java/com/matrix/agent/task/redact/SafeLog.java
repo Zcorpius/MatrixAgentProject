@@ -49,8 +49,9 @@ public final class SafeLog {
      */
     private static final Set<String> FULLY_REDACTED_CAPABILITIES = new java.util.HashSet<>(
             java.util.Arrays.asList(
-                    "memory.preference.save", "memory.preference.get",
-                    "memory.semantic.save", "memory.semantic.get"));
+                    "memory.preference.save", "memory.preference.get", "memory.preference.list", "memory.preference.delete",
+                    "memory.semantic.save", "memory.semantic.get", "memory.semantic.delete",
+                    "memory.episodic.get", "memory.episodic.delete"));
 
     private SafeLog() {}
 

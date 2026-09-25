@@ -40,12 +40,12 @@ public final class RoomMemoryMigratorTest {
 
         new RoomMemoryMigrator(sp, dao, Runnable::run).migrate();
 
-        assertEquals("3 个偏好迁移到 Room", 3, dao.store.size());
+        assertEquals("3 个偏好和迁移标记", 4, dao.store.size());
         MemoryRecordEntity driverTemp = dao.queryByKey(
-                "demo-driver", "global", "preference", "user.preference.temperature");
+                "demo-driver", "driver", "preference", "user.preference.temperature");
         assertEquals("24", driverTemp.value);
         MemoryRecordEntity passengerVol = dao.queryByKey(
-                "demo-passenger", "global", "preference", "user.preference.volume");
+                "demo-passenger", "passenger", "preference", "user.preference.volume");
         assertEquals("high", passengerVol.value);
         assertTrue("SP 必须在成功后清空", sp.cleared);
     }
@@ -78,7 +78,7 @@ public final class RoomMemoryMigratorTest {
 
         new RoomMemoryMigrator(sp, dao, Runnable::run).migrate();
 
-        assertEquals("空 SP 时 Room 不应有写入", 0, dao.store.size());
+        assertEquals("空 SP 仍写入一次性标记", 1, dao.store.size());
         assertFalse("空 SP 时不应调 clear", sp.clearCalled);
     }
 
@@ -95,10 +95,10 @@ public final class RoomMemoryMigratorTest {
 
         new RoomMemoryMigrator(sp, dao, Runnable::run).migrate();
 
-        assertEquals("仅 1 条合法格式偏好被迁移", 1, dao.store.size());
+        assertEquals("1 条偏好及迁移标记", 2, dao.store.size());
         assertNull(dao.queryByKey("no-dot-key", "global", "preference", ""));
         assertEquals("good", dao.queryByKey(
-                "demo-driver", "global", "preference", "valid-key").value);
+                "demo-driver", "driver", "preference", "valid-key").value);
     }
 
     @Test
@@ -115,6 +115,56 @@ public final class RoomMemoryMigratorTest {
                 RoomMemoryStore.SYSTEM_USER, RoomMemoryStore.SYSTEM_ZONE,
                 RoomMemoryStore.PREFERENCE_LAYER, RoomMemoryStore.EPOCH_KEY);
         assertEquals("Integer epoch=5 也必须迁移", "5", epochRow.value);
+    }
+
+    @Test
+    public void failedSourceClearCannotReplayOrOverwriteNewerValue() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("demo-driver.preferred_temperature", "24");
+        FakeSpSource sp = new FakeSpSource(data);
+        sp.clearReturned = false;
+        FakeMemoryRecordDao dao = new FakeMemoryRecordDao();
+        assertFalse(new RoomMemoryMigrator(sp, dao, Runnable::run).migrate());
+        assertEquals(1, sp.data.size());
+
+        MemoryRecordEntity newer = dao.queryByKey("demo-driver", "driver", "preference",
+                "preferred_temperature");
+        newer.value = "26";
+        dao.upsert(newer);
+        sp.clearReturned = true;
+        assertTrue(new RoomMemoryMigrator(sp, dao, Runnable::run).migrate());
+        assertEquals("26", dao.queryByKey("demo-driver", "driver", "preference",
+                "preferred_temperature").value);
+        assertTrue(sp.data.isEmpty());
+    }
+
+    @Test
+    public void existingEpochCanNeverMoveBackwardDuringMigration() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("__epoch__", 3L);
+        FakeSpSource sp = new FakeSpSource(data);
+        FakeMemoryRecordDao dao = new FakeMemoryRecordDao();
+        MemoryRecordEntity epoch = new MemoryRecordEntity();
+        epoch.userId = RoomMemoryStore.SYSTEM_USER;
+        epoch.zone = RoomMemoryStore.SYSTEM_ZONE;
+        epoch.layer = RoomMemoryStore.PREFERENCE_LAYER;
+        epoch.key = RoomMemoryStore.EPOCH_KEY;
+        epoch.value = "7";
+        dao.upsert(epoch);
+        assertTrue(new RoomMemoryMigrator(sp, dao, Runnable::run).migrate());
+        assertEquals("7", dao.queryByKey(epoch.userId, epoch.zone, epoch.layer, epoch.key).value);
+    }
+
+    @Test
+    public void resetMarkerPreventsImportingOldSource() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("demo-driver.preferred_temperature", "24");
+        FakeSpSource sp = new FakeSpSource(data);
+        FakeMemoryRecordDao dao = new FakeMemoryRecordDao();
+        dao.upsert(RoomMemoryMigrator.markerEntity());
+        assertTrue(new RoomMemoryMigrator(sp, dao, Runnable::run).migrate());
+        assertNull(dao.queryByKey("demo-driver", "driver", "preference",
+                "preferred_temperature"));
     }
 
     /** Fake SpSource:in-memory Map + clear 调用追踪。 */
@@ -136,13 +186,20 @@ public final class RoomMemoryMigratorTest {
         @Override
         public boolean clear() {
             clearCalled = true;
-            data.clear();
-            cleared = true;
+            if (clearReturned) data.clear();
+            cleared = clearReturned;
             return clearReturned;
         }
     }
 
     private static final class FakeMemoryRecordDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final Map<String, MemoryRecordEntity> store = new LinkedHashMap<>();
 
         private static String key(MemoryRecordEntity e) {

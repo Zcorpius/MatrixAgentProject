@@ -45,7 +45,7 @@ public final class RoomMemoryWriterSkipsNonTerminalStatesTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.CANCELLED, StopReason.CANCELLED, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("CANCELLED → session_history 0 行", 0, sessionDao.store.size());
     }
@@ -60,7 +60,7 @@ public final class RoomMemoryWriterSkipsNonTerminalStatesTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.TIMED_OUT, StopReason.TIMEOUT, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("TIMED_OUT → session_history 0 行", 0, sessionDao.store.size());
     }
@@ -78,7 +78,7 @@ public final class RoomMemoryWriterSkipsNonTerminalStatesTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.SUCCEEDED, StopReason.DONE, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("SUCCEEDED → session_history 1 行", 1, sessionDao.store.size());
         SessionHistoryEntity row = sessionDao.store.get(0);
@@ -111,12 +111,18 @@ public final class RoomMemoryWriterSkipsNonTerminalStatesTest {
         AgentOutcome outcome = new AgentOutcome(request.getRequestId(),
                 TaskState.FAILED, StopReason.POLICY_HALT, new Trajectory(1L), 1L);
 
-        writer.writeEpisodic(EpisodicTestSupport.write(request, outcome, 0L));
+        writer.writeEpisodic(request, EpisodicTestSupport.write(request, outcome, 0L));
 
         assertEquals("FAILED → session_history 1 行", 1, sessionDao.store.size());
     }
 
     private static final class FakeSessionHistoryDao implements SessionHistoryDao {
+        @Override public int deleteSanitizedLegacyRows() { return 0; }
+        @Override public int deleteExact(String userId, String zone, String sessionId, long startedAtMillis) { return 0; }
+        @Override public int deleteByUser(String userId) { return 0; }
+        @Override public int deleteOlderThan(String userId, String zone, long cutoff) { return 0; }
+        @Override public int retainLatest(String userId, String zone, int keep) { return 0; }
+
         final List<SessionHistoryEntity> store = new ArrayList<>();
         @Override public void insert(SessionHistoryEntity entity) { store.add(entity); }
         @Override public List<SessionHistoryEntity> queryByUserZone(String u, String z, int l) {
@@ -129,6 +135,13 @@ public final class RoomMemoryWriterSkipsNonTerminalStatesTest {
     }
 
     private static final class FakeMemoryRecordDao implements MemoryRecordDao {
+        @Override public java.util.List<String> queryKeysByUserZoneLayer(String u, String z, String l) {
+            return queryByUserZoneLayer(u, z, l).stream().map(row -> row.key).toList();
+        }
+        @Override public int countByUserZoneLayer(String userId, String zone, String layer) { return queryByUserZoneLayer(userId, zone, layer).size(); }
+
+        @Override public int deleteByKey(String userId, String zone, String layer, String key) { return 0; }
+
         final List<MemoryRecordEntity> store = new ArrayList<>();
         @Override public void upsert(MemoryRecordEntity entity) { store.add(entity); }
         @Override public List<MemoryRecordEntity> queryByUserZoneLayer(String u, String z, String l) {

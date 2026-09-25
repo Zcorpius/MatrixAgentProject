@@ -3,13 +3,11 @@ package com.matrix.agent.data.memory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Preference Memory 默认实现——桥接旧版 {@link MemoryStore}。
  *
- * <p>调 {@link MemoryStore#getAllPreferences(MemoryScope)} 取当前 occupant scope 的偏好,按 Map 迭代顺序
- * （当前易失实现保持插入顺序）取前 maxItems 条。
+ * <p>保留存储层的时间与来源元数据，按问题相关性、显式保存和更新时间排序。
  *
  * <p>行为兼容旧版 LlmPlanner.savedKeysFor——返回的 snippet.key 与原"已保存的偏好 key 列表"一致。
  *
@@ -27,13 +25,24 @@ public final class LegacyPreferenceMemorySource implements PreferenceMemorySourc
     @Override
     public List<MemorySnippet> recallPreference(MemoryScope scope, String userText, int maxItems) {
         if (maxItems <= 0) return Collections.emptyList();
-        Map<String, String> prefs = memoryStore.getAllPreferences(scope);
+        List<PreferenceRecord> prefs = memoryStore.getPreferenceRecords(scope);
         if (prefs.isEmpty()) return Collections.emptyList();
         List<MemorySnippet> result = new ArrayList<>();
-        for (Map.Entry<String, String> entry : prefs.entrySet()) {
+        List<PreferenceRecord> ranked = new ArrayList<>(prefs);
+        ranked.removeIf(entry -> !MemoryKeyCatalog.isPreferenceKey(entry.key()));
+        ranked.sort((a, b) -> {
+            int relevance = Integer.compare(MemoryKeyCatalog.relevance(b.key(), userText),
+                    MemoryKeyCatalog.relevance(a.key(), userText));
+            if (relevance != 0) return relevance;
+            int origin = Boolean.compare(b.explicit(), a.explicit());
+            if (origin != 0) return origin;
+            int time = Long.compare(b.capturedAtMs(), a.capturedAtMs());
+            return time != 0 ? time : a.key().compareTo(b.key());
+        });
+        for (PreferenceRecord entry : ranked) {
             if (result.size() >= maxItems) break;
             result.add(new MemorySnippet(MemoryLayer.PREFERENCE, scope,
-                    entry.getKey(), entry.getValue(), 1.0, 0L, null));
+                    entry.key(), entry.value(), 1.0, entry.capturedAtMs(), null));
         }
         return Collections.unmodifiableList(result);
     }

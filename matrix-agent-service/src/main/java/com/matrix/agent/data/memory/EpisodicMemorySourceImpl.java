@@ -2,139 +2,155 @@ package com.matrix.agent.data.memory;
 
 import android.util.Log;
 
-import com.matrix.agent.data.memory.EpisodicMemorySource;
-import com.matrix.agent.data.memory.MemoryLayer;
-import com.matrix.agent.data.memory.MemoryScope;
-import com.matrix.agent.data.memory.MemorySnippet;
 import com.matrix.agent.data.db.SessionHistoryDao;
 import com.matrix.agent.data.db.SessionHistoryEntity;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
+import java.util.Set;
 
-/**
- * Episodic Memory 召回源——基于 SessionHistoryDao 的近期会话历史。
- *
- * <p>替代 {@link EmptyEpisodicMemorySource}——按 (userId, zone) 召回近期
- * N 条会话,作为 episodic snippet 给 {@link com.matrix.agent.task.prompt.DefaultPromptBuilder}
- * 拼装到 system prompt "[episodic] sessionId" 段。
- *
- * <p><b>LRU 缓存</b>:按 (userId, zone) 缓存召回结果 5 分钟,避免每次 buildSystemPrompt 都
- * 查 SessionHistoryDao(虽快,但首 token 时间敏感)。缓存上限 32 个 user-zone 组合,LRU
- * 驱逐最老。
- *
- * <p><b>fail-open</b>:Dao 异常仅 log,返回空 list——记忆是增强能力,不能成为车机任务入口的单点故障。
- *
- * <p><b>snippet key 约定</b>:"session#" + sessionId.substring(0, 8)(短 hash);value = finalState
- * 含 PII 风险,**不**写入 snippet(与 DefaultPromptBuilder.formatRecalledMemory 一致——
- * snippet 仅拼 layer + key,value 不进 prompt)。
- */
+/** Recalls only safe, relevant recent-task metadata. No raw trajectory is ever projected. */
 public final class EpisodicMemorySourceImpl implements EpisodicMemorySource {
     private static final String TAG = "MatrixAgent";
-
-    /** 单次召回上限——保守,与 AgentEngine.RECALL_LIMIT_SYSTEM_PROMPT=8 + Preference 占用对齐。 */
     static final int DEFAULT_LIMIT = 5;
-    /** 缓存 TTL——5 分钟内同 user-zone 复用结果。 */
-    static final long CACHE_TTL_MS = 5L * 60L * 1000L;
-    /** LRU 缓存上限——32 个 user-zone 组合(车机场景:主驾 + 副驾 + 后排,远不到 32)。 */
-    static final int CACHE_MAX_ENTRIES = 32;
-
     private final SessionHistoryDao dao;
     private final int limit;
-    private final LinkedHashMap<String, CacheEntry> cache;
 
     public EpisodicMemorySourceImpl(SessionHistoryDao dao) {
         this(dao, DEFAULT_LIMIT);
     }
 
-    /** 测试用——注入自定义 limit。 */
     public EpisodicMemorySourceImpl(SessionHistoryDao dao, int limit) {
-        if (dao == null) throw new IllegalArgumentException("dao 不能为空");
+        if (dao == null) throw new IllegalArgumentException("dao required");
         this.dao = dao;
         this.limit = limit <= 0 ? DEFAULT_LIMIT : limit;
-        this.cache = new LinkedHashMap<String, CacheEntry>(CACHE_MAX_ENTRIES, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
-                return size() > CACHE_MAX_ENTRIES;
-            }
-        };
     }
 
     @Override
     public List<MemorySnippet> recallEpisodic(MemoryScope scope, String userText, int maxItems) {
-        if (scope == null || maxItems <= 0) return Collections.emptyList();
-        String cacheKey = scope.getUserId() + "@" + scope.getZone().wireValue();
-        int effectiveLimit = Math.min(maxItems, limit);
-
-        synchronized (cache) {
-            CacheEntry hit = cache.get(cacheKey);
-            if (hit != null && !hit.isExpired()) {
-                return hit.truncate(effectiveLimit);
-            }
-        }
-
-        List<MemorySnippet> fresh;
-        try {
-            List<SessionHistoryEntity> rows = dao.queryByUserZone(
-                    scope.getUserId(), scope.getZone().wireValue(), limit);
-            fresh = toSnippets(scope, rows, effectiveLimit);
-        } catch (Exception ex) {
-            Log.w(TAG, "[EpisodicMemorySource] recall FAILED user=" + scope.getUserId()
-                    + " zone=" + scope.getZone() + " cause=" + ex.getClass().getSimpleName()
-                    + ": " + ex.getMessage());
+        if (scope == null || maxItems <= 0 || !EpisodicQueryIntent.isHistoryQuestion(userText)) {
             return Collections.emptyList();
         }
-
-        synchronized (cache) {
-            cache.put(cacheKey, new CacheEntry(fresh, System.currentTimeMillis()));
-        }
-        return fresh.size() > effectiveLimit
-                ? Collections.unmodifiableList(new ArrayList<>(fresh.subList(0, effectiveLimit)))
-                : fresh;
-    }
-
-    private static List<MemorySnippet> toSnippets(MemoryScope scope, List<SessionHistoryEntity> rows,
-            int limit) {
-        if (rows == null || rows.isEmpty()) return Collections.emptyList();
-        List<MemorySnippet> out = new ArrayList<>(Math.min(rows.size(), limit));
-        for (SessionHistoryEntity row : rows) {
-            if (out.size() >= limit) break;
-            String shortId = row.sessionId == null ? "?"
-                    : (row.sessionId.length() > 8 ? row.sessionId.substring(0, 8) : row.sessionId);
-            // value 不进 snippet——finalState 含 PII;DefaultPromptBuilder 仅拼 "[layer] key"。
-            out.add(MemorySnippet.of(MemoryLayer.EPISODIC, scope,
-                    "session#" + shortId + (row.finalState == null ? "" : ":" + row.finalState),
-                    ""));
-        }
-        return Collections.unmodifiableList(out);
-    }
-
-    /** 测试用——清空缓存。 */
-    public void invalidateCache() {
-        synchronized (cache) {
-            cache.clear();
-        }
-    }
-
-    private static final class CacheEntry {
-        final List<MemorySnippet> full;
-        final long createdAtMs;
-
-        CacheEntry(List<MemorySnippet> full, long createdAtMs) {
-            this.full = full;
-            this.createdAtMs = createdAtMs;
-        }
-
-        boolean isExpired() {
-            return System.currentTimeMillis() - createdAtMs > CACHE_TTL_MS;
-        }
-
-        List<MemorySnippet> truncate(int limit) {
-            if (full.size() <= limit) return full;
-            return Collections.unmodifiableList(new ArrayList<>(full.subList(0, limit)));
+        try {
+            List<SessionHistoryEntity> rows = dao.queryByUserZone(scope.getUserId(),
+                    scope.getZone().wireValue(), Math.max(limit * 6, 30));
+            if (rows == null || rows.isEmpty()) return Collections.emptyList();
+            String query = userText.toLowerCase(Locale.ROOT);
+            boolean categoryRequested = matches("climate", query)
+                    || matches("navigation", query) || matches("media", query)
+                    || matches("seat", query) || matches("display", query);
+            List<MemorySnippet> out = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            for (SessionHistoryEntity row : rows) {
+                if (out.size() >= Math.min(maxItems, limit)) break;
+                List<String> categories = categoriesOf(row.trajectoryJson);
+                if (categories.isEmpty()) continue;
+                String state = "SUCCEEDED".equals(row.finalState) ? "succeeded" :
+                        "FAILED".equals(row.finalState) ? "failed" : null;
+                if (state == null) continue;
+                String eventId = eventIdOf(row.trajectoryJson);
+                if (eventId != null && row.startedAtMillis
+                        < System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1_000) continue;
+                for (String category : categories) {
+                    if (out.size() >= Math.min(maxItems, limit)) break;
+                    if (categoryRequested && !matches(category, query)) continue;
+                    String key = eventId == null ? "recent_task." + category + "." + state
+                            : "recent." + category + "." + state + "." + eventId;
+                    if (!seen.add(key)) continue;
+                    out.add(new MemorySnippet(MemoryLayer.EPISODIC, scope, key, "",
+                            1.0, row.startedAtMillis, row.sessionId));
+                    if (!categoryRequested) break;
+                }
+            }
+            return Collections.unmodifiableList(out);
+        } catch (Exception failure) {
+            Log.w(TAG, "[EpisodicMemorySource] recall failed cause="
+                    + failure.getClass().getSimpleName());
+            return Collections.emptyList();
         }
     }
+
+    private static List<String> categoriesOf(String summary) {
+        if (summary == null || summary.length() > 2048) return Collections.emptyList();
+        try {
+            JSONObject event = new JSONObject(summary);
+            if (event.has("eventSchemaVersion")) {
+                int version = event.optInt("eventSchemaVersion", -1);
+                if (version != 1 && version != EpisodicEventKind.SCHEMA_VERSION) {
+                    return Collections.emptyList();
+                }
+                if (version == EpisodicEventKind.SCHEMA_VERSION
+                        && (!EpisodicFactCodec.validEventId(event.optString("eventId", null))
+                        || !EpisodicFactCodec.validFactsForCapabilities(
+                                event.optJSONArray("verifiedFacts"),
+                                event.optJSONArray("successfulCapabilities")))) {
+                    return Collections.emptyList();
+                }
+                return categoriesFromCapabilities(event.optJSONArray("successfulCapabilities"),
+                        event.optString("eventKind", ""));
+            }
+            // Bounded compatibility for pre-protocol safe summaries. v14 migration removes
+            // full historical trajectories, so only explicitly allowlisted capability names
+            // can establish a category here.
+            JSONArray capabilities = event.optJSONArray("successfulCapabilities");
+            return categoriesFromCapabilities(capabilities, "");
+        } catch (Exception invalidSummary) {
+            return Collections.emptyList();
+        }
+    }
+
+    private static List<String> categoriesFromCapabilities(JSONArray capabilities,
+            String fallbackEventKind) {
+        Set<String> kinds = new LinkedHashSet<>();
+        if (capabilities != null) {
+            for (int i = 0; i < Math.min(capabilities.length(), 3); i++) {
+                EpisodicEventKind kind = EpisodicEventKind.fromCapability(
+                        capabilities.optString(i, ""));
+                if (kind != null) kinds.add(kind.wireValue());
+            }
+        }
+        if (kinds.isEmpty()) {
+            EpisodicEventKind fallback = EpisodicEventKind.fromWireValue(fallbackEventKind);
+            if (fallback != null) kinds.add(fallback.wireValue());
+        }
+        return List.copyOf(kinds);
+    }
+
+    private static String eventIdOf(String summary) {
+        if (summary == null || summary.length() > 2048) return null;
+        try {
+            JSONObject event = new JSONObject(summary);
+            String id = event.optString("eventId", null);
+            return event.optInt("eventSchemaVersion", -1) == EpisodicEventKind.SCHEMA_VERSION
+                    && EpisodicFactCodec.validEventId(id) ? id : null;
+        } catch (Exception invalid) { return null; }
+    }
+
+    private static boolean matches(String category, String query) {
+        switch (category) {
+            case "climate": return query.contains("空调") || query.contains("温度")
+                    || query.contains("climate") || query.contains("temperature");
+            case "navigation": return query.contains("导航") || query.contains("路线")
+                    || query.contains("目的地") || query.contains("去哪")
+                    || query.contains("navigation") || query.contains("route")
+                    || query.contains("destination");
+            case "media": return query.contains("音乐") || query.contains("播放")
+                    || query.contains("音量") || query.contains("media") || query.contains("music")
+                    || query.contains("volume");
+            case "display": return query.contains("亮度") || query.contains("屏幕")
+                    || query.contains("brightness") || query.contains("display");
+            case "seat": return query.contains("座椅") || query.contains("座位")
+                    || query.contains("seat");
+            default: return false;
+        }
+    }
+
+    /** Kept for writer compatibility. Queries are uncached so a clear is visible immediately. */
+    public void invalidateCache() { }
 }
