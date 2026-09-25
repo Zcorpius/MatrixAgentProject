@@ -386,6 +386,11 @@ public final class CapabilityRegistry {
         return registry;
     }
 
+    /** Host catalog: preserves the stable demo fixture while adding real media capabilities. */
+    public static CapabilityRegistry createRuntimeRegistry() {
+        return MediaCapabilities.registerInto(createDemoRegistry());
+    }
+
     private static CapabilityDefinition readOnly(String name, String description) {
         return CapabilityDefinition.builder(name, RiskLevel.R0_READ_ONLY)
                 .description(description).writeOperation(false).build();

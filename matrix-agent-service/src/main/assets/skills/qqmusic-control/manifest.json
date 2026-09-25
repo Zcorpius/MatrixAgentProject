@@ -1,0 +1,15 @@
+{
+  "id": "qqmusic-control",
+  "version": 1,
+  "target_app": "qqmusic",
+  "required_capabilities": [
+    "media.qqmusic.get_state",
+    "media.qqmusic.open_app",
+    "media.qqmusic.search_songs",
+    "media.qqmusic.play_search_result",
+    "media.qqmusic.play",
+    "media.qqmusic.pause"
+  ],
+  "profiles": ["PHONE", "AUTOMOTIVE"],
+  "instructions": "SKILL.md"
+}

@@ -14,7 +14,14 @@
     <!-- Host owns the user-initiated, verified display/audio control capabilities. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
+    <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
     <uses-permission android:name="com.matrix.agent.permission.ACCESS_AGENT" />
+
+    <queries>
+        <package android:name="tv.danmaku.bili" />
+        <package android:name="com.tencent.qqmusic" />
+    </queries>
 
     <permission
         android:name="com.matrix.agent.permission.ACCESS_AGENT"
@@ -31,10 +38,27 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <meta-data
+            android:name="com.matrix.agent.runtime_profile"
+            android:value="AUTO" />
+
         <service
             android:name="com.matrix.agent.download.DownloadService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <service
+            android:name="com.matrix.agent.platform.media.QQMusicAccessibilityService"
+            android:label="媒体搜索与选曲"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/qqmusic_accessibility_service" />
+        </service>
 
         <!-- 按需 microphone 前台服务：采音 lease 获取前启动，归零后停止（设计文档 §7.3）。 -->
         <service

@@ -16,6 +16,7 @@ import com.matrix.agent.contract.ModelTurn;
 import com.matrix.agent.contract.ModelTurnRequest;
 import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.task.skill.MediaSwitchGuard;
 import com.matrix.agent.task.capability.CapabilityDefinition;
 import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.capability.CapabilityRegistry;
@@ -302,6 +303,7 @@ public final class AgentEngine {
                 + " convTokens=" + estimateConversationTokens(conversation));
 
         Set<String> blockedCapabilities = new HashSet<>();
+        MediaSwitchGuard mediaSwitchGuard = new MediaSwitchGuard(request);
         int totalToolCalls = 0;
         String finalAssistantText = null;
         StopReason stopReason = StopReason.MAX_ITERATIONS;
@@ -535,7 +537,9 @@ public final class AgentEngine {
                     decisions.add(PolicyDecision.denyCapability(reason));
                     continue;
                 }
-                PolicyDecision decision = policyEngine.evaluate(request, call);
+                PolicyDecision switchDecision = mediaSwitchGuard.before(call);
+                PolicyDecision decision = switchDecision == null
+                        ? policyEngine.evaluate(request, call) : switchDecision;
                 decisions.add(decision);
                 // 调试轨迹：策略判定（POLICY_DECIDED）——允许/拒绝与理由（Redactor 净化）。
                 // 结构化键走 SDK 线格式契约；reason 是含空格的自由文本，只能作末尾记号。
@@ -630,6 +634,7 @@ public final class AgentEngine {
                             toolResult.getCapabilityName(), "Capability 未通过强制回读验证",
                             toolResult.getObservedState(), false, toolResult.getDurationMillis());
                 }
+                mediaSwitchGuard.after(call, toolResult);
                 observations.add(ToolObservation.of(call, toolResult));
                 contextUpdater.onToolCompleted(sessionContext, call, toolResult);
             }

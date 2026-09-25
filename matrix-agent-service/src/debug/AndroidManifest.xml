@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Root/privileged debug validation only; absent from release variants. -->
+        <receiver
+            android:name="com.matrix.agent.debug.MediaProbeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+        <receiver
+            android:name="com.matrix.agent.platform.media.BilibiliViewProbeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
+</manifest>

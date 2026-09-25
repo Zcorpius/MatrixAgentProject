@@ -169,6 +169,18 @@ public final class AgentRuntimeRepository {
             ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
             TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
             IntentClassifier intentClassifier, AuditRepository auditRepository) {
+        this(engineFactory, sessionManager, memoryStore, initialGateway, initialDisplayName,
+                budget, scheduler, vehicleStateSource, registry, intentClassifier, auditRepository,
+                com.matrix.agent.identity.RuntimeProfileSource.UNKNOWN);
+    }
+
+    /** Production constructor: captures a trusted profile in both request-factory paths. */
+    public AgentRuntimeRepository(AgentEngineFactory engineFactory,
+            SessionManager sessionManager, MemoryStore memoryStore,
+            ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
+            TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
+            IntentClassifier intentClassifier, AuditRepository auditRepository,
+            com.matrix.agent.identity.RuntimeProfileSource runtimeProfileSource) {
         if (scheduler == null) throw new IllegalArgumentException("scheduler 不能为空");
         if (vehicleStateSource == null) throw new IllegalArgumentException("vehicleStateSource 不能为空");
         if (registry == null) throw new IllegalArgumentException("registry 不能为空");
@@ -179,7 +191,7 @@ public final class AgentRuntimeRepository {
         this.scheduler = scheduler;
         this.vehicleStateSource = vehicleStateSource;
         this.requestFactory = new TaskRequestFactory(memoryStore, safeBudget, vehicleStateSource,
-                intentClassifier);
+                intentClassifier, runtimeProfileSource);
         this.userDataResetCoordinator = new UserDataResetCoordinator(memoryStore, sessionManager,
                 auditRepository, inFlightTasks);
         this.taskDispatchCoordinator = new TaskDispatchCoordinator(scheduler,

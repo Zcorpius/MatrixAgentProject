@@ -40,6 +40,8 @@ public final class AgentRequest {
      * 默认 {@link VehicleState#satisfyAllPredicates()} mock state,保证现有测试不退绿。
      */
     private final VehicleState currentVehicleState;
+    /** Host-derived profile; UNKNOWN is the safe default for direct/test construction. */
+    private final RuntimeProfile runtimeProfile;
     /**
      * data epoch——Repository 在 {@code clearUserData()} 时自增的全局版本号。
      *
@@ -108,6 +110,8 @@ public final class AgentRequest {
         readOnlyHint = builder.readOnlyHint;
         currentVehicleState = builder.currentVehicleState == null
                 ? VehicleState.satisfyAllPredicates() : builder.currentVehicleState;
+        runtimeProfile = builder.runtimeProfile == null
+                ? RuntimeProfile.UNKNOWN : builder.runtimeProfile;
         epoch = builder.epoch;
         memorySaveAllowed = builder.memorySaveAllowed;
         conversationSeed = builder.conversationSeed;
@@ -158,6 +162,7 @@ public final class AgentRequest {
     public boolean isReadOnlyHint() { return readOnlyHint; }
     /** 当前车辆状态(PolicyEngine 判定 requiredVehicleStates 用)。 */
     public VehicleState getCurrentVehicleState() { return currentVehicleState; }
+    public RuntimeProfile getRuntimeProfile() { return runtimeProfile; }
     /**
      * data epoch——Repository clearUserData 时自增的版本号。
      * Provider 通过此值与 MemoryStore.currentEpoch() 对比,拒绝陈旧写入。
@@ -192,6 +197,7 @@ public final class AgentRequest {
         private CancellationToken cancellationToken = new CancellationToken();
         private boolean readOnlyHint = false;
         private VehicleState currentVehicleState;
+        private RuntimeProfile runtimeProfile = RuntimeProfile.UNKNOWN;
         private long epoch = 0L;
         private boolean memorySaveAllowed = false;
         private ConversationSeedContext conversationSeed;
@@ -223,6 +229,10 @@ public final class AgentRequest {
         public Builder readOnlyHint(boolean value) { readOnlyHint = value; return this; }
         /** 注入当前车辆状态(默认 satisfyAllPredicates mock state)。 */
         public Builder vehicleState(VehicleState value) { currentVehicleState = value; return this; }
+        public Builder runtimeProfile(RuntimeProfile value) {
+            runtimeProfile = value == null ? RuntimeProfile.UNKNOWN : value;
+            return this;
+        }
         /**
          * 注入 data epoch——由 Repository 在 execute 入口捕获并传入,
          * Provider 通过 {@link AgentRequest#getEpoch()} 与 MemoryStore.currentEpoch() 对比。

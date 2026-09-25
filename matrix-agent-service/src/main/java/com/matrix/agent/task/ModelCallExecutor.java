@@ -164,6 +164,13 @@ public final class ModelCallExecutor {
             return Result.terminal(StopReason.TIMEOUT, "模型调用超过请求截止时间");
         } catch (CancellationException cancelled) {
             // abort hook 触发了 future.cancel(true) → 这里说明外部 token.cancel() 已发生
+            // Repository's deadline timer can fire a few milliseconds before wall-clock
+            // remainingMillis reaches zero. Treat that bounded race as deadline expiry.
+            if (agentRequest.remainingMillis() <= 100L) {
+                Log.w(TAG, "[ModelCall] deadline cancellation, terminal=TIMEOUT costMs="
+                        + elapsedMillis(callStarted));
+                return Result.terminal(StopReason.TIMEOUT, "模型调用超过请求截止时间");
+            }
             Log.w(TAG, "[ModelCall] future cancelled by abort hook, terminal=CANCELLED costMs="
                     + elapsedMillis(callStarted));
             return Result.terminal(StopReason.CANCELLED, "模型调用已取消");

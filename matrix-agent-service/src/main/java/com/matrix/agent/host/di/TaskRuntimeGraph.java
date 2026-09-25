@@ -37,6 +37,12 @@ import com.matrix.agent.task.prompt.DefaultPromptBuilder;
 import com.matrix.agent.task.prompt.PromptContextAssembler;
 import com.matrix.agent.task.token.Tokenizer;
 import com.matrix.agent.task.tool.ToolExecutor;
+import com.matrix.agent.task.skill.SkillCatalog;
+import com.matrix.agent.task.skill.SkillSelector;
+import com.matrix.agent.task.skill.QQMusicWorkflowGateway;
+import com.matrix.agent.task.skill.BilibiliTitleGateway;
+import com.matrix.agent.platform.media.MediaAvailabilityCache;
+import com.matrix.agent.platform.media.PendingMediaConfirmation;
 
 /**
  * Task 域的组合根。
@@ -51,8 +57,12 @@ final class TaskRuntimeGraph {
 
     TaskRuntimeGraph(Dependencies values) {
         values.requireComplete();
+        SkillCatalog skillCatalog = new SkillCatalog(values.context, values.registry);
+        SkillSelector skillSelector = new SkillSelector(skillCatalog, values.mediaAvailability,
+                values.pendingMediaConfirmation, values.pendingBilibiliSelection);
         PromptContextAssembler promptAssembler = new PromptContextAssembler(
-                values.memoryRecaller, new DefaultPromptBuilder());
+                values.memoryRecaller, new DefaultPromptBuilder(), skillSelector,
+                values.budget.getMaxMessageChars());
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gateway -> {
             SummaryProvider summaryProvider = gateway instanceof OnDeviceModelGateway
                     ? null : new LlmSummaryProvider(values.modelClient, values.configStore::load);
@@ -67,7 +77,11 @@ final class TaskRuntimeGraph {
                     // 运行阶段出站端口（I3）：Engine 级一次性装配，事件携带 runtimeRequestId。
                     .taskProgressSink(values.taskProgressSink)
                     .build();
-            return new AgentEngine(gateway, values.modelCallExecutor, values.policyEngine,
+            return new AgentEngine(new QQMusicWorkflowGateway(
+                    new BilibiliTitleGateway(gateway, values.pendingBilibiliSelection),
+                    values.pendingMediaConfirmation),
+                    values.modelCallExecutor,
+                    values.policyEngine,
                     values.registry, values.provider, values.sessionManager,
                     new DefaultContextUpdater(), values.sessionLockManager, values.toolExecutor,
                     values.budget, values.steerMailbox, configuration);
@@ -75,7 +89,7 @@ final class TaskRuntimeGraph {
         repository = new AgentRuntimeRepository(engineFactory, values.sessionManager,
                 values.memoryStore, new DemoModelGateway(), "离线 DemoModelGateway", values.budget,
                 values.scheduler, values.vehicleStateSource, values.registry, values.intentClassifier,
-                values.auditRepository);
+                values.auditRepository, values.runtimeProfileSource);
         repository.setSteerMailbox(values.steerMailbox);
         lifecycleManager = new GatewayLifecycleManager(values.lifecycleExecutor);
         repository.setGatewayLifecycleManager(lifecycleManager);
@@ -106,10 +120,15 @@ final class TaskRuntimeGraph {
         MemoryWriter memoryWriter;
         TaskScheduler scheduler;
         VehicleStateSource vehicleStateSource;
+        com.matrix.agent.identity.RuntimeProfileSource runtimeProfileSource;
         MemoryStore memoryStore;
         IntentClassifier intentClassifier;
         java.util.concurrent.ExecutorService lifecycleExecutor;
         com.matrix.agent.task.port.TaskProgressSink taskProgressSink;
+        android.content.Context context;
+        MediaAvailabilityCache mediaAvailability;
+        PendingMediaConfirmation pendingMediaConfirmation;
+        com.matrix.agent.platform.media.PendingBilibiliSelection pendingBilibiliSelection;
 
         private void requireComplete() {
             if (modelClient == null || configStore == null || modelCallExecutor == null
@@ -118,8 +137,11 @@ final class TaskRuntimeGraph {
                     || budget == null || steerMailbox == null || auditRepository == null
                     || auditDigest == null || tokenizer == null || auditEventRecorder == null
                     || memoryRecaller == null || memoryWriter == null || scheduler == null
-                    || vehicleStateSource == null || memoryStore == null || intentClassifier == null
-                    || lifecycleExecutor == null || taskProgressSink == null) {
+                    || vehicleStateSource == null || runtimeProfileSource == null
+                    || memoryStore == null || intentClassifier == null
+                    || lifecycleExecutor == null || taskProgressSink == null
+                    || context == null || mediaAvailability == null
+                    || pendingMediaConfirmation == null || pendingBilibiliSelection == null) {
                 throw new IllegalArgumentException("TaskRuntimeGraph dependencies must be complete");
             }
         }

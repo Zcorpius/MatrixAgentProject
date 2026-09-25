@@ -34,6 +34,13 @@ import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.platform.control.AndroidSystemControlAdapter;
 import com.matrix.agent.platform.control.SystemControlCapabilityProvider;
 import com.matrix.agent.task.capability.RoutedCapabilityProvider;
+import com.matrix.agent.task.capability.MediaCapabilities;
+import com.matrix.agent.platform.media.AndroidAppLaunchPort;
+import com.matrix.agent.platform.media.AndroidMediaSessionPort;
+import com.matrix.agent.platform.media.AndroidPackageProbe;
+import com.matrix.agent.platform.media.AndroidQQMusicUiPort;
+import com.matrix.agent.platform.media.MediaCapabilityProvider;
+import com.matrix.agent.platform.media.MediaAvailabilityCache;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.task.AgentRuntimeRepository;
@@ -58,6 +65,7 @@ public final class AppContainer implements DownloadRuntime {
     private final SteerMailbox steerMailbox;
 
     private final DefaultVehicleStateSource vehicleStateSource;
+    private final MediaAvailabilityCache mediaAvailability;
     /**
      * 统一 shutdown 入口持有的资源。
      *
@@ -98,7 +106,7 @@ public final class AppContainer implements DownloadRuntime {
         // deadlock-free while every production worker has one lifecycle owner.
         this.executorRegistry = new MatrixExecutorRegistry();
         this.httpClient = new MatrixHttpClient();
-        CapabilityRegistry registry = CapabilityRegistry.createDemoRegistry();
+        CapabilityRegistry registry = CapabilityRegistry.createRuntimeRegistry();
         PolicyEngine policyEngine = new PolicyEngine(registry);
         SessionManager sessionManager = new SessionManager();
         SessionLockManager sessionLockManager = new SessionLockManager();
@@ -133,9 +141,28 @@ public final class AppContainer implements DownloadRuntime {
         CapabilityProvider domainProvider = new MockCapabilityProvider(memoryStore, memoryWriter);
         SystemControlCapabilityProvider systemControlProvider = new SystemControlCapabilityProvider(
                 new AndroidSystemControlAdapter(appContext));
+        AndroidAppLaunchPort mediaLauncher = new AndroidAppLaunchPort(appContext);
+        MediaCapabilityProvider mediaProvider = new MediaCapabilityProvider(
+                new AndroidPackageProbe(appContext), new AndroidMediaSessionPort(appContext),
+                mediaLauncher, new AndroidQQMusicUiPort(appContext, mediaLauncher),
+                new com.matrix.agent.platform.media.AndroidBilibiliUiPort(appContext,
+                        mediaLauncher));
+        mediaAvailability = new MediaAvailabilityCache(appContext,
+                new AndroidPackageProbe(appContext), executorRegistry.networkExecutor());
         java.util.Map<String, CapabilityProvider> platformRoutes = new java.util.LinkedHashMap<>();
         platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
         platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
+        for (String capability : MediaCapabilityProvider.capabilities()) {
+            if (registry.find(capability) == null) {
+                throw new IllegalStateException("媒体 Provider 能力未注册: " + capability);
+            }
+            platformRoutes.put(capability, mediaProvider);
+        }
+        for (String capability : registry.snapshot().keySet()) {
+            if (capability.startsWith("media.") && !MediaCapabilities.ALL.contains(capability)) {
+                throw new IllegalStateException("媒体能力缺少 Provider 路由: " + capability);
+            }
+        }
         CapabilityProvider provider = new RoutedCapabilityProvider(domainProvider, platformRoutes);
         ModelRuntimeGraph modelGraph = new ModelRuntimeGraph(appContext, memoryStore,
                 memoryRecaller, executorRegistry.modelRetirementScheduler(), httpClient);
@@ -207,10 +234,15 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.memoryWriter = memoryWriter;
         taskDependencies.scheduler = scheduler;
         taskDependencies.vehicleStateSource = vehicleStateSource;
+        taskDependencies.runtimeProfileSource = new RuntimeProfileResolver(appContext);
         taskDependencies.memoryStore = memoryStore;
         taskDependencies.intentClassifier = appClassifier;
         taskDependencies.lifecycleExecutor = executorRegistry.lifecycleExecutor();
         taskDependencies.taskProgressSink = this.conversationProgressBridge;
+        taskDependencies.context = appContext;
+        taskDependencies.mediaAvailability = mediaAvailability;
+        taskDependencies.pendingMediaConfirmation = mediaProvider;
+        taskDependencies.pendingBilibiliSelection = mediaProvider;
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
         agentRuntimeRepository.setLegacyMemoryClearHook(
@@ -355,6 +387,7 @@ public final class AppContainer implements DownloadRuntime {
 
     public void shutdown() {
         Log.i(TAG, "[App] shutdown begin");
+        mediaAvailability.close();
         try {
             agentRuntimeRepository.shutdown();
         } catch (Throwable t) {

@@ -10,6 +10,7 @@ import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.identity.Actor;
 import com.matrix.agent.identity.AgentRequest;
 import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.identity.RuntimeProfileSource;
 import com.matrix.agent.intent.IntentClassifier;
 import com.matrix.agent.intent.KeywordIntentClassifier;
 import com.matrix.agent.intent.MemoryIntentDetector;
@@ -23,15 +24,24 @@ public final class TaskRequestFactory {
     private final MemoryStore memoryStore;
     private final AgentBudget budget;
     private final VehicleStateSource vehicleStateSource;
+    private final RuntimeProfileSource runtimeProfileSource;
     private volatile IntentClassifier intentClassifier;
     private volatile MemoryIntentDetector memoryIntentDetector = MemoryIntentDetector.NOOP;
 
     public TaskRequestFactory(MemoryStore memoryStore, AgentBudget budget,
             VehicleStateSource vehicleStateSource, IntentClassifier intentClassifier) {
+        this(memoryStore, budget, vehicleStateSource, intentClassifier, RuntimeProfileSource.UNKNOWN);
+    }
+
+    public TaskRequestFactory(MemoryStore memoryStore, AgentBudget budget,
+            VehicleStateSource vehicleStateSource, IntentClassifier intentClassifier,
+            RuntimeProfileSource runtimeProfileSource) {
         if (vehicleStateSource == null) throw new IllegalArgumentException("vehicleStateSource 不能为空");
         this.memoryStore = memoryStore;
         this.budget = budget == null ? new AgentBudget() : budget;
         this.vehicleStateSource = vehicleStateSource;
+        this.runtimeProfileSource = runtimeProfileSource == null
+                ? RuntimeProfileSource.UNKNOWN : runtimeProfileSource;
         this.intentClassifier = intentClassifier == null
                 ? KeywordIntentClassifier.INSTANCE : intentClassifier;
     }
@@ -58,6 +68,7 @@ public final class TaskRequestFactory {
                 .timeoutMillis(budget.getTotalDeadlineMillis())
                 .cancellationToken(token)
                 .vehicleState(vehicleStateSource.snapshot())
+                .runtimeProfile(runtimeProfileSource.snapshot())
                 .readOnlyHint(intentReadOnly)
                 .epoch(capturedEpoch)
                 .memorySaveAllowed(memorySaveAllowed);
@@ -93,6 +104,7 @@ public final class TaskRequestFactory {
                 .timeoutMillis(budget.getTotalDeadlineMillis())
                 .cancellationToken(token)
                 .vehicleState(vehicleStateSource.snapshot())
+                .runtimeProfile(runtimeProfileSource.snapshot())
                 .readOnlyHint(task.classification().readOnlyHint())
                 .memorySaveAllowed(task.classification().memorySaveAllowed())
                 .epoch(capturedEpoch)
