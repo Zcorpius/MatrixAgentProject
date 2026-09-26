@@ -33,6 +33,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
     private final AppLaunchPort launcher;
     private final QQMusicUiPort qqUi;
     private final BilibiliUiPort bilibiliUi;
+    private final ExternalAppHandoffPort handoff;
     // CHM supports lock-free snapshots/discards. Writers use this monitor only to make
     // expiry eviction, capacity enforcement and insertion one bounded transaction.
     private final Map<String, SearchContext> searchContexts = new ConcurrentHashMap<>();
@@ -44,18 +45,26 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
     private record BilibiliSearchContext(BilibiliUiPort.SearchPage page, String requestId,
             String originalRequestText, long createdElapsedMillis) {}
 
-    public MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
+    /** Package-local conveniences for media unit tests. Production must inject the handoff port. */
+    MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
             AppLaunchPort launcher) {
         this(packages, sessions, launcher, null);
     }
 
-    public MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
+    MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
             AppLaunchPort launcher, QQMusicUiPort qqUi) {
         this(packages, sessions, launcher, qqUi, null);
     }
 
-    public MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
+    private MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
             AppLaunchPort launcher, QQMusicUiPort qqUi, BilibiliUiPort bilibiliUi) {
+        this(packages, sessions, launcher, qqUi, bilibiliUi, ExternalAppHandoffPort.NONE);
+    }
+
+    public MediaCapabilityProvider(PackageProbe packages, MediaSessionPort sessions,
+            AppLaunchPort launcher, QQMusicUiPort qqUi, BilibiliUiPort bilibiliUi,
+            ExternalAppHandoffPort handoff) {
+        this.handoff = Objects.requireNonNull(handoff);
         this.packages = Objects.requireNonNull(packages, "packages");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
@@ -117,9 +126,18 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             return result(call, ToolResult.Status.EXECUTION_FAILED, "APP_NOT_INSTALLED",
                     app, "NOT_SENT", false, started);
         }
-        try {
+        LaunchContext ctx = new LaunchContext(request.getRequestId(), java.util.UUID.randomUUID().toString(),
+                uiDeadline(request, capability), request.getCancellationToken());
+        boolean externalUi = switch (capability) {
+            case MediaCapabilities.QQ_OPEN, MediaCapabilities.BILI_OPEN,
+                    MediaCapabilities.QQ_SEARCH, MediaCapabilities.QQ_PLAY_RESULT,
+                    MediaCapabilities.BILI_SEARCH, MediaCapabilities.BILI_OPEN_RESULT -> true;
+            default -> false;
+        };
+        try (ExternalAppHandoffPort.Operation ignored = externalUi ? handoff.begin(ctx) : () -> {}) {
+            ctx.checkActive();
             if (MediaCapabilities.QQ_OPEN.equals(capability)) {
-                launcher.openApp(app);
+                launcher.openApp(app, ctx);
                 return result(call, ToolResult.Status.SUCCESS, null, app, "REQUESTED",
                         false, started);
             }
@@ -132,21 +150,21 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                             app, "NOT_SENT", false, started);
                 }
                 Integer page = rawPage == null ? null : ((Number) rawPage).intValue();
-                launcher.openBilibiliVideo((String) rawBvid, page);
+                launcher.openBilibiliVideo((String) rawBvid, page, ctx);
                 return result(call, ToolResult.Status.SUCCESS, null, app, "REQUESTED",
                         false, started);
             }
             if (MediaCapabilities.QQ_SEARCH.equals(capability)) {
-                return searchSongs(request, call, started);
+                return searchSongs(request, call, started, ctx);
             }
             if (MediaCapabilities.QQ_PLAY_RESULT.equals(capability)) {
-                return playSearchResult(request, call, started);
+                return playSearchResult(request, call, started, ctx);
             }
             if (MediaCapabilities.BILI_SEARCH.equals(capability)) {
-                return searchBilibili(request, call, started);
+                return searchBilibili(request, call, started, ctx);
             }
             if (MediaCapabilities.BILI_OPEN_RESULT.equals(capability)) {
-                return openBilibiliResult(request, call, started);
+                return openBilibiliResult(request, call, started, ctx);
             }
             if (MediaCapabilities.QQ_PLAY.equals(capability)
                     && hasPendingConfirmation(request.getSessionId())
@@ -170,7 +188,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         }
     }
 
-    private ToolResult searchSongs(AgentRequest request, ToolCall call, long started)
+    private ToolResult searchSongs(AgentRequest request, ToolCall call, long started, LaunchContext ctx)
             throws MediaPlatformException {
         if (qqUi == null) throw new MediaPlatformException("UI_ACCESS_NOT_ENABLED");
         Object raw = call.argument("query");
@@ -182,8 +200,8 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             throw new MediaPlatformException("NOT_DISPATCHED");
         }
         String query = ((String) raw).strip();
-        QQMusicUiPort.SearchPage page = qqUi.search(query, uiDeadline(request,
-                MediaCapabilities.QQ_SEARCH));
+        handoff.prepare(ctx, MediaApp.QQMUSIC, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
+        QQMusicUiPort.SearchPage page = qqUi.search(query, ctx);
         rememberSearch(request, page);
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (QQMusicUiPort.Candidate candidate : page.candidates()) {
@@ -204,7 +222,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                 observed, true, elapsed(started));
     }
 
-    private ToolResult searchBilibili(AgentRequest request, ToolCall call, long started)
+    private ToolResult searchBilibili(AgentRequest request, ToolCall call, long started, LaunchContext ctx)
             throws MediaPlatformException {
         if (bilibiliUi == null) throw new MediaPlatformException("UI_ACCESS_NOT_ENABLED");
         Object raw = call.argument("query");
@@ -216,8 +234,8 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             throw new MediaPlatformException("NOT_DISPATCHED");
         }
         String query = ((String) raw).strip();
-        BilibiliUiPort.SearchPage page = bilibiliUi.search(query,
-                uiDeadline(request, MediaCapabilities.BILI_SEARCH));
+        handoff.prepare(ctx, MediaApp.BILIBILI, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
+        BilibiliUiPort.SearchPage page = bilibiliUi.search(query, ctx);
         rememberBilibiliSearch(request, page);
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (BilibiliUiPort.Candidate candidate : page.candidates()) {
@@ -234,7 +252,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                 observed, true, elapsed(started));
     }
 
-    private ToolResult openBilibiliResult(AgentRequest request, ToolCall call, long started)
+    private ToolResult openBilibiliResult(AgentRequest request, ToolCall call, long started, LaunchContext ctx)
             throws MediaPlatformException {
         if (bilibiliUi == null) throw new MediaPlatformException("UI_ACCESS_NOT_ENABLED");
         if (request.isCancelled() || request.remainingMillis() <= RETURN_MARGIN_MS + 500L) {
@@ -262,8 +280,8 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                         context.page().candidates().size() == 1)) {
             throw new MediaPlatformException("SELECTION_NOT_CONFIRMED");
         }
-        bilibiliUi.open(context.page(), candidate,
-                uiDeadline(request, MediaCapabilities.BILI_OPEN_RESULT));
+        handoff.prepare(ctx, MediaApp.BILIBILI, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
+        bilibiliUi.open(context.page(), candidate, ctx);
         bilibiliSearchContexts.remove(sessionId, context);
         Map<String, Object> observed = new LinkedHashMap<>();
         observed.put("media.app", MediaApp.BILIBILI.wireName());
@@ -299,7 +317,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                 request.getRequestId(), request.getText(), now));
     }
 
-    private ToolResult playSearchResult(AgentRequest request, ToolCall call, long started)
+    private ToolResult playSearchResult(AgentRequest request, ToolCall call, long started, LaunchContext ctx)
             throws MediaPlatformException {
         if (qqUi == null) throw new MediaPlatformException("UI_ACCESS_NOT_ENABLED");
         if (request.remainingMillis() <= RETURN_MARGIN_MS + 500L || request.isCancelled()) {
@@ -328,8 +346,9 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
                         index == context.confirmableIndex(), uniqueTitle)) {
             throw new MediaPlatformException("SELECTION_NOT_CONFIRMED");
         }
-        long deadline = uiDeadline(request, MediaCapabilities.QQ_PLAY_RESULT);
-        qqUi.select(context.page(), selected, deadline);
+        long deadline = ctx.deadlineElapsedMillis();
+        handoff.prepare(ctx, MediaApp.QQMUSIC, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
+        qqUi.select(context.page(), selected, ctx);
         searchContexts.remove(request.getSessionId(), context);
         MediaSessionPort.Snapshot latest = null;
         while (SystemClock.elapsedRealtime() < deadline) {

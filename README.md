@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/ABI-arm64--v8a-173B46?style=flat-square" alt="arm64-v8a" />
 </p>
 
-[界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
+[界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [跨应用悬浮窗](#跨应用悬浮窗) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
 
 </div>
 
@@ -29,7 +29,7 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 | 设计目标 | MatrixAgent 的做法 |
 |---|---|
 | **系统级可信执行** | 调用方身份、用户、音区、车辆状态与策略判断均由 Host 生成，客户端不能伪造 |
-| **稳定客户端边界** | AIDL、DTO、错误码与五个 Manager 独立发布，使用契约哈希和版本协商保护兼容性 |
+| **稳定客户端边界** | AIDL、DTO、错误码与类型安全的域 Manager 独立发布，使用契约哈希和版本协商保护兼容性 |
 | **统一模型入口** | 云端 API、局域网服务与 MNN 端侧模型共享同一模型域和生命周期 |
 | **对话与语音闭环** | 文字、PTT 与唤醒后的语音最终转写进入同一对话执行链；Host 管理录音、模型、焦点与播报 |
 | **可控的分层记忆** | 按用户与音区隔离；偏好、事实显式保存，事件摘要自动保存，支持精确读取、逐条删除与清除恢复 |
@@ -74,6 +74,19 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 
 [截图来源与更新方式](docs/images/README.md)。车辆控制的集成范围见[当前边界](#当前边界)。
 
+### 跨应用会话预览
+
+以下为 **2026-09-26 · Mi 9 SE · Android 15** 真机截图。Agent 操作 QQ 音乐时，可以从悬浮球展开会话，继续查看消息、补充输入或返回全屏。
+
+<table>
+  <tr><th align="center">悬浮球</th><th align="center">完整会话小窗</th><th align="center">展开执行过程</th></tr>
+  <tr>
+    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/01-bubble.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/01-bubble.png" width="260" alt="外部应用上方的可拖动 Agent 悬浮球" /></a></td>
+    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03b-reopened.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03b-reopened.png" width="260" alt="小窗显示用户提问、执行过程、助手回复及输入框" /></a></td>
+    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03e-process-expanded.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03e-process-expanded.png" width="260" alt="小窗中展开思考与工具过程，消息区域可独立滚动" /></a></td>
+  </tr>
+</table>
+
 ## 功能概览
 
 | | |
@@ -82,6 +95,8 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 | **03 · 语音闭环**<br><br>端侧 Vosk / Sherpa ASR、实时转写、唤醒、PTT、VAD、音频焦点和前台麦克风服务；状态明确呈现等待、录音、思考、播报与打断。 | **04 · 模型运行时**<br><br>统一接入 OpenAI Chat、Anthropic Messages、Gemini、Ollama 与 MNN 端侧协议；API Key 仅通过一次性 Binder 管道进入 Host。 |
 | **05 · 模型市场与语音资源**<br><br>目录缓存、Range 断点续传、暂停、恢复、取消、删除和原子安装；识别与 Piper 语音模型同样具有安装事实与可见进度。 | **06 · 数据、安全与 SDK**<br><br>Room + SQLCipher、Android KeyStore、敏感字段脱敏、epoch gate、签名权限和逐事务调用方校验；Launcher 只依赖 AAR。 |
 | **07 · 四层记忆**<br><br>Working 核验状态、Preference 偏好、Semantic 事实与 Episodic 事件协同召回；相关性过滤、分层预算与统一安全投影控制进入模型的内容。 | **08 · 用户数据控制**<br><br>偏好目录、历史 key 安全别名、逐条忘记与事务化清除；清除后拒绝旧请求写回，恢复失败时保留待清理标记并使用易失存储。 |
+
+- **跨应用任务入口**：打开或操作 QQ 音乐、B 站时保留悬浮球；点击展开与全屏共享内容的会话小窗，支持历史翻页、标题拖动、草稿与当前任务控制。
 
 ### 模型接入矩阵
 
@@ -134,6 +149,28 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 
 腾讯云接入是可选增强：网络、地域、账号权限和设备音频链路仍需要在目标 ROM 真机完成端到端认证，凭证不得写入仓库、截图或 issue。
 
+## 跨应用悬浮窗
+
+### 从悬浮球展开为会话小窗
+
+1. Agent 准备打开或操作外部应用时，Host 与 Launcher 进行有界交接，在屏幕边缘保留可拖动、贴边的悬浮球。
+2. 点击球展开小窗，显示同一会话的用户、助手与系统消息；最近 30 条先加载，更早消息按需翻页。小窗与全屏共享消息渲染器；开启 `matrix.debugTraceUi` 时，也共享“思考与工具”折叠过程。
+3. 按住标题栏即可移动小窗。球与小窗分别记住位置，收起再展开保留草稿；阅读历史时，新回复不会强制跳到底部。
+4. 可发送补充内容、取消当前任务、返回 Agent、收起或关闭。关闭窗口不取消 Host 任务；返回同一会话页时隐藏重复浮层，并提供小窗草稿恢复入口。
+
+深蓝标题栏、浅色消息区、角色气泡与状态色区分内容层级。横屏或可用高度不足时使用紧凑布局：发送位于输入框旁，返回与取消收进“更多”；输入法弹出后仍按可用区域约束位置。
+
+### 使用与实现边界
+
+- 在 Launcher 导航抽屉的“跨应用悬浮窗”入口开启系统悬浮窗访问；QQ 音乐 / B 站 UI 操作还需启用 Host 的“媒体搜索与选曲”无障碍服务。
+- Host 保持任务、消息与取消语义的唯一权威。Launcher 的 application scope 组件管理窗口和独立订阅，浮层不依赖聊天 Fragment 存活。
+- 首次准备或更换任务归属最多等待 1,200ms；同归属复用预算为 50ms，两者都受工具剩余 deadline 限制。ACK 超时或权限不可用走受控降级，不能让窗口准备无限阻塞任务。
+- 自动操作时暂不允许新取得输入焦点；已经开始编辑的草稿和焦点保持。输入不代表暂停 Agent，当前不引入输入租约。
+- 当前为单浮层、默认显示屏和 conversation 主轮次；进程死亡后通过返回 Launcher 恢复会话，不自动冷启动重建窗口。
+- 新增 `HandoffManager` 和 schema 9 契约，Host、SDK 与 Launcher 需要配套升级。
+
+设计、错误处理与验收细节见[技术执行方案](docs/Agent跨应用悬浮球与小窗模式技术执行方案.md)及[实现与真机验证记录](docs/Agent跨应用悬浮窗实现与真机验证记录.md)。
+
 ## 分层记忆
 
 对话正文提供连续交流所需的上下文；记忆模块按当前问题，从用户与音区所属范围内选取可复用的信息。所有持久化入口在 Host 内校验请求身份，`zone` 统一使用小写规范值。
@@ -157,7 +194,7 @@ Episodic v2 的事实范围包括导航目的地、空调温度、座椅加热�
 - **明确删除目标**：保存和删除均校验用户意图及指定内容；事件删除要求用户明确选择完整事件编号。模型发现某条历史事件不意味着获得删除授权。
 - **清除与恢复**：记忆表删除和 epoch 自增在同一事务完成，旧请求不能写回已清除的数据。数据库不可用时保留待清理标记；恢复完成前使用易失存储，避免旧持久化数据重新进入业务域。
 
-实现入口：[记忆模块](matrix-agent-service/src/main/java/com/matrix/agent/data/memory)、[事件摘要](matrix-agent-service/src/main/java/com/matrix/agent/task/persistence/EpisodicSummary.java)、[完整评审与实施记录](docs/记忆模块问题与修复方案.md)。
+实现入口：[记忆模块](matrix-agent-service/src/main/java/com/matrix/agent/data/memory)、[事件摘要](matrix-agent-service/src/main/java/com/matrix/agent/task/persistence/EpisodicSummary.java)。
 
 ## 系统架构
 
@@ -204,7 +241,7 @@ flowchart LR
     SDK --> Root
 ```
 
-客户端先连接 Root Binder，再取得任务、对话、模型、下载和语音五个类型安全的域 Manager。Host 通过 `ServiceManager.addService()` 注册系统服务，同时保留签名权限保护的显式绑定入口；Binder 死亡后，SDK 会重连并恢复活动订阅。
+客户端先连接 Root Binder，再取得任务、对话、模型、下载和语音五个主要业务域 Manager；跨应用交接、附件与调试轨迹通过独立扩展域接入。Host 通过 `ServiceManager.addService()` 注册系统服务，同时保留签名权限保护的显式绑定入口；Binder 死亡后，SDK 会重连并恢复活动订阅。
 
 记忆模块由 Host 内部的任务链和 Capability 调用，身份从当前请求派生；客户端通过现有任务 / 对话入口使用记忆能力。
 
@@ -219,9 +256,9 @@ flowchart LR
 
 | 模块 | 交付物 | 主要职责 |
 |---|---|---|
-| `matrix-agent-service` | `com.matrix.agent` APK | system UID Host、五域 Stub、任务引擎、对话协调、分层记忆、模型、语音、下载、持久化与审计 |
-| `matrix-agent-service-lib` | AAR | AIDL、Parcelable DTO、常量、`MatrixAgent` 门面与五个客户端 Manager |
-| `matrix-agent-launcher` | `com.matrix.agent.launcher` APK | SDK-only 工作区，展示任务、对话、语音、模型接入与模型市场 |
+| `matrix-agent-service` | `com.matrix.agent` APK | system UID Host、业务域与交接 Stub、任务引擎、对话协调、分层记忆、模型、语音、下载、持久化与审计 |
+| `matrix-agent-service-lib` | AAR | AIDL、Parcelable DTO、常量、`MatrixAgent` 门面与类型安全的客户端 Manager |
+| `matrix-agent-launcher` | `com.matrix.agent.launcher` APK | SDK-only 工作区与跨应用浮层，展示任务、对话、语音、模型接入与模型市场 |
 | `matrix-agent-test` | trusted / untrusted APK | 跨 APK 权限、身份、契约与 Binder 行为验证 |
 | `ondevice` | Android Library + JNI | MNN-LLM Java 边界与 native 生命周期管理，不暴露给客户端 |
 
@@ -355,7 +392,7 @@ MatrixAgent agent = MatrixAgent.createAsyncHandle(context, (client, state) -> {
 agent.release();
 ```
 
-`MatrixAgent` 提供 `getAgentManager()`、`getConversationManager()`、`getModelManager()`、`getDownloadManager()` 和 `getVoiceManager()`。订阅接口返回 `AutoCloseable`，调用方必须在生命周期结束时关闭。
+`MatrixAgent` 提供 `getAgentManager()`、`getConversationManager()`、`getModelManager()`、`getDownloadManager()` 和 `getVoiceManager()`。另提供 `getHandoffManager()`、`getAttachmentManager()` 和 `getDebugTraceManager()` 扩展域。订阅接口返回 `AutoCloseable`，调用方必须在生命周期结束时关闭。
 
 对话接口同样只经 SDK 使用；不要让客户端直接访问 Host 数据库：
 
@@ -390,9 +427,31 @@ PTT 绑定通过 `createVoiceBinding()` 创建一次性关联，再由语音域�
 | Vosk / Sherpa、麦克风、TTS、焦点与前台服务 | `./gradlew :matrix-agent-service:connectedVoiceCertificationAndroidTest` |
 | MNN 模型与 native tool-call | `./gradlew :matrix-agent-service:connectedOnDeviceCertificationAndroidTest` |
 
+### 跨应用浮层验收记录
+
+**2026-09-26 · Mi 9 SE / Android 15**，已安装版本与本地 APK 的 SHA-256 一致：
+
+| 验收范围 | 结果 |
+|---|---|
+| Host / Launcher / service-lib JVM | 1,353 + 45 + 20 = **1,418 项通过**，失败 / 错误 / 跳过均为 0 |
+| 最终真机联合测试 | **22 项通过**：2 项真实聊天 / QQ 搜索流程、20 项真实窗口边界与会话列表用例 |
+| 内容与交互 | 用户提问、助手回复与 Host 持久化消息一致；历史翻页、实时更新、过程折叠、标题拖动、IME 草稿与横屏布局通过 |
+| 跨 APK Binder 基准（前一轮独立样本） | 100 / 100 成功，P50 4ms、P95 7ms、最大 11ms |
+| Launcher / service-lib lint | 无 error；Launcher 35 条 warning，service-lib 0 条 warning |
+
+本次覆盖三个模块的 JVM、相关构建和两模块 lint，未将其描述为完整 `verifyArchitecture` 门禁通过。B 站成功搜索仍受目标应用网络故障限制；多 ROM / API、分屏、大字体及长时压力尚未完成完整矩阵。历史失败和修复前截图保留在[验证记录](docs/Agent跨应用悬浮窗实现与真机验证记录.md)中，最终联合结果见[真机日志](docs/verification/agent-overlay-conversation-2026-09-26/final-device-suite.txt)。
+
+复验前安装 Launcher 的 debug 与 androidTest APK，并保持上述权限及 Host 连接可用：
+
+```bash
+adb shell am instrument -w -r \
+  -e class com.matrix.agent.launcher.OverlayDeviceTest,com.matrix.agent.launcher.overlay.OverlayControllerDeviceTest \
+  com.matrix.agent.launcher.test/androidx.test.runner.AndroidJUnitRunner
+```
+
 ### 记忆模块验收记录
 
-以下为 **2026-09-25 记忆修复阶段的已有验收结果**，范围为 Host 单元测试与相关设备测试；详细用例及阶段记录见[实施文档 §27–§28](docs/记忆模块问题与修复方案.md)。
+以下为 **2026-09-25 记忆修复阶段的已有验收结果**，范围为 Host 单元测试与相关设备测试。
 
 | 验收范围 | 结果 |
 |---|---|
@@ -401,7 +460,7 @@ PTT 绑定通过 `createVoiceBinding()` 创建一次性关联，再由语音域�
 | A–K 修复阶段真机测试 | 9 个测试类、45 项通过，覆盖迁移、事务清除、恢复、目录与 SQLCipher |
 | 后续 P3 增量真机回归 | 2 个相关测试类、12 项通过，覆盖空音区、中文历史意图和目录冲突等 |
 
-两批真机结果分别记录，不合并为一次测试数量。仪器测试使用独立数据库和隔离环境；本次 README 更新重新采集了六个真机页面，未重跑上述测试集。
+两批真机结果分别记录，不合并为一次测试数量。仪器测试使用独立数据库和隔离环境；2026-09-25 的 README 更新采集了六个真机页面；本次悬浮窗修订未重跑上述记忆专项设备测试。
 
 ## 当前边界
 
@@ -415,8 +474,8 @@ PTT 绑定通过 `createVoiceBinding()` 创建一次性关联，再由语音域�
 
 ## 设计文档
 
-- [记忆模块问题与修复方案](docs/记忆模块问题与修复方案.md)：逐项评审、修复方案、实施记录、真机验收与产品边界
-- [MatrixAgent 项目详细评审报告](docs/MatrixAgent项目详细评审报告.md)：项目架构与各模块评审；阅读时结合后续专项实施记录
+- [Agent 跨应用悬浮球与小窗技术执行方案](docs/Agent跨应用悬浮球与小窗模式技术执行方案.md)：交接协议、窗口生命周期、完整会话与输入规则
+- [Agent 跨应用悬浮窗实现与真机验证记录](docs/Agent跨应用悬浮窗实现与真机验证记录.md)：实现结构、测试结果、真机截图、已知边界与复验步骤
 - [`MatrixAgent对话交互与统一语音架构设计.md`](MatrixAgent对话交互与统一语音架构设计.md)：对话持久化、语音 ingress、TTS 回注与恢复语义
 - [Matrix 对话输入交互增强任务设计](Matrix对话输入交互增强任务设计.md)：全屏编辑、运行状态、加密草稿、模型胶囊与上下文附件
 - [Framework 编译桩说明](matrix-agent-service/tools/framework/README.md)：目标 ROM 的 framework stub 更新与核对

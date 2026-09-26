@@ -1,0 +1,4 @@
+<resources>
+    <item name="overlay_action_return" type="id" />
+    <item name="overlay_action_cancel" type="id" />
+</resources>

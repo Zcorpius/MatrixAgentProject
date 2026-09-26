@@ -1,0 +1,12 @@
+[
+  {
+    "package": "com.matrix.agent",
+    "sha256": "ddd30b7ce2c29db68b66bfa52c91f94f8378a8740e33a1079db310b8d6cd45ff",
+    "installedMatchesBuild": true
+  },
+  {
+    "package": "com.matrix.agent.launcher",
+    "sha256": "7b3f1ea97a1f737d051a9d1021ce8e868ce0492611a2bc4568cfc828d34153f5",
+    "installedMatchesBuild": true
+  }
+]

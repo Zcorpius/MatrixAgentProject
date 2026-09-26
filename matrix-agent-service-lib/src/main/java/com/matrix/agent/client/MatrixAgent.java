@@ -210,6 +210,10 @@ public final class MatrixAgent {
     }
 
     /** 受控附件 staging（输入交互增强 I6）；Host 未通告该域时返回 null。 */
+    public HandoffManager getHandoffManager() {
+        return (HandoffManager) getMatrixManager(MatrixServiceConstants.HANDOFF_SERVICE);
+    }
+
     public AttachmentManager getAttachmentManager() {
         return (AttachmentManager) getMatrixManager(MatrixServiceConstants.ATTACHMENT_SERVICE);
     }
@@ -564,6 +568,8 @@ public final class MatrixAgent {
                 return new ConversationManager(this, serviceBinder);
             case MatrixServiceConstants.DEBUG_TRACE_SERVICE:
                 return new DebugTraceManager(this, serviceBinder);
+            case MatrixServiceConstants.HANDOFF_SERVICE:
+                return new HandoffManager(this, serviceBinder);
             case MatrixServiceConstants.ATTACHMENT_SERVICE:
                 return new AttachmentManager(this, serviceBinder);
             default:

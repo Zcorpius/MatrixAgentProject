@@ -27,7 +27,8 @@ public final class ParcelSchema {
      * discovery key. Readers must branch on schemaVersion before consuming
      * appended fields; writers remain append-only.
      */
-    public static final int CURRENT = 8;
+    // v9 adds the conversation external-app handoff domain and read-only UI activity.
+    public static final int CURRENT = 9;
 
     private ParcelSchema() {
     }

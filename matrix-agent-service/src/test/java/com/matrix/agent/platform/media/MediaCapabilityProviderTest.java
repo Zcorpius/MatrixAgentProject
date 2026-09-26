@@ -1,5 +1,8 @@
 package com.matrix.agent.platform.media;
 
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNotEquals;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -75,6 +78,7 @@ public final class MediaCapabilityProviderTest {
 
     @Test public void searchListsCandidatesAndRequiresAnotherExplicitUserTurnToPlay() {
         FakeUi ui = new FakeUi();
+        RecordingHandoff handoff = new RecordingHandoff();
         MediaSessionPort.Session session = new MediaSessionPort.Session() {
             @Override public MediaSessionPort.Snapshot snapshot() {
                 return new MediaSessionPort.Snapshot(ui.selected ? "PLAYING" : "PAUSED",
@@ -86,7 +90,7 @@ public final class MediaCapabilityProviderTest {
             }
         };
         MediaCapabilityProvider provider = new MediaCapabilityProvider(app -> true,
-                app -> session, new FakeLaunch(), ui);
+                app -> session, new FakeLaunch(), ui, null, handoff);
         AgentRequest searchRequest = AgentRequest.builder("搜索李健的歌", Actor.DRIVER)
                 .sessionId("music-conversation").build();
         ToolResult search = provider.execute(searchRequest,
@@ -94,6 +98,10 @@ public final class MediaCapabilityProviderTest {
         assertEquals(ToolResult.Status.SUCCESS, search.getStatus());
         assertEquals(2, ((List<?>) search.getObservedState().get("media.candidates")).size());
         assertFalse(ui.selected);
+        assertSame(ui.searchContext, handoff.prepared.get(0));
+        assertSame(ui.searchContext, handoff.started.get(0));
+        assertSame(searchRequest.getCancellationToken(), ui.searchContext.cancellation());
+        assertEquals(searchRequest.getRequestId(), ui.searchContext.runtimeRequestId());
 
         ToolCall select = new ToolCall(MediaCapabilities.QQ_PLAY_RESULT, Map.of("index", 2));
         ToolResult premature = provider.execute(searchRequest, select);
@@ -108,18 +116,24 @@ public final class MediaCapabilityProviderTest {
         assertTrue(played.isVerified());
         assertTrue(ui.selected);
         assertEquals("贝加尔湖畔", played.getObservedState().get("media.title"));
+        assertSame(ui.selectionContext, handoff.prepared.get(1));
+        assertEquals(chosen.getRequestId(), ui.selectionContext.runtimeRequestId());
+        assertNotEquals(ui.searchContext.operationId(), ui.selectionContext.operationId());
+        assertEquals(3, handoff.started.size()); // includes the rejected premature selection
+        assertEquals(3, handoff.closed);
+        assertEquals(2, handoff.prepared.size());
     }
 
     @Test public void affirmativeReplyCanPlayOnlyUniquelyProposedCandidate() {
         AtomicBoolean selected = new AtomicBoolean();
         QQMusicUiPort ui = new QQMusicUiPort() {
-            @Override public SearchPage search(String query, long deadline) {
+            @Override public SearchPage search(String query, com.matrix.agent.platform.media.LaunchContext deadline) {
                 return new SearchPage(query, 1L, List.of(
                         new Candidate(1, "传奇", "李健·似水流年"),
                         new Candidate(2, "传奇", "王菲·传奇")));
             }
 
-            @Override public void select(SearchPage page, Candidate candidate, long deadline) {
+            @Override public void select(SearchPage page, Candidate candidate, com.matrix.agent.platform.media.LaunchContext deadline) {
                 assertEquals(1, candidate.index());
                 selected.set(true);
             }
@@ -236,22 +250,39 @@ public final class MediaCapabilityProviderTest {
 
     private static final class FakeLaunch implements AppLaunchPort {
         int opens;
-        @Override public void openApp(MediaApp app) { opens++; }
-        @Override public void openBilibiliVideo(String bvid, Integer page) { opens++; }
+        @Override public void openApp(MediaApp app, com.matrix.agent.platform.media.LaunchContext ctx) { opens++; }
+        @Override public void openBilibiliVideo(String bvid, Integer page, com.matrix.agent.platform.media.LaunchContext ctx) { opens++; }
     }
 
     private static final class FakeUi implements QQMusicUiPort {
         boolean selected;
+        LaunchContext searchContext, selectionContext;
 
-        @Override public SearchPage search(String query, long deadline) {
+        @Override public SearchPage search(String query, com.matrix.agent.platform.media.LaunchContext deadline) {
+            searchContext = deadline;
             return new SearchPage(query, 1L, List.of(
                     new Candidate(1, "人间共鸣", "李健·人间共鸣"),
                     new Candidate(2, "贝加尔湖畔", "李健·依然")));
         }
 
-        @Override public void select(SearchPage page, Candidate candidate, long deadline) {
+        @Override public void select(SearchPage page, Candidate candidate, com.matrix.agent.platform.media.LaunchContext deadline) {
+            selectionContext = deadline;
             assertEquals("贝加尔湖畔", candidate.title());
             selected = true;
         }
+    }
+
+    private static final class RecordingHandoff implements ExternalAppHandoffPort {
+        final List<LaunchContext> started = new java.util.ArrayList<>();
+        final List<LaunchContext> prepared = new java.util.ArrayList<>();
+        int closed;
+        @Override public Operation begin(LaunchContext context) {
+            started.add(context); return () -> closed++;
+        }
+        @Override public void prepare(LaunchContext context, MediaApp app, int reason) {
+            assertEquals(com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP, reason);
+            prepared.add(context);
+        }
+        @Override public void launchFinished(LaunchContext context, int result) {}
     }
 }

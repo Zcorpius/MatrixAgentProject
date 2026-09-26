@@ -1,0 +1,22 @@
+<resources>
+    <!-- Explicit light floating surface, independent of the app behind it. -->
+    <color name="overlay_header">#172D40</color>
+    <color name="overlay_on_header">#F8FAFC</color>
+    <color name="overlay_header_muted">#B5CADA</color>
+    <color name="overlay_surface">#F3F6FA</color>
+    <color name="overlay_card">#FFFFFF</color>
+    <color name="overlay_text">#203447</color>
+    <color name="overlay_muted">#586D80</color>
+    <color name="overlay_border">#DCE5ED</color>
+    <color name="overlay_input">#EDF2F7</color>
+    <color name="overlay_active">#126B82</color>
+    <color name="overlay_active_surface">#E1F1F6</color>
+    <color name="overlay_success">#25684B</color>
+    <color name="overlay_success_surface">#E5F3EA</color>
+    <color name="overlay_warning">#89530D</color>
+    <color name="overlay_warning_surface">#FFF1D9</color>
+    <color name="overlay_danger">#A83B38</color>
+    <color name="overlay_danger_surface">#FCECE9</color>
+    <color name="overlay_send">#B7482C</color>
+    <color name="overlay_disabled">#DEE5EC</color>
+</resources>

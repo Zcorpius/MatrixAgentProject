@@ -40,24 +40,28 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
         this.launcher = launcher;
     }
 
-    @Override public SearchPage search(String query, long deadlineElapsedMillis)
+    @Override public SearchPage search(String query, LaunchContext ctx)
             throws MediaPlatformException {
-        lockUntil(deadlineElapsedMillis);
+        long deadlineElapsedMillis = ctx.deadlineElapsedMillis();
+        ctx.checkActive();
+        lockUntil(deadlineElapsedMillis, ctx);
         try {
-            return searchLocked(query, deadlineElapsedMillis);
+            return searchLocked(query, deadlineElapsedMillis, ctx);
         } finally {
             uiLock.unlock();
         }
     }
 
-    @Override public void select(SearchPage page, Candidate candidate, long deadlineElapsedMillis)
+    @Override public void select(SearchPage page, Candidate candidate, LaunchContext ctx)
             throws MediaPlatformException {
-        lockUntil(deadlineElapsedMillis);
+        long deadlineElapsedMillis = ctx.deadlineElapsedMillis();
+        ctx.checkActive();
+        lockUntil(deadlineElapsedMillis, ctx);
         try {
             if (appVersion() != page.appVersion()) {
                 throw new MediaPlatformException("SEARCH_CONTEXT_EXPIRED");
             }
-            SearchPage refreshed = searchLocked(page.query(), deadlineElapsedMillis);
+            SearchPage refreshed = searchLocked(page.query(), deadlineElapsedMillis, ctx);
             if (refreshed.appVersion() != page.appVersion()) {
                 throw new MediaPlatformException("SEARCH_CONTEXT_EXPIRED");
             }
@@ -66,7 +70,7 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
                             && found.detail().equals(candidate.detail())).count();
             if (matches != 1) throw new MediaPlatformException("SEARCH_RESULT_CHANGED");
             QQMusicAccessibilityService service = service();
-            AccessibilityNodeInfo root = requireRoot(service, deadlineElapsedMillis);
+            AccessibilityNodeInfo root = requireRoot(service, deadlineElapsedMillis, ctx);
             if (!page.query().contentEquals(searchText(root))) {
                 throw new MediaPlatformException("SEARCH_RESULT_CHANGED");
             }
@@ -75,6 +79,7 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
                 Candidate live = candidateOf(row, candidate.index());
                 if (live != null && live.title().equals(candidate.title())
                         && live.detail().equals(candidate.detail())) {
+                    ctx.checkActive();
                     if (!row.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                         throw new MediaPlatformException("UI_ACTION_REJECTED");
                     }
@@ -87,50 +92,61 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
         }
     }
 
-    private SearchPage searchLocked(String query, long deadline) throws MediaPlatformException {
+    private SearchPage searchLocked(String query, long deadline, LaunchContext ctx) throws MediaPlatformException {
         QQMusicAccessibilityService service = service();
         long version = appVersion();
-        if (service.qqRoot() == null) launcher.openApp(MediaApp.QQMUSIC);
-        AccessibilityNodeInfo root = openSearchSurface(service, deadline);
+        if (service.qqRoot() == null) launcher.openApp(MediaApp.QQMUSIC, ctx);
+        AccessibilityNodeInfo root = openSearchSurface(service, deadline, ctx);
         if (first(root, SEARCH_INPUT) == null) {
             AccessibilityNodeInfo entry = first(root, SEARCH_ENTRY);
-            if (entry == null || !click(entry)) {
+            if (entry == null || !click(entry, ctx)) {
                 throw new MediaPlatformException("SEARCH_UI_CHANGED");
             }
         }
-        AccessibilityNodeInfo input = waitForNode(service, SEARCH_INPUT, deadline);
-        AccessibilityNodeInfo before = requireRoot(service, deadline);
+        AccessibilityNodeInfo input = waitForNode(service, SEARCH_INPUT, deadline, ctx);
+        AccessibilityNodeInfo before = requireRoot(service, deadline, ctx);
         String previousQuery = searchText(before);
         List<Candidate> previousCandidates = candidates(before);
         Bundle text = new Bundle();
         text.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, query);
+        ctx.checkActive();
         if (!input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, text)) {
             throw new MediaPlatformException("UI_ACTION_REJECTED");
         }
-        input.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-        boolean submitted = input.performAction(
-                AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId());
-        if (!submitted) {
-            input.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-            AccessibilityNodeInfo currentInput = waitForNode(service, SEARCH_INPUT, deadline);
-            submitted = currentInput.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId());
+        // Prefer a package-owned suggestion. IME_ENTER is only valid with existing target focus;
+        // never acquire target input focus while the user is editing the Agent panel.
+        boolean submitted = clickVisibleSuggestion(service, query, ctx);
+        if (!submitted && service.canUseFocusedInput(MediaApp.QQMUSIC)) {
+            // Re-enter the target's own search form only while that app owns interaction.
+            // A focused Agent editor makes this guard false, so its IME is never stolen.
+            if (!input.isFocused() && input.isClickable()) {
+                ctx.checkActive();
+                input.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                input = waitForNode(service, SEARCH_INPUT, deadline, ctx);
+            }
+            submitted = clickVisibleSuggestion(service, query, ctx);
+            if (!submitted && android.os.Build.VERSION.SDK_INT >= 30
+                    && service.canUseFocusedInput(MediaApp.QQMUSIC) && input.isFocused()) {
+                ctx.checkActive();
+                submitted = input.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId());
+            }
         }
-        if (!submitted) clickExactSuggestion(service, query, deadline);
-        AccessibilityNodeInfo songsTab = waitForSongsTab(service, deadline);
-        if (!songsTab.isSelected() && !click(songsTab)) {
+        if (!submitted) clickExactSuggestion(service, query,
+                Math.min(deadline, SystemClock.elapsedRealtime() + 1200), ctx);
+        AccessibilityNodeInfo songsTab = waitForSongsTab(service, deadline, ctx);
+        if (!songsTab.isSelected() && !click(songsTab, ctx)) {
             throw new MediaPlatformException("UI_ACTION_REJECTED");
         }
         List<Candidate> candidates = waitForCandidates(service, query, previousQuery,
-                previousCandidates, deadline);
+                previousCandidates, deadline, ctx);
         return new SearchPage(query, version, List.copyOf(candidates));
     }
 
     private static AccessibilityNodeInfo openSearchSurface(QQMusicAccessibilityService service,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         // QQ Music keeps the full-screen player above the search page after a selection.
         // Leave only that recognized page, then wait for the previous search surface.
-        AccessibilityNodeInfo root = requireRoot(service, deadline);
+        AccessibilityNodeInfo root = requireRoot(service, deadline, ctx);
         long settleUntil = Math.min(deadline,
                 SystemClock.elapsedRealtime() + PAGE_SETTLE_MILLIS);
         while (SystemClock.elapsedRealtime() < settleUntil) {
@@ -141,31 +157,41 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
                 AccessibilityNodeInfo back = first(root, PLAYER_BACK);
                 if (back != null && back.isVisibleToUser()
                         && "返回".contentEquals(back.getContentDescription())) {
-                    if (!click(back)) throw new MediaPlatformException("UI_ACTION_REJECTED");
+                    if (!click(back, ctx)) throw new MediaPlatformException("UI_ACTION_REJECTED");
                     while (SystemClock.elapsedRealtime() < deadline) {
                         root = service.qqRoot();
                         if (root != null && (first(root, SEARCH_INPUT) != null
                                 || first(root, SEARCH_ENTRY) != null)) return root;
-                        pause();
+                        pause(ctx);
                     }
                     throw new MediaPlatformException("SEARCH_UI_CHANGED");
                 }
             }
-            pause();
+            pause(ctx);
             root = service.qqRoot();
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
-    private void lockUntil(long deadline) throws MediaPlatformException {
+    private void lockUntil(long deadline, LaunchContext ctx) throws MediaPlatformException {
+        ctx.checkActive();
         try {
             long remaining = Math.max(0L, deadline - SystemClock.elapsedRealtime());
-            if (!uiLock.tryLock(remaining, TimeUnit.MILLISECONDS)) {
+            if (!acquire(uiLock, ctx)) {
                 throw new MediaPlatformException("UI_BUSY");
             }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new MediaPlatformException("CANCELLED");
+        }
+    }
+
+    private static boolean acquire(ReentrantLock lock, LaunchContext ctx)
+            throws InterruptedException, MediaPlatformException {
+        while (true) {
+            ctx.checkActive();
+            long wait = Math.min(50L, Math.max(1L, ctx.deadlineElapsedMillis() - SystemClock.elapsedRealtime()));
+            if (lock.tryLock(wait, TimeUnit.MILLISECONDS)) return true;
         }
     }
 
@@ -185,28 +211,28 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
     }
 
     private static AccessibilityNodeInfo requireRoot(QQMusicAccessibilityService service,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
             if (root != null) return root;
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("QQMUSIC_NOT_FOREGROUND");
     }
 
     private static AccessibilityNodeInfo waitForNode(QQMusicAccessibilityService service,
-            String id, long deadline) throws MediaPlatformException {
+            String id, long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
             AccessibilityNodeInfo node = root == null ? null : first(root, id);
             if (node != null) return node;
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
     private static AccessibilityNodeInfo waitForSongsTab(QQMusicAccessibilityService service,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
             if (root != null) {
@@ -214,29 +240,40 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
                     if ("歌曲".contentEquals(tab.getText()) && tab.isVisibleToUser()) return tab;
                 }
             }
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
+    private static boolean clickVisibleSuggestion(QQMusicAccessibilityService service,
+            String query, LaunchContext ctx) throws MediaPlatformException {
+        AccessibilityNodeInfo root = service.qqRoot();
+        if (root == null) return false;
+        for (AccessibilityNodeInfo suggestion : root.findAccessibilityNodeInfosByViewId(SEARCH_SUGGESTION)) {
+            if (query.equals(clean(suggestion.getText())) && suggestion.isVisibleToUser()
+                    && click(suggestion, ctx)) return true;
+        }
+        return false;
+    }
+
     private static void clickExactSuggestion(QQMusicAccessibilityService service,
-            String query, long deadline) throws MediaPlatformException {
+            String query, long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
             if (root != null) {
                 for (AccessibilityNodeInfo suggestion :
                         root.findAccessibilityNodeInfosByViewId(SEARCH_SUGGESTION)) {
                     if (query.equals(clean(suggestion.getText()))
-                            && suggestion.isVisibleToUser() && click(suggestion)) return;
+                            && suggestion.isVisibleToUser() && click(suggestion, ctx)) return;
                 }
             }
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
     private static List<Candidate> waitForCandidates(QQMusicAccessibilityService service,
-            String query, String previousQuery, List<Candidate> previousCandidates, long deadline)
+            String query, String previousQuery, List<Candidate> previousCandidates, long deadline, LaunchContext ctx)
             throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
@@ -248,7 +285,7 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
                         || !results.equals(previousCandidates);
                 if (refreshed && queryRepresented(query, results)) return results;
             }
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_NO_RESULTS");
     }
@@ -300,7 +337,8 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
         return found.isEmpty() ? null : found.get(0);
     }
 
-    private static boolean click(AccessibilityNodeInfo node) {
+    private static boolean click(AccessibilityNodeInfo node, LaunchContext ctx) throws MediaPlatformException {
+        ctx.checkActive();
         for (int i = 0; node != null && i < 5; i++, node = node.getParent()) {
             if (node.isClickable()) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         }
@@ -311,10 +349,12 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
         return text == null ? "" : text.toString().strip();
     }
 
-    private static void pause() throws MediaPlatformException {
+    private static void pause(LaunchContext ctx) throws MediaPlatformException {
         if (Thread.currentThread().isInterrupted()) {
             throw new MediaPlatformException("CANCELLED");
         }
-        SystemClock.sleep(POLL_MILLIS);
+        ctx.checkActive();
+        SystemClock.sleep(Math.min(POLL_MILLIS, Math.max(1L, ctx.deadlineElapsedMillis() - SystemClock.elapsedRealtime())));
+        ctx.checkActive();
     }
 }

@@ -1,0 +1,27 @@
+<resources>
+    <string name="overlay_title">Agent 任务</string>
+    <string name="overlay_drag_hint">按住标题栏移动</string>
+    <string name="overlay_drag_description">移动任务小窗，拖动标题栏可调整位置</string>
+    <string name="overlay_more">更多</string>
+    <string name="overlay_collapse">收起</string>
+    <string name="overlay_close">关闭</string>
+    <string name="overlay_return">返回 Agent</string>
+    <string name="overlay_cancel">取消任务</string>
+    <string name="overlay_send">发送</string>
+    <string name="overlay_sending">发送中</string>
+    <string name="overlay_sync_task">正在同步任务</string>
+    <string name="overlay_sync_activity">正在同步操作状态</string>
+    <string name="overlay_reconnecting">正在重新连接</string>
+    <string name="overlay_feedback_label">最新反馈</string>
+    <string name="overlay_input_hint">补充信息或开始新任务</string>
+    <string name="overlay_editing">可补充信息；Agent 会继续当前操作</string>
+    <string name="overlay_automation">正在操作应用，完成当前步骤后可输入</string>
+    <string name="overlay_idle">可输入补充信息</string>
+    <string name="overlay_bubble_description">Agent %1$s，点按展开，拖动移动</string>
+    <string name="overlay_bubble_marker">M %1$s</string>
+    <string name="overlay_history_loading">正在加载对话…</string>
+    <string name="overlay_history_older">查看更早消息</string>
+    <string name="overlay_history_retry">消息加载失败，点按重试</string>
+    <string name="overlay_history_empty">暂无对话消息</string>
+    <string name="overlay_message_copied">消息已复制</string>
+</resources>

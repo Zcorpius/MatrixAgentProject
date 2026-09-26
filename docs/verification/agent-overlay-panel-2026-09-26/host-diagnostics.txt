@@ -1,0 +1,11 @@
+SERVICE com.matrix.agent/.host.MatrixAgentManagerService a3e7fcb pid=16881 user=0
+  Client:
+    {"schema":1,"retention":"process_memory","capacity":256,"quantile":"nearest_rank_recent_timed_events_including_failures"}
+    {"type":"summary","stage":"HANDOFF","mode":1,"count":2,"successes":2,"results":{"1":1,"2":1},"timedSamples":2,"p50Ms":109,"p95Ms":116,"maxMs":116}
+    {"type":"summary","stage":"INTENT_DISPATCH","mode":1,"count":1,"successes":1,"results":{"1":1},"timedSamples":0,"p50Ms":-1,"p95Ms":-1,"maxMs":-1}
+    {"type":"summary","stage":"TASK_TERMINAL","mode":0,"count":2,"successes":2,"results":{"2":2},"timedSamples":0,"p50Ms":-1,"p95Ms":-1,"maxMs":-1}
+    {"type":"event","stage":"HANDOFF","mode":1,"result":2,"reason":0,"success":true,"elapsedRealtimeMs":185230973,"durationMs":109,"task":"83ed4780b1b4bf5d3a92a73f5cba518ded6b2ffe4902136ef274e3b331423a1a","request":"3059e9d762ff45679bdf8b5026d98f210aac94d0ca389062d31deed237919d19"}
+    {"type":"event","stage":"INTENT_DISPATCH","mode":1,"result":1,"reason":0,"success":true,"elapsedRealtimeMs":185230998,"durationMs":-1,"task":"83ed4780b1b4bf5d3a92a73f5cba518ded6b2ffe4902136ef274e3b331423a1a","request":"3059e9d762ff45679bdf8b5026d98f210aac94d0ca389062d31deed237919d19"}
+    {"type":"event","stage":"TASK_TERMINAL","mode":0,"result":2,"reason":0,"success":true,"elapsedRealtimeMs":185238718,"durationMs":-1,"task":"83ed4780b1b4bf5d3a92a73f5cba518ded6b2ffe4902136ef274e3b331423a1a","request":""}
+    {"type":"event","stage":"HANDOFF","mode":1,"result":1,"reason":0,"success":true,"elapsedRealtimeMs":185245245,"durationMs":116,"task":"48dfb52e5a189a0313d2d1df6381971a26b925ac963043aaeee1ba38dd1cbb3c","request":"2aacb2acef8e935626198e700940ca4888f2ac20d966e54fef203ec95768f933"}
+    {"type":"event","stage":"TASK_TERMINAL","mode":0,"result":2,"reason":0,"success":true,"elapsedRealtimeMs":185248249,"durationMs":-1,"task":"48dfb52e5a189a0313d2d1df6381971a26b925ac963043aaeee1ba38dd1cbb3c","request":""}

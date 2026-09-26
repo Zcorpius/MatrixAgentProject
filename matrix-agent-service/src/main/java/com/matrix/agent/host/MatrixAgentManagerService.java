@@ -62,6 +62,8 @@ public final class MatrixAgentManagerService extends Service {
                     : MatrixServiceConstants.VOICE_SERVICE.equals(serviceName) ? voiceServiceBinder()
                     : MatrixServiceConstants.CONVERSATION_SERVICE.equals(serviceName)
                         ? conversationServiceBinder()
+                    : MatrixServiceConstants.HANDOFF_SERVICE.equals(serviceName)
+                        ? graph.handoffBinder()
                     : MatrixServiceConstants.ATTACHMENT_SERVICE.equals(serviceName)
                         ? attachmentServiceBinder()
                     : MatrixServiceConstants.DEBUG_TRACE_SERVICE.equals(serviceName)
@@ -161,6 +163,13 @@ public final class MatrixAgentManagerService extends Service {
         // The process owns the global ServiceManager entry. Restart it after a recoverable
         // process kill so the boot receiver is not the only registration path.
         return START_STICKY;
+    }
+
+    @Override
+    protected void dump(java.io.FileDescriptor fd, java.io.PrintWriter writer, String[] args) {
+        if (args != null && java.util.Arrays.asList(args).contains("--handoff")) {
+            ((MatrixAgentApplication) getApplication()).getContainer().getHandoffDiagnostics().dump(writer);
+        } else super.dump(fd, writer, args);
     }
 
     @Override

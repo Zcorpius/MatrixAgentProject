@@ -13,26 +13,28 @@ public final class AndroidAppLaunchPort implements AppLaunchPort {
             "android.permission.START_ACTIVITIES_FROM_BACKGROUND";
 
     private final Context context;
+    private final ExternalAppHandoffPort handoff;
 
-    public AndroidAppLaunchPort(Context context) {
+    public AndroidAppLaunchPort(Context context, ExternalAppHandoffPort handoff) {
         this.context = context.getApplicationContext();
+        this.handoff = handoff;
     }
 
-    @Override public void openApp(MediaApp app) throws MediaPlatformException {
+    @Override public void openApp(MediaApp app, LaunchContext ctx) throws MediaPlatformException {
         requireLaunchContext();
         Intent intent = context.getPackageManager().getLaunchIntentForPackage(app.packageName());
         if (intent == null) throw new MediaPlatformException("ACTION_UNSUPPORTED");
-        dispatch(intent);
+        dispatch(intent, app, ctx);
     }
 
-    @Override public void openBilibiliVideo(String bvid, Integer page)
+    @Override public void openBilibiliVideo(String bvid, Integer page, LaunchContext ctx)
             throws MediaPlatformException {
         requireLaunchContext();
         String url = "https://www.bilibili.com/video/" + bvid;
         if (page != null) url += "?p=" + page;
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         intent.setPackage(MediaApp.BILIBILI.packageName());
-        dispatch(intent);
+        dispatch(intent, MediaApp.BILIBILI, ctx);
     }
 
     private void requireLaunchContext() throws MediaPlatformException {
@@ -45,14 +47,24 @@ public final class AndroidAppLaunchPort implements AppLaunchPort {
         }
     }
 
-    private void dispatch(Intent intent) throws MediaPlatformException {
+    private void dispatch(Intent intent, MediaApp app, LaunchContext ctx) throws MediaPlatformException {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             if (intent.resolveActivity(context.getPackageManager()) == null) {
                 throw new MediaPlatformException("ACTION_UNSUPPORTED");
             }
-            context.startActivity(intent);
+            try {
+                handoff.prepare(ctx, app, com.matrix.agent.api.handoff.HandoffProtocol.LAUNCH_ACTIVITY);
+                ctx.checkActive();
+                requireLaunchContext();
+                context.startActivity(intent);
+                handoff.launchFinished(ctx, com.matrix.agent.api.handoff.HandoffProtocol.DISPATCHED);
+            } catch (MediaPlatformException cancelled) {
+                handoff.launchFinished(ctx, com.matrix.agent.api.handoff.HandoffProtocol.DISPATCH_CANCELLED);
+                throw cancelled;
+            }
         } catch (ActivityNotFoundException | SecurityException failure) {
+            handoff.launchFinished(ctx, com.matrix.agent.api.handoff.HandoffProtocol.DISPATCH_FAILED);
             throw new MediaPlatformException("BACKGROUND_LAUNCH_BLOCKED");
         }
     }

@@ -46,6 +46,16 @@ import java.util.function.UnaryOperator;
  */
 public final class ConversationCoordinator {
 
+    private com.matrix.agent.diagnostics.HandoffDiagnostics handoffDiagnostics =
+            com.matrix.agent.diagnostics.HandoffDiagnostics.NONE;
+    public void setHandoffDiagnostics(com.matrix.agent.diagnostics.HandoffDiagnostics diagnostics) {
+        handoffDiagnostics = diagnostics;
+    }
+    private com.matrix.agent.handoff.HandoffContextRegistry handoffContexts;
+    public void setHandoffContexts(com.matrix.agent.handoff.HandoffContextRegistry contexts) {
+        this.handoffContexts = contexts;
+    }
+
     private static final String TAG = "MatrixAgent";
     /** Binder 正文上限与 AgentRequest.TEXT_MAX 对齐；Host 侧再校验，不信任客户端。 */
     public static final int TEXT_MAX_CHARS = 4096;
@@ -283,6 +293,12 @@ public final class ConversationCoordinator {
         activeTokens.put(conversationTaskId, token);
         // 运行阶段（I3）：受理事务已原子持久化 → 发布 QUEUED 并绑定 Engine 事件映射。
         // 在 lane 预约前发布：订阅者先看到“等待执行”，再看到 RUNNING 消息事件。
+        if (handoffContexts != null) {
+            var owner = store.findConversation(command.conversationId());
+            if (owner != null) handoffContexts.bind(new com.matrix.agent.handoff.HandoffContextRegistry.Binding(
+                    runtimeRequestId, command.conversationId(), conversationTaskId, userMessageId,
+                    submitted.sequenceNo(), owner.ownerUserId(), owner.vehicleZone()));
+        }
         beginStageTracking(command.conversationId(), conversationTaskId, runtimeRequestId);
         // 必须先回执再预约 lane：极快的本地执行也不能在 VoiceBridge 建立 token→task 映射前
         // 回来，从而丢失唯一一次 TTS 回注。
@@ -746,6 +762,7 @@ public final class ConversationCoordinator {
 
     private void endStageTracking(String conversationId, String conversationTaskId,
             String runtimeRequestId) {
+        if (handoffContexts != null) handoffContexts.unbind(runtimeRequestId);
         if (stageRegistry != null) {
             stageRegistry.clear(conversationId, conversationTaskId);
         }
@@ -774,6 +791,10 @@ public final class ConversationCoordinator {
                     + conversationTaskId);
             return;
         }
+        // Persisted task truth, recorded only after the terminal write succeeds.
+        handoffDiagnostics.record(com.matrix.agent.diagnostics.HandoffDiagnostics.Stage.TASK_TERMINAL,
+                0, status.wire(), 0, status == PersistedMessageStatus.COMPLETED,
+                android.os.SystemClock.elapsedRealtime(), -1, conversationTaskId, null);
         MessageRow assistant = store.findMessage(assistantMessageId);
         if (assistant != null) {
             notifyUpsert(assistant);

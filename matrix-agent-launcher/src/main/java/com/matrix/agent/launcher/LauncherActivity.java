@@ -29,6 +29,13 @@ import com.matrix.agent.launcher.presentation.VoiceFragment;
 
 /** Shell navigation only; feature pages keep their own MVVM state and SDK boundary. */
 public final class LauncherActivity extends AppCompatActivity {
+    @Override
+    public void dump(String prefix, java.io.FileDescriptor fd, java.io.PrintWriter writer, String[] args) {
+        if (args != null && java.util.Arrays.asList(args).contains("--handoff")) {
+            ((LauncherApplication) getApplication()).diagnostics().dump(writer);
+        } else super.dump(prefix, fd, writer, args);
+    }
+
     /** φ⁻¹：导航覆盖屏幕 61.803%，保留 38.197% 的工作区作为空间锚点。 */
     private static final double DRAWER_GOLDEN_RATIO = 0.61803398875d;
 
@@ -86,13 +93,24 @@ public final class LauncherActivity extends AppCompatActivity {
 
         viewModelFactory = new LauncherViewModelFactory(
                 ((LauncherApplication) getApplication()).hostGateway(),
-                new com.matrix.agent.launcher.data.DraftCommandLane(
-                        ((LauncherApplication) getApplication()).hostGateway(),
-                        ((LauncherApplication) getApplication()).executorRegistry()
-                                .draftCommands()));
+                ((LauncherApplication) getApplication()).draftLane());
         new ViewModelProvider(this, viewModelFactory).get(LauncherViewModel.class)
                 .connectionState().observe(this, this::updateConnection);
         if (savedInstanceState == null) showInitialPage(getIntent());
+        Button overlaySettings = new Button(this);
+        overlaySettings.setText("跨应用悬浮窗");
+        overlaySettings.setTextColor(Color.rgb(147, 206, 185));
+        overlaySettings.setBackgroundColor(Color.TRANSPARENT);
+        overlaySettings.setOnClickListener(view -> new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("跨应用悬浮窗")
+                .setMessage("Agent 操作其他应用时，以悬浮球保留任务入口。点按可查看进度、补充输入或取消任务。可随时关闭，不影响任务继续执行。")
+                .setPositiveButton(android.provider.Settings.canDrawOverlays(this) ? "管理权限" : "开启悬浮窗",
+                        (dialog, which) -> startActivity(new android.content.Intent(
+                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:" + getPackageName()))))
+                .setNegativeButton("返回", null).show());
+        ((android.widget.LinearLayout) drawerContent).addView(overlaySettings,
+                ((android.widget.LinearLayout) drawerContent).getChildCount() - 1);
     }
 
     @Override
@@ -106,6 +124,13 @@ public final class LauncherActivity extends AppCompatActivity {
         if (intent != null && MatrixServiceConstants.ACTION_OPEN_DOWNLOADS.equals(intent.getAction())) {
             show(new DownloadFragment(), downloads, R.string.nav_downloads);
         } else {
+            if (intent != null && com.matrix.agent.api.handoff.HandoffProtocol.ACTION_OPEN_CONVERSATION.equals(intent.getAction())) {
+                String target = intent.getStringExtra(com.matrix.agent.api.handoff.HandoffProtocol.EXTRA_CONVERSATION_ID);
+                if (target != null && target.length() <= 128) {
+                    new ViewModelProvider(this, viewModelFactory)
+                            .get(com.matrix.agent.launcher.presentation.ConversationViewModel.class).switchConversation(target);
+                }
+            }
             show(new ConversationFragment(), conversation, R.string.nav_conversation);
         }
     }

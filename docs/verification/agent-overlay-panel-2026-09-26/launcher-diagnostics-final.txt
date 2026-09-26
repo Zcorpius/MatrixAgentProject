@@ -1,0 +1,7 @@
+TASK 10187:com.matrix.agent.launcher id=347 userId=0 displayId=0(type=INTERNAL)
+  ACTIVITY com.matrix.agent.launcher/.LauncherActivity d5b8cb8 pid=19257 userId=0 uid=10187 displayId=0(type=INTERNAL)
+{"schema":1,"retention":"process_memory","capacity":256,"quantile":"nearest_rank_recent_timed_events_including_failures"}
+{"type":"summary","stage":"WINDOW_ATTACH","mode":1,"count":1,"successes":1,"results":{"1":1},"timedSamples":1,"p50Ms":50,"p95Ms":50,"maxMs":50}
+{"type":"summary","stage":"FIRST_DRAW","mode":1,"count":1,"successes":1,"results":{"1":1},"timedSamples":1,"p50Ms":43,"p95Ms":43,"maxMs":43}
+{"type":"event","stage":"WINDOW_ATTACH","mode":1,"result":1,"reason":0,"success":true,"elapsedRealtimeMs":185724157,"durationMs":50,"task":"d5ac527f243beaf0f3d6f244ebc50ef6f534634e1214ffba9b785aa4fa7d1a74","request":"6145e4f883d4c5f6d28aacafb02e728e89bd103a4bdd0673120641d179ad5ad8"}
+{"type":"event","stage":"FIRST_DRAW","mode":1,"result":1,"reason":0,"success":true,"elapsedRealtimeMs":185724301,"durationMs":43,"task":"d5ac527f243beaf0f3d6f244ebc50ef6f534634e1214ffba9b785aa4fa7d1a74","request":"6145e4f883d4c5f6d28aacafb02e728e89bd103a4bdd0673120641d179ad5ad8"}

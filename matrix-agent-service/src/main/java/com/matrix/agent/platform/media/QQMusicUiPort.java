@@ -7,9 +7,9 @@ public interface QQMusicUiPort {
     record Candidate(int index, String title, String detail) {}
     record SearchPage(String query, long appVersion, List<Candidate> candidates) {}
 
-    SearchPage search(String query, long deadlineElapsedMillis) throws MediaPlatformException;
+    SearchPage search(String query, LaunchContext ctx) throws MediaPlatformException;
 
     /** Clicks only a row whose title and detail still match the previously shown candidate. */
-    void select(SearchPage page, Candidate candidate, long deadlineElapsedMillis)
+    void select(SearchPage page, Candidate candidate, LaunchContext ctx)
             throws MediaPlatformException;
 }

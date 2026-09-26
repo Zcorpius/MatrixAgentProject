@@ -1,0 +1,28 @@
+{
+  "matrix-agent-service": {
+    "tests": 1353,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-launcher": {
+    "tests": 45,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint": {
+      "Error": 0,
+      "Warning": 35
+    }
+  },
+  "matrix-agent-service-lib": {
+    "tests": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint": {
+      "Error": 0,
+      "Warning": 0
+    }
+  }
+}

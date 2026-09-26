@@ -1,0 +1,25 @@
+matrix-agent-service: {'tests': 1353, 'failures': 0, 'errors': 0, 'skipped': 0}
+matrix-agent-launcher: {'tests': 36, 'failures': 0, 'errors': 0, 'skipped': 0}
+matrix-agent-service-lib: {'tests': 20, 'failures': 0, 'errors': 0, 'skipped': 0}
+matrix-agent-launcher lint: {'Warning': 33}
+matrix-agent-service-lib lint: {}
+Binder device log 2026-09-26 14:17:28.988: samples=100 ready=100 p50Ms=4 p95Ms=7 maxMs=17
+QQ Music direct search: 2026-09-26 14:23:08.079 SUCCESS verified=true durationMs=2839
+Bilibili probe: 2026-09-26 14:04:37 MEDIA_NETWORK_UNAVAILABLE; target application displayed 网络尚未连接，请稍后再试
+Latest offline amendments are built locally, not reinstalled after the user requested exclusive device use.
+
+Review follow-up (offline only): P2 suppressed committed window retention; named skipped result;
+conservative steer receipt; bounded structured diagnostics/export; small-screen geometry.
+JVM total: 1403 passed, 0 failures/errors/skipped.
+OverlayControllerDeviceTest: 17 compiled, 11 previously executed; 6 newer cases NOT RUN.
+Structured diagnostics added now; device export/first-draw/P95 overhead NOT YET MEASURED.
+SDK contract hash: 486da2072caa839511cc6cb07b9c17ea5cdf78a24a87b817784568d30b1494ca
+Host and Launcher must be installed together; no device queries or actions in this review follow-up.
+
+Expanded-panel design follow-up (offline only): title-region dragging, separate panel/bubble
+positions, IME/display bounds, shared cancel-safe gesture math, layered light palette.
+Current JVM total: 1409 passed (Host 1353 / Launcher 36 / SDK 20); zero failures/errors/skips.
+Launcher/SDK lint: zero errors; Launcher 33 warnings, SDK 0.
+Current OverlayControllerDeviceTest: 19 cases compiled. Two new drag cases and modified
+editor-drag assertions NOT RUN. New UI not installed or visually verified on the device.
+Historical screenshots show the old green UI, not this new design.

@@ -132,12 +132,13 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
 
     private static synchronized MediaCapabilityProvider provider(Context context) {
         if (provider == null) {
-            AndroidAppLaunchPort launcher = new AndroidAppLaunchPort(context);
+            var handoff = ((MatrixAgentApplication) context).getContainer().getHandoffCoordinator();
+            AndroidAppLaunchPort launcher = new AndroidAppLaunchPort(context, handoff);
             provider = new MediaCapabilityProvider(new AndroidPackageProbe(context),
                     new AndroidMediaSessionPort(context), launcher,
                     new AndroidQQMusicUiPort(context, launcher),
                     new com.matrix.agent.platform.media.AndroidBilibiliUiPort(context,
-                            launcher));
+                            launcher), handoff);
         }
         return provider;
     }

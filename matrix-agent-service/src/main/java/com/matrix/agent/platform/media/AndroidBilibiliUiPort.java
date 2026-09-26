@@ -39,36 +39,40 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
         this.launcher = launcher;
     }
 
-    @Override public SearchPage search(String query, long deadlineElapsedMillis)
+    @Override public SearchPage search(String query, LaunchContext ctx)
             throws MediaPlatformException {
-        lockUntil(deadlineElapsedMillis);
+        long deadlineElapsedMillis = ctx.deadlineElapsedMillis();
+        ctx.checkActive();
+        lockUntil(deadlineElapsedMillis, ctx);
         try {
-            return searchLocked(query, deadlineElapsedMillis);
+            return searchLocked(query, deadlineElapsedMillis, ctx);
         } finally {
             lock.unlock();
         }
     }
 
-    @Override public void open(SearchPage page, Candidate candidate, long deadlineElapsedMillis)
+    @Override public void open(SearchPage page, Candidate candidate, LaunchContext ctx)
             throws MediaPlatformException {
-        lockUntil(deadlineElapsedMillis);
+        long deadlineElapsedMillis = ctx.deadlineElapsedMillis();
+        ctx.checkActive();
+        lockUntil(deadlineElapsedMillis, ctx);
         try {
             if (appVersion() != page.appVersion()) {
                 throw new MediaPlatformException("SEARCH_CONTEXT_EXPIRED");
             }
-            SearchPage refreshed = searchLocked(page.query(), deadlineElapsedMillis);
+            SearchPage refreshed = searchLocked(page.query(), deadlineElapsedMillis, ctx);
             if (refreshed.appVersion() != page.appVersion()) {
                 throw new MediaPlatformException("SEARCH_CONTEXT_EXPIRED");
             }
             QQMusicAccessibilityService service = service();
-            AccessibilityNodeInfo root = requireRoot(service, deadlineElapsedMillis);
+            AccessibilityNodeInfo root = requireRoot(service, deadlineElapsedMillis, ctx);
             if (!page.query().equals(queryText(root))) {
                 throw new MediaPlatformException("SEARCH_RESULT_CHANGED");
             }
             List<LiveRow> matches = liveRows(root).stream()
                     .filter(row -> BilibiliResultRules.sameResult(row.candidate(), candidate))
                     .toList();
-            if (matches.size() != 1 || !click(matches.get(0).node())) {
+            if (matches.size() != 1 || !click(matches.get(0).node(), ctx)) {
                 throw new MediaPlatformException("SEARCH_RESULT_CHANGED");
             }
         } finally {
@@ -76,98 +80,104 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
         }
     }
 
-    private SearchPage searchLocked(String query, long deadline) throws MediaPlatformException {
+    private SearchPage searchLocked(String query, long deadline, LaunchContext ctx) throws MediaPlatformException {
         QQMusicAccessibilityService service = service();
         long version = appVersion();
-        if (service.bilibiliRoot() == null) launcher.openApp(MediaApp.BILIBILI);
-        AccessibilityNodeInfo root = navigateToSearchSurface(service, deadline);
+        if (service.bilibiliRoot() == null) launcher.openApp(MediaApp.BILIBILI, ctx);
+        AccessibilityNodeInfo root = navigateToSearchSurface(service, deadline, ctx);
         String previousQuery = queryText(root);
         List<Candidate> previousCandidates = candidates(root);
         AccessibilityNodeInfo input = first(root, SEARCH_INPUT);
         if (input == null) {
             AccessibilityNodeInfo entry = first(root, SEARCH_FAKE);
             if (entry == null) entry = first(root, SEARCH_ENTRY);
-            if (entry == null || !click(entry)) {
+            if (entry == null || !click(entry, ctx)) {
                 throw new MediaPlatformException("SEARCH_UI_CHANGED");
             }
-            input = waitForNode(service, SEARCH_INPUT, deadline);
+            input = waitForNode(service, SEARCH_INPUT, deadline, ctx);
         }
         Bundle arguments = new Bundle();
         arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                 query);
+        ctx.checkActive();
         if (!input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
             throw new MediaPlatformException("UI_ACTION_REJECTED");
         }
-        AccessibilityNodeInfo submit = waitForNode(service, SEARCH_BUTTON, deadline);
-        if (!click(submit)) throw new MediaPlatformException("UI_ACTION_REJECTED");
+        AccessibilityNodeInfo submit = waitForNode(service, SEARCH_BUTTON, deadline, ctx);
+        if (!click(submit, ctx)) throw new MediaPlatformException("UI_ACTION_REJECTED");
         List<Candidate> found = waitForResults(service, query, previousQuery,
-                previousCandidates, deadline);
+                previousCandidates, deadline, ctx);
         return new SearchPage(query, version, List.copyOf(found));
     }
 
     private static AccessibilityNodeInfo waitForSearchSurface(QQMusicAccessibilityService service,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         long settleUntil = deadline;
         while (SystemClock.elapsedRealtime() < settleUntil) {
             AccessibilityNodeInfo root = service.bilibiliRoot();
             if (root != null && (first(root, SEARCH_ENTRY) != null
                     || first(root, SEARCH_INPUT) != null
                     || first(root, SEARCH_FAKE) != null)) return root;
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
     private static AccessibilityNodeInfo navigateToSearchSurface(
-            QQMusicAccessibilityService service, long deadline) throws MediaPlatformException {
+            QQMusicAccessibilityService service, long deadline, LaunchContext ctx) throws MediaPlatformException {
         for (int attempt = 0; attempt < 4 && SystemClock.elapsedRealtime() < deadline;
                 attempt++) {
             long window = Math.min(deadline, SystemClock.elapsedRealtime()
                     + (attempt == 0 ? 3_000L : 1_000L));
             try {
-                return waitForSearchSurface(service, window);
+                return waitForSearchSurface(service, window, ctx);
             } catch (MediaPlatformException missingSearch) {
                 if (!"SEARCH_UI_CHANGED".equals(missingSearch.code())) throw missingSearch;
             }
             // Back is issued only while Bilibili owns the active window. Never navigate
             // another app merely because its UI has no search entry.
+            ctx.checkActive();
             if (!service.backWithinBilibili()) break;
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
     private static AccessibilityNodeInfo requireRoot(QQMusicAccessibilityService service,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.bilibiliRoot();
             if (root != null) return root;
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("BILIBILI_NOT_FOREGROUND");
     }
 
     private static AccessibilityNodeInfo waitForNode(QQMusicAccessibilityService service,
-            String id, long deadline) throws MediaPlatformException {
+            String id, long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.bilibiliRoot();
             AccessibilityNodeInfo node = root == null ? null : first(root, id);
             if (node != null && node.isVisibleToUser()) return node;
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_UI_CHANGED");
     }
 
     private static List<Candidate> waitForResults(QQMusicAccessibilityService service,
             String query, String previousQuery, List<Candidate> previousCandidates,
-            long deadline) throws MediaPlatformException {
+            long deadline, LaunchContext ctx) throws MediaPlatformException {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.bilibiliRoot();
+            // Verified against Bilibili 9.12.0 (zh-CN); revisit this UI text on target upgrades.
+            if (root != null && !root.findAccessibilityNodeInfosByText("网络尚未连接，请稍后再试").isEmpty()) {
+                throw new MediaPlatformException("MEDIA_NETWORK_UNAVAILABLE");
+            }
             if (root != null && query.equals(queryText(root)) && first(root, RESULTS) != null) {
                 List<Candidate> found = candidates(root);
                 if (!found.isEmpty() && (query.equals(previousQuery)
                         || !found.equals(previousCandidates))) return found;
             }
-            pause();
+            pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_NO_RESULTS");
     }
@@ -258,7 +268,8 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
         return null;
     }
 
-    private static boolean click(AccessibilityNodeInfo node) {
+    private static boolean click(AccessibilityNodeInfo node, LaunchContext ctx) throws MediaPlatformException {
+        ctx.checkActive();
         AccessibilityNodeInfo clickable = clickableAncestor(node);
         return clickable != null && clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK);
     }
@@ -267,15 +278,25 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
         return node == null || node.getText() == null ? "" : node.getText().toString().strip();
     }
 
-    private void lockUntil(long deadline) throws MediaPlatformException {
+    private void lockUntil(long deadline, LaunchContext ctx) throws MediaPlatformException {
+        ctx.checkActive();
         try {
             long remaining = Math.max(0L, deadline - SystemClock.elapsedRealtime());
-            if (!lock.tryLock(remaining, TimeUnit.MILLISECONDS)) {
+            if (!acquire(lock, ctx)) {
                 throw new MediaPlatformException("UI_BUSY");
             }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new MediaPlatformException("CANCELLED");
+        }
+    }
+
+    private static boolean acquire(ReentrantLock lock, LaunchContext ctx)
+            throws InterruptedException, MediaPlatformException {
+        while (true) {
+            ctx.checkActive();
+            long wait = Math.min(50L, Math.max(1L, ctx.deadlineElapsedMillis() - SystemClock.elapsedRealtime()));
+            if (lock.tryLock(wait, TimeUnit.MILLISECONDS)) return true;
         }
     }
 
@@ -294,10 +315,12 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
         return service;
     }
 
-    private static void pause() throws MediaPlatformException {
+    private static void pause(LaunchContext ctx) throws MediaPlatformException {
         if (Thread.currentThread().isInterrupted()) {
             throw new MediaPlatformException("CANCELLED");
         }
-        SystemClock.sleep(POLL_MILLIS);
+        ctx.checkActive();
+        SystemClock.sleep(Math.min(POLL_MILLIS, Math.max(1L, ctx.deadlineElapsedMillis() - SystemClock.elapsedRealtime())));
+        ctx.checkActive();
     }
 }

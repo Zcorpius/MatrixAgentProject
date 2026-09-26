@@ -17,6 +17,8 @@ public final class MatrixServiceGraph {
     private final DownloadGraph download;
     private final VoiceGraph voice;
     private final ConversationGraph conversation;
+    private final com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub handoff;
+    public IBinder handoffBinder() { return handoff.asBinder(); }
 
     public MatrixServiceGraph(AppContainer container, ModelServiceStub.CallerResolver callers) {
         persistence = new PersistenceGate(container.getMatrixDatabase());
@@ -41,6 +43,11 @@ public final class MatrixServiceGraph {
                 container.getExecutorRegistry().networkExecutor(),
                 container.getModelConfigStore(),
                 container.getExecutorRegistry().networkExecutor());
+        handoff = new com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub(
+                container.getAppContext(), container.getHandoffCoordinator());
+        conversation.setHandoffDiagnostics(container.getHandoffDiagnostics());
+        conversation.setHandoffContexts(container.getHandoffContexts());
+        container.getAgentRuntimeRepository().addConversationClearHook(container.getHandoffContexts()::clear);
         if (conversation.isAvailable()) {
             voice.setBindingStore(conversation.bindingStore());
             voice.addControllerConfigurer(conversation.controllerConfigurer());
@@ -70,7 +77,8 @@ public final class MatrixServiceGraph {
                 | MatrixServiceConstants.FEATURE_PERSISTENCE_GATE;
         if (voice.isAvailable()) flags |= MatrixServiceConstants.FEATURE_VOICE_DOMAIN;
         if (conversation.isAvailable()) {
-            flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN;
+            flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN
+                    | MatrixServiceConstants.FEATURE_HANDOFF_DOMAIN;
             // 附件 staging 与对话域同库（SQLCipher 可用才装配 ConversationGraph）；
             // 客户端按位隐藏 `+` 入口，而不是调用后吃异常。
             flags |= MatrixServiceConstants.FEATURE_ATTACHMENT_DOMAIN;
@@ -78,6 +86,7 @@ public final class MatrixServiceGraph {
         return flags;
     }
     public void shutdown() {
+        handoff.close();
         voice.shutdown();
         conversation.shutdown();
         tasks.shutdown();

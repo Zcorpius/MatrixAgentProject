@@ -59,6 +59,15 @@ import com.matrix.agent.platform.MatrixHttpClient;
 
 /** Explicit composition root for replaceable runtime and platform dependencies. */
 public final class AppContainer implements DownloadRuntime {
+    private final com.matrix.agent.handoff.HandoffContextRegistry handoffContexts =
+            new com.matrix.agent.handoff.HandoffContextRegistry();
+    private final com.matrix.agent.diagnostics.HandoffDiagnostics handoffDiagnostics =
+            new com.matrix.agent.diagnostics.HandoffDiagnostics();
+    public com.matrix.agent.diagnostics.HandoffDiagnostics getHandoffDiagnostics() { return handoffDiagnostics; }
+    private final com.matrix.agent.handoff.HandoffCoordinator handoff;
+    public com.matrix.agent.handoff.HandoffContextRegistry getHandoffContexts() { return handoffContexts; }
+    public com.matrix.agent.handoff.HandoffCoordinator getHandoffCoordinator() { return handoff; }
+
     private static final String TAG = "MatrixAgent";
     private final AgentRuntimeRepository agentRuntimeRepository;
     private final ModelGatewayRepository modelGatewayRepository;
@@ -141,12 +150,17 @@ public final class AppContainer implements DownloadRuntime {
         CapabilityProvider domainProvider = new MockCapabilityProvider(memoryStore, memoryWriter);
         SystemControlCapabilityProvider systemControlProvider = new SystemControlCapabilityProvider(
                 new AndroidSystemControlAdapter(appContext));
-        AndroidAppLaunchPort mediaLauncher = new AndroidAppLaunchPort(appContext);
+        handoff = new com.matrix.agent.handoff.HandoffCoordinator(handoffContexts,
+                android.os.SystemClock::elapsedRealtime,
+                new com.matrix.agent.handoff.HandoffFallbackNotifier(appContext),
+                (mode, result, reason, elapsed) -> android.util.Log.i("MatrixHandoff",
+                        "mode=" + mode + " result=" + result + " reason=" + reason + " elapsedMs=" + elapsed), handoffDiagnostics);
+        AndroidAppLaunchPort mediaLauncher = new AndroidAppLaunchPort(appContext, handoff);
         MediaCapabilityProvider mediaProvider = new MediaCapabilityProvider(
                 new AndroidPackageProbe(appContext), new AndroidMediaSessionPort(appContext),
                 mediaLauncher, new AndroidQQMusicUiPort(appContext, mediaLauncher),
                 new com.matrix.agent.platform.media.AndroidBilibiliUiPort(appContext,
-                        mediaLauncher));
+                        mediaLauncher), handoff);
         mediaAvailability = new MediaAvailabilityCache(appContext,
                 new AndroidPackageProbe(appContext), executorRegistry.networkExecutor());
         java.util.Map<String, CapabilityProvider> platformRoutes = new java.util.LinkedHashMap<>();
