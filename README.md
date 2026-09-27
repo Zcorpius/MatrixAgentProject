@@ -14,8 +14,7 @@
   <img src="https://img.shields.io/badge/Java-17-173B46?style=flat-square&amp;logo=openjdk&amp;logoColor=white" alt="Java 17 源码" />
   <img src="https://img.shields.io/badge/ABI-arm64--v8a-173B46?style=flat-square" alt="arm64-v8a" />
 </p>
-
-[能力概览](#overview) · [真机界面](#screenshots) · [雪乃与悬浮窗](#overlay) · [定时任务](#scheduling) · [对话与媒体](#conversation) · [模型与语音](#model-voice) · [分层记忆](#memory) · [架构](#architecture) · [构建运行](#quickstart) · [SDK](#sdk) · [验证与边界](#verification)
+[能力概览](#overview) · [真机界面](#screenshots) · [雪乃与悬浮窗](#overlay) · [定时任务](#scheduling) · [对话与媒体](#conversation) · <br/>[模型与语音](#model-voice) · [分层记忆](#memory) · [架构](#architecture) · [构建运行](#quickstart) · [SDK](#sdk) · [验证与边界](#verification)
 
 </div>
 
