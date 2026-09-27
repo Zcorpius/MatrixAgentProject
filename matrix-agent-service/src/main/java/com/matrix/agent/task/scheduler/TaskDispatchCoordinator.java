@@ -27,6 +27,22 @@ public final class TaskDispatchCoordinator {
         this.inFlightTasks = inFlightTasks;
     }
 
+    /** Dedicated automatic worker already owns arbitration. Do not queue it a second time. */
+    public AgentOutcome dispatchAutomatic(AgentRequest request, CancellationToken token, AgentEngine engine) {
+        if (!scheduler.holdsAutomaticLease()) throw new IllegalStateException("automatic arbitration lease required");
+        long started = System.nanoTime(); AgentOutcome outcome;
+        inFlightTasks.register(token);
+        try { outcome = engine.execute(request); }
+        catch (RuntimeException failure) {
+            token.cancel();
+            outcome = TaskDispatchRecovery.terminal(request,
+                    request.isReadOnlyHint() ? TaskState.FAILED : TaskState.EXECUTION_UNKNOWN,
+                    request.isReadOnlyHint() ? StopReason.PROTOCOL_ERROR : StopReason.EXECUTION_UNKNOWN,
+                    "automatic execution interrupted", started);
+        } finally { inFlightTasks.unregister(token); }
+        auditSink.persist(outcome, request); return outcome;
+    }
+
     public AgentOutcome dispatch(AgentRequest request, CancellationToken token, AgentEngine engine) {
         AgentOutcome outcome;
         Future<AgentOutcome> future = null;

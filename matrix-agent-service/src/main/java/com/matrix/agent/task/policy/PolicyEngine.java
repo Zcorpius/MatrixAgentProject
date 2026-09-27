@@ -44,13 +44,22 @@ public final class PolicyEngine {
     private static final String MEMORY_PREFERENCE_SAVE = "memory.preference.save";
 
     private final CapabilityRegistry registry;
+    private final MediaUsagePolicy mediaUsagePolicy;
+    private final MediaSelectionPolicy mediaSelectionPolicy = new MediaSelectionPolicy();
+    private final MediaTargetPolicy mediaTargetPolicy = new MediaTargetPolicy();
+    private final BilibiliVideoIntentPolicy bilibiliVideoIntentPolicy =
+            new BilibiliVideoIntentPolicy();
 
     public PolicyEngine(CapabilityRegistry registry) {
         this.registry = registry;
+        this.mediaUsagePolicy = new MediaUsagePolicy(registry);
     }
 
     public PolicyDecision evaluate(AgentRequest request, ToolCall call) {
         String cap = call.getCapabilityName();
+        if (!request.getExecutionScope().allows(cap)) return PolicyDecision.denyCapability("计划未授权此能力");
+        String revoked = request.getExecutionScope().rejection();
+        if (!revoked.isEmpty()) return PolicyDecision.denyCapability(revoked);
         // Tool 参数含 destination / home_address / preferred_temperature 等业务敏感字段,
         // 不能整段进 logcat。这里只暴露 capability 名 + 元数据(actor / occupantZone)。
         Log.d(TAG, "[Policy] evaluate cap=" + cap
@@ -97,6 +106,15 @@ public final class PolicyEngine {
             return PolicyDecision.denyCapability(
                     "任务被标记为只读(readOnlyHint=true),禁止执行写操作");
         }
+
+        PolicyDecision mediaDecision = mediaTargetPolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = bilibiliVideoIntentPolicy.evaluate(request, call);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = mediaSelectionPolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = mediaUsagePolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
 
         // capability 前置车辆状态约束(AND 语义)。
         // 不满足时归 CAPABILITY 拒绝(不可上诉)——vehicle state 是车辆物理事实,

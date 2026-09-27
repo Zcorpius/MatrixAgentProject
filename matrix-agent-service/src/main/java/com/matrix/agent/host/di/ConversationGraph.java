@@ -176,6 +176,14 @@ final class ConversationGraph {
         recoverOffMainThread(databaseExecutor, store, draftStore, attachmentStore);
     }
 
+    void setHandoffDiagnostics(com.matrix.agent.diagnostics.HandoffDiagnostics diagnostics) {
+        if (coordinator != null) coordinator.setHandoffDiagnostics(diagnostics);
+    }
+
+    void setHandoffContexts(com.matrix.agent.handoff.HandoffContextRegistry contexts) {
+        if (coordinator != null) coordinator.setHandoffContexts(contexts);
+    }
+
     boolean isAvailable() {
         return coordinator != null;
     }

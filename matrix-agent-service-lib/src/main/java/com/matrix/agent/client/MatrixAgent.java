@@ -66,6 +66,9 @@ public final class MatrixAgent {
 
     private volatile int state = ConnectionState.DISCONNECTED;
     private volatile IMatrixAgentManager managerService;
+    private volatile int negotiatedFeatureFlags;
+    /** Static capabilities of the last successfully negotiated Host; readiness is queried separately. */
+    public int getFeatureFlags() { return negotiatedFeatureFlags; }
     private volatile boolean bindPending;
     /**
      * Exactly one discovery/link/negotiate transaction may run at a time.  A generation
@@ -200,6 +203,10 @@ public final class MatrixAgent {
         return (DownloadManager) getMatrixManager(MatrixServiceConstants.DOWNLOAD_SERVICE);
     }
 
+    public ScheduleManager getScheduleManager() {
+        return (ScheduleManager) getMatrixManager(MatrixServiceConstants.SCHEDULE_SERVICE);
+    }
+
     public ConversationManager getConversationManager() {
         return (ConversationManager) getMatrixManager(MatrixServiceConstants.CONVERSATION_SERVICE);
     }
@@ -210,6 +217,10 @@ public final class MatrixAgent {
     }
 
     /** 受控附件 staging（输入交互增强 I6）；Host 未通告该域时返回 null。 */
+    public HandoffManager getHandoffManager() {
+        return (HandoffManager) getMatrixManager(MatrixServiceConstants.HANDOFF_SERVICE);
+    }
+
     public AttachmentManager getAttachmentManager() {
         return (AttachmentManager) getMatrixManager(MatrixServiceConstants.ATTACHMENT_SERVICE);
     }
@@ -420,9 +431,11 @@ public final class MatrixAgent {
         // contractHash 防线（审计 A-105）：major 相同而接口产物不一致的组合必须拒绝。
         // Hash 缺失也是不兼容，不能在生产协议中 fail-open。
         String expected = com.matrix.agent.api.common.ContractVersion.CONTRACT_HASH;
-        return ContractNegotiationPolicy.isCompatible(info.contractMajor, info.minClientMinor,
+        boolean compatible = ContractNegotiationPolicy.isCompatible(info.contractMajor, info.minClientMinor,
                 info.maxClientMinor, info.contractHash, SUPPORTED_CONTRACT_MAJOR, clientMinor,
                 expected);
+        if (compatible) negotiatedFeatureFlags = info.featureFlags;
+        return compatible;
     }
 
     /**
@@ -560,10 +573,14 @@ public final class MatrixAgent {
                 return new VoiceManager(this, serviceBinder);
             case MatrixServiceConstants.DOWNLOAD_SERVICE:
                 return new DownloadManager(this, serviceBinder);
+            case MatrixServiceConstants.SCHEDULE_SERVICE:
+                return new ScheduleManager(this, serviceBinder);
             case MatrixServiceConstants.CONVERSATION_SERVICE:
                 return new ConversationManager(this, serviceBinder);
             case MatrixServiceConstants.DEBUG_TRACE_SERVICE:
                 return new DebugTraceManager(this, serviceBinder);
+            case MatrixServiceConstants.HANDOFF_SERVICE:
+                return new HandoffManager(this, serviceBinder);
             case MatrixServiceConstants.ATTACHMENT_SERVICE:
                 return new AttachmentManager(this, serviceBinder);
             default:

@@ -25,6 +25,7 @@ import com.matrix.agent.task.capability.CapabilityRegistry;
 import com.matrix.agent.task.capability.RiskLevel;
 import com.matrix.agent.identity.Actor;
 import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.RuntimeProfile;
 import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.data.memory.InMemoryMemoryStore;
 import com.matrix.agent.data.memory.MemoryScope;
@@ -86,6 +87,124 @@ public final class AgentEngineTest {
         assertEquals(2, outcome.getResults().size());
         assertTrue(outcome.getResults().get(0).isVerified());
         assertTrue(outcome.getResults().get(1).isVerified());
+    }
+
+    @Test public void singleTargetSwitchRecoversFromEarlyPlayAndCompletesHandoff() {
+        registry = CapabilityRegistry.createRuntimeRegistry();
+        AtomicInteger round = new AtomicInteger();
+        AtomicInteger sourcePauses = new AtomicInteger();
+        AtomicInteger targetPlays = new AtomicInteger();
+        ModelGateway gateway = request -> {
+            switch (round.getAndIncrement()) {
+                case 0: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.qqmusic.play", Map.of())), "early play");
+                case 1: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.qqmusic.get_state", Map.of()),
+                        new ToolCall("media.bilibili.get_state", Map.of())), "read both");
+                case 2: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.bilibili.pause", Map.of())), "pause source");
+                case 3: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.qqmusic.play", Map.of())), "play target");
+                default: return ModelTurn.directAnswer("已切换到 QQ 音乐");
+            }
+        };
+        CapabilityProvider media = (request, call) -> {
+            String capability = call.getCapabilityName();
+            if ("media.qqmusic.get_state".equals(capability)) {
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "state",
+                        Map.of("media.playback_state", "PAUSED"), false, 1L);
+            }
+            if ("media.bilibili.get_state".equals(capability)) {
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "state",
+                        Map.of("media.playback_state", "PLAYING"), false, 1L);
+            }
+            if ("media.bilibili.pause".equals(capability)) {
+                sourcePauses.incrementAndGet();
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "paused",
+                        Map.of("media.playback_state", "PAUSED"), true, 1L);
+            }
+            if ("media.qqmusic.play".equals(capability)) {
+                targetPlays.incrementAndGet();
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "playing",
+                        Map.of("media.playback_state", "PLAYING"), true, 1L);
+            }
+            throw new AssertionError("unexpected capability: " + capability);
+        };
+        AgentOutcome outcome = createEngine(gateway, media)
+                .execute(AgentRequest.builder("切换到QQ音乐", Actor.DRIVER)
+                        .sessionId("single-target-switch").build());
+        assertEquals(TaskState.SUCCEEDED, outcome.getFinalState());
+        assertEquals(1, sourcePauses.get());
+        assertEquals(1, targetPlays.get());
+        assertFalse(outcome.getTrajectory().getIterations().get(0)
+                .getObservations().get(0).isCapabilityBlocked());
+    }
+
+    @Test public void pauseThenPlayHandoffCompletesWithoutSwitchVerb() {
+        registry = CapabilityRegistry.createRuntimeRegistry();
+        AtomicInteger sourcePauses = new AtomicInteger();
+        AtomicInteger targetPlays = new AtomicInteger();
+        AtomicInteger round = new AtomicInteger();
+        ModelGateway gateway = request -> {
+            switch (round.getAndIncrement()) {
+                case 0: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.bilibili.resume", Map.of())), "early play");
+                case 1: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.qqmusic.get_state", Map.of()),
+                        new ToolCall("media.bilibili.get_state", Map.of())), "read both");
+                case 2: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.qqmusic.pause", Map.of())), "pause source");
+                case 3: return ModelTurn.ofToolCalls(List.of(
+                        new ToolCall("media.bilibili.resume", Map.of())), "play target");
+                default: return ModelTurn.directAnswer("已切换到 B 站");
+            }
+        };
+        CapabilityProvider media = (request, call) -> {
+            String capability = call.getCapabilityName();
+            if ("media.qqmusic.get_state".equals(capability)) {
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "state",
+                        Map.of("media.playback_state", "PLAYING"), false, 1L);
+            }
+            if ("media.bilibili.get_state".equals(capability)) {
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "state",
+                        Map.of("media.playback_state", "PAUSED"), false, 1L);
+            }
+            if ("media.qqmusic.pause".equals(capability)) {
+                sourcePauses.incrementAndGet();
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "paused",
+                        Map.of("media.playback_state", "PAUSED"), true, 1L);
+            }
+            if ("media.bilibili.resume".equals(capability)) {
+                targetPlays.incrementAndGet();
+                return new ToolResult(ToolResult.Status.SUCCESS, capability, "playing",
+                        Map.of("media.playback_state", "PLAYING"), true, 1L);
+            }
+            throw new AssertionError("unexpected capability: " + capability);
+        };
+        AgentOutcome outcome = createEngine(gateway, media)
+                .execute(AgentRequest.builder("暂停 QQ 音乐再播放 B 站", Actor.DRIVER)
+                        .runtimeProfile(RuntimeProfile.PHONE)
+                        .sessionId("imperative-handoff").build());
+        assertEquals(TaskState.SUCCEEDED, outcome.getFinalState());
+        assertEquals(1, sourcePauses.get());
+        assertEquals(1, targetPlays.get());
+        assertFalse(outcome.getTrajectory().getIterations().get(0)
+                .getObservations().get(0).isCapabilityBlocked());
+    }
+
+    @Test public void namelessSwitchCannotStartPlaybackBeforeTargetIsNamed() {
+        registry = CapabilityRegistry.createRuntimeRegistry();
+        CapabilityProvider neverExecute = (request, call) -> {
+            throw new AssertionError("switch with no target must not execute media writes");
+        };
+        ModelGateway gateway = oneShot(new ToolCall("media.qqmusic.play", Map.of()),
+                "nameless-switch");
+        AgentOutcome outcome = createEngine(gateway, neverExecute)
+                .execute(AgentRequest.builder("切换音乐来源", Actor.DRIVER)
+                        .sessionId("nameless-switch").build());
+        assertEquals(TaskState.FAILED, outcome.getFinalState());
+        assertTrue(outcome.getTrajectory().getIterations().get(0)
+                .getObservations().get(0).isCapabilityBlocked());
     }
 
     /**

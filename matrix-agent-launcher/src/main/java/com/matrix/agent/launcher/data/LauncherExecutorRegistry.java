@@ -22,6 +22,9 @@ public final class LauncherExecutorRegistry {
     private final ExecutorService sdkCalls = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(16), daemonFactory("matrix-launcher-sdk"),
             new ThreadPoolExecutor.AbortPolicy());
+    private final ExecutorService handoffCalls = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(32), daemonFactory("matrix-launcher-handoff"),
+            new ThreadPoolExecutor.AbortPolicy());
     private final ScheduledThreadPoolExecutor polling = new ScheduledThreadPoolExecutor(1,
             daemonFactory("matrix-launcher-poll"), new ThreadPoolExecutor.AbortPolicy());
     /**
@@ -40,11 +43,14 @@ public final class LauncherExecutorRegistry {
         polling.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
     }
 
+    public ExecutorService handoffCalls() { return handoffCalls; }
+
     public ExecutorService sdkCalls() { return sdkCalls; }
     public ScheduledExecutorService polling() { return polling; }
     public ExecutorService draftCommands() { return draftCommands; }
 
     public void shutdown() {
+        handoffCalls.shutdownNow();
         sdkCalls.shutdownNow();
         polling.shutdownNow();
         draftCommands.shutdownNow();

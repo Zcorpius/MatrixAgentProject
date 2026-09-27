@@ -1,0 +1,12 @@
+{
+  "com.matrix.agent": {
+    "installed_sha256": "ddd30b7ce2c29db68b66bfa52c91f94f8378a8740e33a1079db310b8d6cd45ff",
+    "build_sha256": "ddd30b7ce2c29db68b66bfa52c91f94f8378a8740e33a1079db310b8d6cd45ff",
+    "matches": true
+  },
+  "com.matrix.agent.launcher": {
+    "installed_sha256": "835ec8a2b8aa7d08212205fe1be3f1244a830b16202c3bcb79fee482520b7669",
+    "build_sha256": "835ec8a2b8aa7d08212205fe1be3f1244a830b16202c3bcb79fee482520b7669",
+    "matches": true
+  }
+}

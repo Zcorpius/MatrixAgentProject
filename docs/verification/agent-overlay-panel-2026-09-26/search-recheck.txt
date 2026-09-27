@@ -1,0 +1,53 @@
+INSTRUMENTATION_STATUS: class=com.matrix.agent.launcher.OverlayDeviceTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.matrix.agent.launcher.OverlayDeviceTest:
+INSTRUMENTATION_STATUS: test=realExistingAppSearchUsesProductionProviderHandoff
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.launcher.OverlayDeviceTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Search facts: [role=0 status=3 sameTask=true traces=[media.qqmusic.search_songs:FAILED] text=播放李健的传奇, role=1 status=3 sameTask=true traces=[] text=QQ 音乐搜索未成功，请稍后重试。没有播放歌曲。]
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:176)
+	... 32 trimmed
+Caused by: java.lang.AssertionError: Device condition timed out after 20000 ms
+	at org.junit.Assert.fail(Assert.java:89)
+	at com.matrix.agent.launcher.OverlayDeviceTest.await(OverlayDeviceTest.java:261)
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:164)
+	... 33 more
+
+INSTRUMENTATION_STATUS: stream=
+Error in realExistingAppSearchUsesProductionProviderHandoff(com.matrix.agent.launcher.OverlayDeviceTest):
+java.lang.AssertionError: Search facts: [role=0 status=3 sameTask=true traces=[media.qqmusic.search_songs:FAILED] text=播放李健的传奇, role=1 status=3 sameTask=true traces=[] text=QQ 音乐搜索未成功，请稍后重试。没有播放歌曲。]
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:176)
+	... 32 trimmed
+Caused by: java.lang.AssertionError: Device condition timed out after 20000 ms
+	at org.junit.Assert.fail(Assert.java:89)
+	at com.matrix.agent.launcher.OverlayDeviceTest.await(OverlayDeviceTest.java:261)
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:164)
+	... 33 more
+
+INSTRUMENTATION_STATUS: test=realExistingAppSearchUsesProductionProviderHandoff
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 27.051
+There was 1 failure:
+1) realExistingAppSearchUsesProductionProviderHandoff(com.matrix.agent.launcher.OverlayDeviceTest)
+java.lang.AssertionError: Search facts: [role=0 status=3 sameTask=true traces=[media.qqmusic.search_songs:FAILED] text=播放李健的传奇, role=1 status=3 sameTask=true traces=[] text=QQ 音乐搜索未成功，请稍后重试。没有播放歌曲。]
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:176)
+	... 32 trimmed
+Caused by: java.lang.AssertionError: Device condition timed out after 20000 ms
+	at org.junit.Assert.fail(Assert.java:89)
+	at com.matrix.agent.launcher.OverlayDeviceTest.await(OverlayDeviceTest.java:261)
+	at com.matrix.agent.launcher.OverlayDeviceTest.realExistingAppSearchUsesProductionProviderHandoff(OverlayDeviceTest.java:164)
+	... 33 more
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

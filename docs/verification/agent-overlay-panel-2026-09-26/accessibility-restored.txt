@@ -1,0 +1,3 @@
+     Bound services:{Service[label=媒体搜索与选曲, feedbackType[FEEDBACK_GENERIC], capabilities=1, eventTypes=[TYPE_WINDOW_STATE_CHANGED, TYPE_WINDOW_CONTENT_CHANGED, TYPE_VIEW_SCROLLED], notificationTimeout=100, requestA11yBtn=false]}
+     Enabled services:{{com.matrix.agent/com.matrix.agent.platform.media.QQMusicAccessibilityService}}
+     Crashed services:{}

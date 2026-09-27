@@ -1,0 +1,6 @@
+# JVM test totals from final verifyArchitecture
+
+matrix-agent-service: tests=1385, failures=0, errors=0, skipped=0
+matrix-agent-service-lib: tests=20, failures=0, errors=0, skipped=0
+matrix-agent-launcher: tests=45, failures=0, errors=0, skipped=0
+matrix-agent-test: tests=4, failures=0, errors=0, skipped=0

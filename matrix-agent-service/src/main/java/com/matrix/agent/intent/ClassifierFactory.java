@@ -20,7 +20,8 @@ public final class ClassifierFactory {
             return KeywordIntentClassifier.INSTANCE;
         }
         try {
-            return new FallbackIntentClassifier(new LlmIntentClassifier(client, config),
+            return new FallbackIntentClassifier(
+                    new MediaWorkflowIntentClassifier(new LlmIntentClassifier(client, config)),
                     KeywordIntentClassifier.INSTANCE);
         } catch (Exception error) {
             Log.w(TAG, "LLM intent classifier unavailable; using Keyword", error);

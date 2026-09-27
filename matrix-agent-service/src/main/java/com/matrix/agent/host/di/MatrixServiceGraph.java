@@ -12,14 +12,22 @@ import com.matrix.agent.api.common.MatrixServiceConstants;
 /** Owns Host domain graphs; Android Service only routes Binder calls and lifecycle. */
 public final class MatrixServiceGraph {
     private final PersistenceGate persistence;
+    private final com.matrix.agent.host.rpc.ScheduleServiceStub schedule;
+    public IBinder scheduleBinder() { return schedule; }
     private final TaskGraph tasks;
     private final ModelGraph model;
     private final DownloadGraph download;
     private final VoiceGraph voice;
     private final ConversationGraph conversation;
+    private final com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub handoff;
+    public IBinder handoffBinder() { return handoff.asBinder(); }
 
     public MatrixServiceGraph(AppContainer container, ModelServiceStub.CallerResolver callers) {
         persistence = new PersistenceGate(container.getMatrixDatabase());
+        ScheduleGraph scheduleGraph = ((com.matrix.agent.host.MatrixAgentApplication) container.getAppContext()).scheduleRuntime();
+        schedule = new com.matrix.agent.host.rpc.ScheduleServiceStub(container.getAppContext(), scheduleGraph);
+        container.getAgentRuntimeRepository().addConversationClearHook(scheduleGraph::reset);
+        scheduleGraph.changed();
         tasks = new TaskGraph(container.getMatrixDatabase(),
                 container.getAgentRuntimeRepository(),
                 container.getExecutorRegistry().hostDispatcherExecutor(),
@@ -41,6 +49,11 @@ public final class MatrixServiceGraph {
                 container.getExecutorRegistry().networkExecutor(),
                 container.getModelConfigStore(),
                 container.getExecutorRegistry().networkExecutor());
+        handoff = new com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub(
+                container.getAppContext(), container.getHandoffCoordinator());
+        conversation.setHandoffDiagnostics(container.getHandoffDiagnostics());
+        conversation.setHandoffContexts(container.getHandoffContexts());
+        container.getAgentRuntimeRepository().addConversationClearHook(container.getHandoffContexts()::clear);
         if (conversation.isAvailable()) {
             voice.setBindingStore(conversation.bindingStore());
             voice.addControllerConfigurer(conversation.controllerConfigurer());
@@ -70,14 +83,20 @@ public final class MatrixServiceGraph {
                 | MatrixServiceConstants.FEATURE_PERSISTENCE_GATE;
         if (voice.isAvailable()) flags |= MatrixServiceConstants.FEATURE_VOICE_DOMAIN;
         if (conversation.isAvailable()) {
-            flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN;
+            flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN
+                    | MatrixServiceConstants.FEATURE_HANDOFF_DOMAIN;
             // 附件 staging 与对话域同库（SQLCipher 可用才装配 ConversationGraph）；
             // 客户端按位隐藏 `+` 入口，而不是调用后吃异常。
             flags |= MatrixServiceConstants.FEATURE_ATTACHMENT_DOMAIN;
         }
+        if (persistence.isAvailable()) flags |= MatrixServiceConstants.FEATURE_SCHEDULE_DOMAIN
+                | MatrixServiceConstants.FEATURE_CALENDAR_DOMAIN | MatrixServiceConstants.FEATURE_CLOCK_DELEGATION
+                | MatrixServiceConstants.FEATURE_SCHEDULE_AGENT | MatrixServiceConstants.FEATURE_SCHEDULE_WORKFLOW;
         return flags;
     }
     public void shutdown() {
+        schedule.close();
+        handoff.close();
         voice.shutdown();
         conversation.shutdown();
         tasks.shutdown();

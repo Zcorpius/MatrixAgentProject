@@ -26,7 +26,7 @@ import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** SDK-backed conversation data source. UI never sees a Manager instance or Binder type. */
-public final class ConversationRepository {
+public final class ConversationRepository implements OverlayConversationSource {
 
     /** 订阅快照之后一次性翻页取的每页条数。 */
     public static final int PAGE_SIZE = 30;
@@ -107,6 +107,22 @@ public final class ConversationRepository {
             ConversationManager manager = agent.getConversationManager();
             return manager == null ? null : manager.getMessages(conversationId,
                     beforeSequenceExclusive, PAGE_SIZE);
+        }, receiver);
+    }
+
+    public void messagesAfter(String conversationId, long sequence,
+            Consumer<Result<ConversationPage>> receiver) {
+        gateway.execute(agent -> {
+            var manager = agent.getConversationManager();
+            return manager == null ? null : manager.getMessagesAfter(conversationId, sequence, PAGE_SIZE);
+        }, receiver);
+    }
+
+    public void messagesAround(String conversationId, long sequence,
+            Consumer<Result<ConversationPage>> receiver) {
+        gateway.execute(agent -> {
+            var manager = agent.getConversationManager();
+            return manager == null ? null : manager.getMessagesAround(conversationId, sequence, PAGE_SIZE);
         }, receiver);
     }
 
@@ -335,11 +351,13 @@ public final class ConversationRepository {
     public AutoCloseable subscribe(@NonNull String conversationId,
             @NonNull ConversationListener listener,
             @NonNull Consumer<Result<AutoCloseable>> receiver) {
-        final AutoCloseable[] handle = new AutoCloseable[1];
+        final java.util.concurrent.atomic.AtomicReference<AutoCloseable> handle =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final AtomicBoolean closed = new AtomicBoolean();
         gateway.execute(agent -> {
             ConversationManager manager = agent.getConversationManager();
             if (manager == null) return null;
-            handle[0] = manager.subscribeConversation(conversationId,
+            AutoCloseable subscribed = manager.subscribeConversation(conversationId,
                     new ConversationManager.ConversationListener() {
                         @Override public void onMessageUpsert(ConversationMessage message) {
                             listener.onMessageUpsert(message);
@@ -366,15 +384,22 @@ public final class ConversationRepository {
                             listener.onConversationError(conversationId, errorCode);
                         }
                     });
-            return handle[0];
+            handle.set(subscribed);
+            if (closed.get()) closeSubscription(handle.getAndSet(null));
+            return subscribed;
         }, receiver);
         return () -> {
-            try {
-                if (handle[0] != null) handle[0].close();
-            } catch (Exception ignored) {
-                // 进程销毁路径；Binder 已死时 SDK 侧为 no-op。
-            }
+            if (!closed.compareAndSet(false, true)) return;
+            AutoCloseable subscribed = handle.getAndSet(null);
+            if (subscribed != null) gateway.executeClientWork(() -> {
+                closeSubscription(subscribed); return true;
+            }, ignored -> {});
         };
+    }
+
+    private static void closeSubscription(AutoCloseable handle) {
+        if (handle == null) return;
+        try { handle.close(); } catch (Exception ignored) { }
     }
 
     /**

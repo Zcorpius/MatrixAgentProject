@@ -25,6 +25,7 @@ public final class LauncherViewModelFactory implements ViewModelProvider.Factory
     @NonNull @Override @SuppressWarnings("unchecked")
     public <T extends ViewModel> T create(@NonNull Class<T> type) {
         if (type == LauncherViewModel.class) return (T) new LauncherViewModel(gateway);
+        if (type == ScheduleViewModel.class) return (T) new ScheduleViewModel(new com.matrix.agent.launcher.data.ScheduleRepository(gateway));
         if (type == AgentTaskViewModel.class) return (T) new AgentTaskViewModel(new AgentTaskRepository(gateway));
         if (type == ModelViewModel.class) return (T) new ModelViewModel(new ModelRepository(gateway));
         if (type == DownloadViewModel.class) return (T) new DownloadViewModel(new DownloadRepository(gateway));

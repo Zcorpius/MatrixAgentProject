@@ -7,6 +7,8 @@ import com.matrix.agent.data.memory.MemoryScope;
 import com.matrix.agent.data.memory.MemorySnippet;
 import com.matrix.agent.identity.ActorUsers;
 import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.task.skill.SkillSelector;
+import com.matrix.agent.task.redact.ModelSanitizer;
 
 import java.util.Collections;
 import java.util.List;
@@ -23,25 +25,68 @@ public final class PromptContextAssembler {
 
     private final MemoryRecaller memoryRecaller;
     private final PromptBuilder promptBuilder;
+    private final SkillSelector skillSelector;
+    private final int maxMessageChars;
 
     public PromptContextAssembler(MemoryRecaller memoryRecaller, PromptBuilder promptBuilder) {
+        this(memoryRecaller, promptBuilder, null);
+    }
+
+    public PromptContextAssembler(MemoryRecaller memoryRecaller, PromptBuilder promptBuilder,
+            SkillSelector skillSelector) {
+        this(memoryRecaller, promptBuilder, skillSelector, Integer.MAX_VALUE);
+    }
+
+    public PromptContextAssembler(MemoryRecaller memoryRecaller, PromptBuilder promptBuilder,
+            SkillSelector skillSelector, int maxMessageChars) {
+        if (maxMessageChars <= 0) throw new IllegalArgumentException("maxMessageChars 必须大于 0");
         this.memoryRecaller = memoryRecaller;
         this.promptBuilder = promptBuilder;
+        this.skillSelector = skillSelector;
+        this.maxMessageChars = maxMessageChars;
     }
 
     public String build(AgentRequest request) {
         List<MemorySnippet> recalled = recallSafely(request);
         if (promptBuilder != null) {
             try {
-                return DefaultPromptBuilder.join(promptBuilder.buildSystemPrompt(request, recalled));
+                return withSkill(request,
+                        DefaultPromptBuilder.join(promptBuilder.buildSystemPrompt(request, recalled)));
             } catch (Exception error) {
                 Log.w(TAG, "[Prompt] builder failed, fallback to base req="
                         + request.getRequestId() + " cause=" + error.getClass().getSimpleName());
             }
         }
-        return fallbackPrompt(request, recalled);
+        return withSkill(request, fallbackPrompt(request, recalled));
     }
 
+    private String withSkill(AgentRequest request, String base) {
+        if (skillSelector == null) return base;
+        try {
+            return appendSkillWithinBudget(base, skillSelector.promptFor(request),
+                    maxMessageChars);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "[Prompt] skill selection unavailable req=" + request.getRequestId()
+                    + " cause=" + error.getClass().getSimpleName());
+            return base;
+        }
+    }
+
+    static String appendSkillWithinBudget(String base, String skill, int limit) {
+        if (skill == null || skill.isEmpty()) return base;
+        if ((long) base.length() + skill.length() <= limit) return base + skill;
+        int memoryStart = base.indexOf("\n已召回的 Memory");
+        if (memoryStart >= 0 && (long) memoryStart + skill.length() <= limit) {
+            return base.substring(0, memoryStart) + skill;
+        }
+        int baseRoom = limit - skill.length();
+        // A tiny custom budget cannot fit the signed skill and core system instructions.
+        // Keep the base prompt intact up to the engine limit instead of a partial skill.
+        if (baseRoom < Math.min(base.length(), 256)) {
+            return ModelSanitizer.truncateWithSuffix(base, limit);
+        }
+        return ModelSanitizer.truncateWithSuffix(base, baseRoom) + skill;
+    }
     private List<MemorySnippet> recallSafely(AgentRequest request) {
         if (memoryRecaller == null) return Collections.emptyList();
         try {

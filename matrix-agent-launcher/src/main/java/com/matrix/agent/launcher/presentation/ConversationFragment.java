@@ -1,7 +1,6 @@
 package com.matrix.agent.launcher.presentation;
 
 import android.animation.ObjectAnimator;
-import android.graphics.Typeface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -15,7 +14,6 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.graphics.drawable.GradientDrawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -79,6 +77,7 @@ public final class ConversationFragment extends Fragment {
     private boolean applyingDraftRestore;
     /** PTT 手势进行中（触摸层事实）：与 ViewModel 阶段机正交，只补 DOWN 即时按压视觉。 */
     private boolean pttHeld;
+    private android.widget.Button restoreOverlayDraft;
     /** 主动作的触摸契约在一个手势内不可改写；否则快速点按会丢失 ACTION_UP。 */
     private boolean primaryActionConfigured;
     private boolean primaryActionIsSend;
@@ -168,7 +167,43 @@ public final class ConversationFragment extends Fragment {
                         viewModel.refreshModelRuntime();
                     }
                 });
+        restoreOverlayDraft = new android.widget.Button(requireContext());
+        restoreOverlayDraft.setText("恢复小窗草稿");
+        restoreOverlayDraft.setVisibility(View.GONE);
+        restoreOverlayDraft.setOnClickListener(ignored -> {
+            var stateValue = viewModel.state().getValue();
+            if (stateValue == null || stateValue.conversationId == null) return;
+            var store = launcherApplication().overlay().drafts();
+            var draft = store.get(stateValue.conversationId);
+            new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("小窗草稿")
+                    .setMessage(draft.text())
+                    .setPositiveButton("追加到输入框", (dialog, which) -> {
+                        String current = input.getText().toString();
+                        input.setText(current.isBlank() ? draft.text() : current + "\n" + draft.text());
+                        input.setSelection(input.length());
+                        store.clearIfRevision(stateValue.conversationId, draft.revision());
+                        restoreOverlayDraft.setVisibility(View.GONE);
+                    }).setNegativeButton("保留草稿", null).show();
+        });
+        ((android.widget.LinearLayout) root.findViewById(R.id.conversation_composer_card))
+                .addView(restoreOverlayDraft, 0);
         return root;
+    }
+
+    private com.matrix.agent.launcher.LauncherApplication launcherApplication() {
+        return (com.matrix.agent.launcher.LauncherApplication) requireActivity().getApplication();
+    }
+
+    @Override public void onResume() {
+        super.onResume();
+        var value = viewModel.state().getValue();
+        launcherApplication().overlay().conversationPageVisible(value == null ? null : value.conversationId);
+    }
+
+    @Override public void onPause() {
+        launcherApplication().overlay().conversationPageVisible(null);
+        super.onPause();
     }
 
     @Override public void onStart() {
@@ -416,6 +451,10 @@ public final class ConversationFragment extends Fragment {
     }
 
     private void render(@NonNull ConversationViewModel.State value) {
+        if (isResumed()) launcherApplication().overlay().conversationPageVisible(value.conversationId);
+        if (restoreOverlayDraft != null) restoreOverlayDraft.setVisibility(value.conversationId != null
+                && !launcherApplication().overlay().drafts().get(value.conversationId).text().isBlank()
+                ? View.VISIBLE : View.GONE);
         renderNotice(value);
         renderMessages(value.messages);
         renderInputBar(value);
@@ -881,135 +920,12 @@ public final class ConversationFragment extends Fragment {
     }
 
     private View buildRow(ConversationViewModel.UiMessage message) {
-        float density = getResources().getDisplayMetrics().density;
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        boolean isUser = message.role() == ConversationMessage.ROLE_USER;
-        boolean isSystem = message.role() == ConversationMessage.ROLE_SYSTEM;
-        int avatarSize = (int) (42 * density + .5f);
-        int avatarGap = (int) (8 * density + .5f);
-        // 头像距屏幕的边距唯一由消息列表容器的 padding（XML）决定：行自身不再叠加水平
-        // padding，头像贴近屏幕边缘（微信式），气泡随之外移并获得更多可用宽度。
-        int contentInset = Math.max(messageRows.getPaddingStart(),
-                messageRows.getPaddingEnd());
-        // 头像与气泡必须共同受屏宽约束，不能让长文本把头像挤出可视区。
-        int maxBubbleWidth = Math.min((int) (screenWidth * 0.72f),
-                screenWidth - avatarSize - avatarGap - contentInset * 2);
-
-        // 外层负责微信式左右编排；气泡只承载内容，不再承载“用户/助手”身份文字。
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(android.view.Gravity.TOP);
-        row.setPadding(0, (int) (7 * density + .5f), 0,
-                (int) (7 * density + .5f));
+        int width = messageRows.getWidth() > 0 ? messageRows.getWidth()
+                : getResources().getDisplayMetrics().widthPixels;
+        View row = new ConversationMessageRenderer(requireContext()).create(message,
+                width - messageRows.getPaddingStart() - messageRows.getPaddingEnd(), this::showActions);
         row.setTag(R.id.conversation_messages, signatureOf(message));
-        row.setTag(R.id.conversation_row_sequence, message.sequence());
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.bottomMargin = (int) (3 * density + .5f);
-        row.setLayoutParams(rowParams);
-
-        LinearLayout bubbleContent = new LinearLayout(requireContext());
-        bubbleContent.setOrientation(LinearLayout.VERTICAL);
-        int bubblePadH = (int) (12 * density + .5f);
-        int bubblePadV = (int) (9 * density + .5f);
-        bubbleContent.setPadding(bubblePadH, bubblePadV, bubblePadH, bubblePadV);
-
-        android.graphics.drawable.GradientDrawable bubble =
-                new android.graphics.drawable.GradientDrawable();
-        bubble.setCornerRadius(15 * density);
-        if (isUser) {
-            bubble.setColor(color(R.color.matrix_chat_user_bubble));
-            bubble.setStroke(1, color(R.color.matrix_chat_user_bubble_stroke));
-        } else if (isSystem) {
-            bubble.setColor(color(R.color.matrix_chat_system_bubble));
-        } else {
-            bubble.setColor(color(R.color.matrix_chat_assistant_bubble));
-            bubble.setStroke(1, color(R.color.matrix_chat_assistant_bubble_stroke));
-        }
-        bubbleContent.setBackground(bubble);
-        LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-
-        TextView body = new TextView(requireContext());
-        body.setTextSize(14);
-        body.setTextColor(ContextCompat.getColor(requireContext(),
-                isSystem ? R.color.matrix_muted : R.color.matrix_text));
-        body.setText(message.text());
-        body.setMaxWidth(maxBubbleWidth);
-        bubbleContent.addView(body, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        if (isUser && !isTerminalStatus(message.status())) {
-            TextView status = new TextView(requireContext());
-            status.setTextSize(10);
-            status.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
-            status.setText(statusText(message.status()));
-            status.setMaxWidth(maxBubbleWidth);
-            bubbleContent.addView(status, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
-
-        if (isUser && message.inputKind() == ConversationMessage.INPUT_STEER) {
-            TextView steerNote = new TextView(requireContext());
-            steerNote.setTextSize(10);
-            steerNote.setTypeface(Typeface.DEFAULT_BOLD);
-            steerNote.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_primary));
-            steerNote.setText(steerNoteText(message.steerDeliveryState(), message.status()));
-            steerNote.setMaxWidth(maxBubbleWidth);
-            bubbleContent.addView(steerNote, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
-
-        if (isSystem) {
-            row.addView(weightSpacer());
-            row.addView(bubbleContent, bubbleParams);
-            row.addView(weightSpacer());
-        } else if (isUser) {
-            row.addView(weightSpacer());
-            row.addView(bubbleContent, bubbleParams);
-            row.addView(avatarView(R.drawable.avatar_user_penguin,
-                    R.string.conversation_avatar_user, R.color.matrix_chat_avatar_user_bg),
-                    avatarLayoutParams(avatarSize, avatarGap, true));
-        } else {
-            row.addView(avatarView(R.drawable.avatar_assistant_matrix,
-                    R.string.conversation_avatar_assistant, R.color.matrix_chat_avatar_assistant_bg),
-                    avatarLayoutParams(avatarSize, avatarGap, false));
-            row.addView(bubbleContent, bubbleParams);
-            row.addView(weightSpacer());
-        }
-
-        row.setOnLongClickListener(view -> {
-            showActions(message);
-            return true;
-        });
         return row;
-    }
-
-    private View weightSpacer() {
-        View spacer = new View(requireContext());
-        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
-        return spacer;
-    }
-
-    private LinearLayout.LayoutParams avatarLayoutParams(int size, int gap, boolean userSide) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
-        if (userSide) params.setMarginStart(gap);
-        else params.setMarginEnd(gap);
-        return params;
-    }
-
-    private android.widget.ImageView avatarView(int drawableRes, int descriptionRes,
-            int backgroundColorRes) {
-        android.widget.ImageView avatar = new android.widget.ImageView(requireContext());
-        avatar.setImageResource(drawableRes);
-        avatar.setContentDescription(getString(descriptionRes));
-        avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable mask = new GradientDrawable();
-        mask.setShape(GradientDrawable.OVAL);
-        mask.setColor(color(backgroundColorRes));
-        avatar.setBackground(mask);
-        avatar.setClipToOutline(true);
-        return avatar;
     }
 
     /**
@@ -1017,230 +933,16 @@ public final class ConversationFragment extends Fragment {
      * USER → PROCESS → ASSISTANT；真实事实的所有权仍在 user/task link，不被 UI 重写。
      */
     private View buildDebugTraceRow(ConversationViewModel.UiMessage userMessage) {
-        float density = getResources().getDisplayMetrics().density;
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        // 过程是辅助信息而非第三种聊天气泡。收起时只保留居中的细分隔标题；展开后
-        // 才在其下挂出独立详情卡，避免和用户/助手的会话层级争夺注意力。
-        int maxWidth = (int) (screenWidth * 0.86f);
-
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(0, (int) (6 * density + .5f), 0, (int) (6 * density + .5f));
+        int width = messageRows.getWidth() > 0 ? messageRows.getWidth()
+                : getResources().getDisplayMetrics().widthPixels;
+        View row = new ConversationTraceRenderer(requireContext()).create(userMessage,
+                width - messageRows.getPaddingStart() - messageRows.getPaddingEnd());
         row.setTag(R.id.conversation_messages, "process:" + signatureOf(userMessage));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(maxWidth,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = android.view.Gravity.CENTER_HORIZONTAL;
-        params.bottomMargin = (int) (3 * density + .5f);
-        row.setLayoutParams(params);
-        row.addView(buildDebugTracePanel(userMessage.debugTraces(), maxWidth, density));
         return row;
-    }
-
-    /**
-     * 过程组：一轮 AI 回复把连续的思考、工具请求和工具结果编排成一个
-     * 可折叠组；组内“思考”和每个 capability 又各自独立折叠。这里不是 Logcat 的镜像：
-     * 只展示写时已脱敏的事实投影；所有构建变体均由 matrix.debugTraceUi 显式控制。
-     */
-    private View buildDebugTracePanel(List<DebugTraceWireEvent> rawEvents, int maxBubbleWidth,
-            float density) {
-        List<DebugTraceTimeline.Node> nodes = DebugTraceTimeline.from(rawEvents);
-        int thinkingCount = 0;
-        int toolCount = 0;
-        for (DebugTraceTimeline.Node node : nodes) {
-            if (node.kind == DebugTraceTimeline.Kind.THINKING) thinkingCount++;
-            if (node.kind == DebugTraceTimeline.Kind.TOOL) toolCount++;
-        }
-
-        LinearLayout panel = new LinearLayout(requireContext());
-        panel.setOrientation(LinearLayout.VERTICAL);
-        String groupText = thinkingCount == 0
-                ? getString(R.string.conversation_debug_trace_group_without_reasoning, toolCount)
-                : getString(R.string.conversation_debug_trace_group, thinkingCount, toolCount);
-
-        // 收起态使用轻量过程分隔器：没有背景、没有描边、没有信息图标，只把
-        // 标题置于两条细线之间。箭头是唯一的交互暗示，过程不会再误读成助手气泡。
-        LinearLayout header = new LinearLayout(requireContext());
-        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        header.setPadding(0, (int) (3 * density + .5f), 0, (int) (3 * density + .5f));
-        View leftRule = traceRule(density);
-        header.addView(leftRule, new LinearLayout.LayoutParams(0, Math.max(1, (int) density), 1f));
-        TextView title = new TextView(requireContext());
-        title.setText(groupText);
-        title.setContentDescription(groupText);
-        title.setTextSize(10);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(color(R.color.matrix_trace_group_title));
-        title.setPadding((int) (10 * density + .5f), 0, (int) (5 * density + .5f), 0);
-        header.addView(title, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        android.widget.ImageButton affordance = traceDisclosure(false, density, groupText);
-        LinearLayout.LayoutParams affordanceParams = new LinearLayout.LayoutParams(
-                (int) (22 * density + .5f), (int) (22 * density + .5f));
-        affordanceParams.rightMargin = (int) (5 * density + .5f);
-        header.addView(affordance, affordanceParams);
-        View rightRule = traceRule(density);
-        header.addView(rightRule, new LinearLayout.LayoutParams(0, Math.max(1, (int) density), 1f));
-        panel.addView(header, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout detail = new LinearLayout(requireContext());
-        detail.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable background = roundedBackground(color(R.color.matrix_trace_detail_bg),
-                color(R.color.matrix_trace_detail_stroke), 9 * density);
-        detail.setBackground(background);
-        int inset = (int) (8 * density + .5f);
-        detail.setPadding(inset, inset, inset, inset);
-        // 静态消息默认收起；进行中的消息才能自动展开。Matrix 只持久化 final，
-        // 因而重进会话保持稳定、可预期的收起状态。
-        detail.setVisibility(View.GONE);
-        for (int i = 0; i < nodes.size(); i++) {
-            detail.addView(buildDebugTraceNode(nodes.get(i), i == nodes.size() - 1,
-                    maxBubbleWidth - inset * 2, density));
-        }
-        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        detailParams.topMargin = (int) (8 * density + .5f);
-        panel.addView(detail, detailParams);
-        header.setOnClickListener(ignored -> {
-            boolean expanding = detail.getVisibility() != View.VISIBLE;
-            detail.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            updateTraceDisclosure(affordance, expanding, groupText);
-        });
-        return panel;
-    }
-
-    private View traceRule(float density) {
-        View rule = new View(requireContext());
-        rule.setBackgroundColor(color(R.color.matrix_trace_group_stroke));
-        return rule;
-    }
-
-    /**
-     * 无底座的 Material 图标：Matrix 的收起态向左，展开态向下。
-     * 它没有背景或文字，排布仍由 Matrix 的居中分隔器与节点标题负责。
-     */
-    private android.widget.ImageButton traceDisclosure(boolean expanded, float density,
-            String subject) {
-        android.widget.ImageButton disclosure = new android.widget.ImageButton(requireContext());
-        disclosure.setScaleType(android.widget.ImageView.ScaleType.CENTER);
-        disclosure.setPadding((int) (2 * density + .5f), (int) (2 * density + .5f),
-                (int) (2 * density + .5f), (int) (2 * density + .5f));
-        disclosure.setBackground(null);
-        updateTraceDisclosure(disclosure, expanded, subject);
-        return disclosure;
-    }
-
-    private void updateTraceDisclosure(android.widget.ImageButton disclosure, boolean expanded,
-            String subject) {
-        disclosure.setImageResource(expanded ? R.drawable.ic_trace_disclosure_down
-                : R.drawable.ic_trace_disclosure_right);
-        disclosure.setContentDescription(subject + "，"
-                + (expanded ? getString(R.string.conversation_debug_trace_collapse_detail)
-                : getString(R.string.conversation_debug_trace_expand_detail)));
-    }
-
-    private View buildDebugTraceNode(DebugTraceTimeline.Node node, boolean last, int maxWidth,
-            float density) {
-        LinearLayout item = new LinearLayout(requireContext());
-        item.setOrientation(LinearLayout.HORIZONTAL);
-        item.setPadding(0, 0, 0, last ? 0 : (int) (7 * density + .5f));
-
-        LinearLayout rail = new LinearLayout(requireContext());
-        rail.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        rail.setOrientation(LinearLayout.VERTICAL);
-        TextView dot = new TextView(requireContext());
-        dot.setText(node.kind == DebugTraceTimeline.Kind.THINKING ? "✦" : "●");
-        dot.setTextSize(12);
-        dot.setGravity(android.view.Gravity.CENTER);
-        dot.setTextColor(node.kind == DebugTraceTimeline.Kind.TOOL
-                ? ContextCompat.getColor(requireContext(), node.statusColorRes())
-                : color(R.color.matrix_trace_thinking_dot));
-        rail.addView(dot, new LinearLayout.LayoutParams((int) (18 * density + .5f),
-                (int) (18 * density + .5f)));
-        if (!last) {
-            View guide = new View(requireContext());
-            guide.setBackgroundColor(color(R.color.matrix_trace_guide_line));
-            LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(
-                    Math.max(1, (int) density), 0, 1f);
-            guideParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
-            rail.addView(guide, guideParams);
-        }
-        item.addView(rail, new LinearLayout.LayoutParams((int) (18 * density + .5f),
-                ViewGroup.LayoutParams.MATCH_PARENT));
-
-        LinearLayout card = new LinearLayout(requireContext());
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int) (6 * density + .5f), 0, 0, 0);
-        LinearLayout nodeHeader = new LinearLayout(requireContext());
-        nodeHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(requireContext());
-        title.setTextSize(11);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(color(R.color.matrix_trace_node_title));
-        title.setText(node.title(requireContext()));
-        nodeHeader.addView(title, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        String nodeTitle = node.title(requireContext());
-        android.widget.ImageButton affordance = traceDisclosure(false, density, nodeTitle);
-        LinearLayout.LayoutParams nodeAffordanceParams = new LinearLayout.LayoutParams(
-                (int) (22 * density + .5f), (int) (22 * density + .5f));
-        nodeHeader.addView(affordance, nodeAffordanceParams);
-        card.addView(nodeHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView content = new TextView(requireContext());
-        content.setTextSize(10);
-        content.setTypeface(Typeface.MONOSPACE);
-        content.setTextColor(color(R.color.matrix_trace_node_content));
-        content.setText(node.detail(requireContext()));
-        content.setMaxWidth(maxWidth - (int) (30 * density + .5f));
-        content.setPadding((int) (9 * density + .5f), (int) (5 * density + .5f), 0, 0);
-        content.setBackground(roundedBackground(color(R.color.matrix_trace_node_content_bg),
-                0x00000000, 5 * density));
-        content.setVisibility(View.GONE);
-        card.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        // 节点标题只承担语义与折叠控制。此前同时渲染两行 preview 和完整 detail，
-        // 使同一段 reasoning/tool payload 在展开时重复出现；调试信息应完整保留一次，
-        // 而不是用重复文本换取“摘要”。
-        View.OnClickListener toggle = ignored -> {
-            boolean expanding = content.getVisibility() != View.VISIBLE;
-            content.setVisibility(expanding ? View.VISIBLE : View.GONE);
-            updateTraceDisclosure(affordance, expanding, nodeTitle);
-        };
-        nodeHeader.setOnClickListener(toggle);
-        affordance.setOnClickListener(toggle);
-        item.addView(card, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return item;
-    }
-
-    private GradientDrawable roundedBackground(int color, int strokeColor, float radius) {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(color);
-        background.setCornerRadius(radius);
-        if (strokeColor != 0x00000000) background.setStroke(1, strokeColor);
-        return background;
     }
 
     private int color(int resource) {
         return ContextCompat.getColor(requireContext(), resource);
-    }
-
-    private String steerNoteText(int steerDeliveryState, int status) {
-        if (status == ConversationMessage.STATUS_FAILED) {
-            return getString(R.string.conversation_steer_failed);
-        }
-        switch (steerDeliveryState) {
-            case ConversationMessage.STEER_DELIVERY_OFFERED:
-                return getString(R.string.conversation_steer_offered);
-            case ConversationMessage.STEER_DELIVERY_PENDING:
-                // 恢复后仍 PENDING：诚实显示“未确认”，宿主终态不谎称并入
-                return isTerminalStatus(status)
-                        ? getString(R.string.conversation_steer_recovered)
-                        : getString(R.string.conversation_steer_pending);
-            default:
-                return getString(R.string.conversation_steer_failed);
-        }
     }
 
     private void showActions(ConversationViewModel.UiMessage message) {
@@ -1344,16 +1046,6 @@ java.util.List<String> options = new java.util.ArrayList<>();
     private boolean isTerminalStatus(int status) {
         return status != ConversationMessage.STATUS_ACCEPTED
                 && status != ConversationMessage.STATUS_RUNNING;
-    }
-
-    private String statusText(int status) {
-        if (status == ConversationMessage.STATUS_ACCEPTED) {
-            return getString(R.string.conversation_status_accepted);
-        }
-        if (status == ConversationMessage.STATUS_RUNNING) {
-            return getString(R.string.conversation_status_running);
-        }
-        return "";
     }
 
     private LauncherActivity activity() {

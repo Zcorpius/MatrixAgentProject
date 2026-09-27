@@ -45,6 +45,28 @@ public final class TaskScheduler {
     private static final String TAG = "MatrixAgent";
 
     private final ExecutorService workers;
+    private final Object admissionGate = new Object();
+    private final ThreadLocal<Boolean> automaticLease = ThreadLocal.withInitial(() -> false);
+    private final ConcurrentMap<String, com.matrix.agent.identity.CancellationToken> automaticReaders = new ConcurrentHashMap<>();
+
+    /** Acquired on the dedicated automatic worker before creating a deadline or charging parent budget. */
+    public AutoCloseable tryAutomaticLease(com.matrix.agent.identity.CancellationToken token, boolean readOnly) throws InterruptedException {
+        synchronized (admissionGate) {
+            String key = "demo-vehicle";
+            var queue = runningTasks.get(key);
+            if (queue != null && queue.stream().anyMatch(task -> !task.isDone())) return null;
+            var handle = sessionLockManager.tryAcquire(key, 0);
+            if (handle == null) return null;
+            // Recheck after acquisition so an already-submitted interactive request wins admission.
+            queue = runningTasks.get(key);
+            if (queue != null && queue.stream().anyMatch(task -> !task.isDone())) { handle.close(); return null; }
+            automaticLease.set(true);
+            if (readOnly) automaticReaders.put(key, token);
+            return () -> { automaticReaders.remove(key, token); automaticLease.remove(); handle.close(); };
+        }
+    }
+    public boolean holdsAutomaticLease() { return automaticLease.get(); }
+
     /** true 时 shutdown() 才真正关闭池;共享池由外部统一关闭。 */
     private final boolean ownsPool;
     private final SessionLockManager sessionLockManager;
@@ -103,16 +125,17 @@ public final class TaskScheduler {
         // 这样主驾和副驾可以共享调度队列参与抢占,但 SessionManager / SteerMailbox 仍用
         // sessionId 按乘员隔离对话上下文与运行时干预通道。
         final String arbitrationKey = request.getArbitrationKey();
-        // 主驾查询类请求:在 submit 时尝试抢占 arbitration 队列中正在跑的副驾只读任务
-        if (request.getActor() == Actor.DRIVER && request.isReadOnlyHint()) {
+        final RunningTask newTask = new RunningTask(request);
+        com.matrix.agent.identity.CancellationToken background;
+        synchronized (admissionGate) {
+            background = request.getExecutionScope().automatic() ? null : automaticReaders.get(arbitrationKey);
+            runningTasks.computeIfAbsent(arbitrationKey, k -> new ConcurrentLinkedDeque<>()).addLast(newTask);
+        }
+        // Publish the interactive request atomically with automatic admission, but run cancellation hooks outside the gate.
+        if (background != null) background.cancel();
+        if (!request.getExecutionScope().automatic() && request.getActor() == Actor.DRIVER && request.isReadOnlyHint()) {
             tryPreemptPassengerReadOnly(arbitrationKey);
         }
-
-        final RunningTask newTask = new RunningTask(request);
-        // 所有 submit 都记录到 FIFO 队列尾,旧实现的 putIfAbsent 语义
-        // 会让排队中的 task 无法被记录,主驾抢占判定失效。
-        runningTasks.computeIfAbsent(arbitrationKey, k -> new ConcurrentLinkedDeque<>())
-                .addLast(newTask);
 
         Callable<AgentOutcome> task = () -> {
             long started = System.nanoTime();

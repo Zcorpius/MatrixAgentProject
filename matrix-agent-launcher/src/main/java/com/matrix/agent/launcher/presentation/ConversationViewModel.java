@@ -54,6 +54,15 @@ public final class ConversationViewModel extends ViewModel {
                     ConversationMessage.STEER_DELIVERY_PENDING, null, List.of(), List.of());
         }
 
+        /** Shared Host projection for the full conversation and the floating conversation. */
+        public static UiMessage from(ConversationMessage message) {
+            return new UiMessage(message.messageId, message.sequenceNo, message.role,
+                    message.status, message.channel, message.text, message.failureCode,
+                    message.inputKind, message.steerHostUserMessageId, message.steerDeliveryState,
+                    message.conversationTaskId, message.executionTraces == null ? List.of() : message.executionTraces,
+                    List.of());
+        }
+
         /** 状态迁移拷贝（保留全部元数据）。 */
         public UiMessage withStatus(int newStatus, int newFailureCode) {
             return new UiMessage(messageId, sequence, role, newStatus, channel, text,
@@ -1012,12 +1021,7 @@ public final class ConversationViewModel extends ViewModel {
 
     private void merge(ConversationMessage message) {
         // SDK DTO 是显式字段（非 record 访问器）；v5 元数据（steer 注记 + 轨迹）随行
-        UiMessage mapped = new UiMessage(message.messageId, message.sequenceNo, message.role,
-                message.status, message.channel, message.text, message.failureCode,
-                message.inputKind, message.steerHostUserMessageId,
-                message.steerDeliveryState, message.conversationTaskId,
-                message.executionTraces == null ? List.of() : message.executionTraces,
-                debugTracesFor(message));
+        UiMessage mapped = UiMessage.from(message).withDebugTraces(debugTracesFor(message));
         // Host 的 upsert 可能只补充 capability trace / steer 投递态；不能仅比较 status/text，
         // 否则 UI 会错过同序号的后续事实。调试轨迹同样随本行不可变快照带入。
         bySequence.put(mapped.sequence(), mapped);

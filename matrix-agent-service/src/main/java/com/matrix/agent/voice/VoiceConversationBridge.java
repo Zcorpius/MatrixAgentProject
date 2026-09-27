@@ -40,7 +40,12 @@ public final class VoiceConversationBridge {
             float asrConfidence,
             boolean confidenceAvailable,
             int audioZoneId,
-            VoiceResponseToken token) { }
+            VoiceResponseToken token,
+            com.matrix.agent.identity.InteractiveOrigin origin) {
+        public SubmitRequest(String text, String languageTag, float confidence, boolean available, int zone, VoiceResponseToken token) {
+            this(text, languageTag, confidence, available, zone, token, null);
+        }
+    }
 
     /** Controller 生成的不透明回注令牌（§7.1）。 */
     public record VoiceResponseToken(
@@ -121,7 +126,7 @@ public final class VoiceConversationBridge {
                             "demo-vehicle",
                             new ConversationCoordinator.InputMetadata(channel, InputSource.VOICE,
                                     idempotencyKey, request.asrConfidence(),
-                                    request.confidenceAvailable()),
+                                    request.confidenceAvailable(), request.origin()),
                             receipt -> tokensByTaskId.put(receipt.conversationTaskId(), token)));
             // submitTextOrAppend 是同步事务；成功即 receipt
             Log.i(TAG, "[Bridge] 提交成功 conv=" + conversationId

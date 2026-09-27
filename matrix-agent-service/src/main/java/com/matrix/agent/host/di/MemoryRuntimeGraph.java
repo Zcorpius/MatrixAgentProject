@@ -47,9 +47,25 @@ final class MemoryRuntimeGraph {
 
     MemoryRuntimeGraph(@NonNull Context context, MatrixDatabase database,
             @NonNull SessionManager sessions, Executor databaseExecutor) {
+        this(database, sessions, initializeStore(context, database, databaseExecutor));
+    }
+
+    MemoryRuntimeGraph(PersistenceRuntimeGraph.Admission admission, SessionManager sessions) {
+        this(admission.database(), sessions, new StoreInitialization(admission.memory(), !admission.available()));
+    }
+
+    private static StoreInitialization initializeStore(Context context, MatrixDatabase database,
+            Executor databaseExecutor) {
         AtomicBoolean degradedRef = new AtomicBoolean(false);
-        store = createStoreSafely(context, database, degradedRef, databaseExecutor);
-        degraded = degradedRef.get();
+        MemoryStore memory = createStoreSafely(context, database, degradedRef, databaseExecutor);
+        return new StoreInitialization(memory, degradedRef.get());
+    }
+
+    private record StoreInitialization(MemoryStore store, boolean degraded) { }
+
+    private MemoryRuntimeGraph(MatrixDatabase database, SessionManager sessions, StoreInitialization result) {
+        store = result.store();
+        degraded = result.degraded();
 
         EpisodicMemorySourceImpl episodicImpl = degraded
                 ? null : new EpisodicMemorySourceImpl(database.sessionHistoryDao());

@@ -1,0 +1,13 @@
+2026-09-26 — Full conversation overlay verification
+Build: success (Host / Launcher / service-lib JVM + Launcher APK and instrumentation)
+JVM: Host 1353 + Launcher 45 + SDK 20 = 1418; failures/errors/skipped 0
+Lint: Launcher 0 errors / 35 warnings; SDK 0 errors / 0 warnings
+Final device suite: OK (22 tests), 43.367 seconds
+Device: Xiaomi Mi 9 SE / Android 15 API 35 / 977d27c4
+Coverage: latest and older messages, live updates, shared role/text/status projection,
+process disclosure, title dragging, IME/draft retention, compact landscape controls,
+real QQ Music search, and window ownership/failure lifecycle.
+APK hashes: installed-apks.json; both installed binaries match build outputs.
+Final state: Launcher foreground; accessibility service Bound, Crashed empty;
+rotation lock 0 / fixed-to-user-rotation default.
+Earlier runs are retained separately; final-device-suite.txt is the final installed-build result.
