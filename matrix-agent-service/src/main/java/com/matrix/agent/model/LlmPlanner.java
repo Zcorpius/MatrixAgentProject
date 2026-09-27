@@ -21,6 +21,8 @@ import com.matrix.agent.contract.ModelTurnRequest;
 import com.matrix.agent.contract.AgentMessage;
 import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.contract.schema.SchemaJsonWriter;
+import com.matrix.agent.contract.schema.SchemaProjectionConfig;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -173,6 +175,14 @@ public final class LlmPlanner {
                 text.append("- ").append(tool.getCapabilityName());
                 if (tool.getDescription() != null && !tool.getDescription().isEmpty()) {
                     text.append(": ").append(tool.getDescription());
+                }
+                if (tool.getParametersSchema() != null) {
+                    try {
+                        text.append("\n  arguments schema=").append(SchemaJsonWriter.INSTANCE.write(
+                                tool.getParametersSchema(), SchemaProjectionConfig.ANTHROPIC_FULL));
+                    } catch (org.json.JSONException invalid) {
+                        throw new IllegalStateException("无法序列化工具参数 Schema", invalid);
+                    }
                 }
                 text.append('\n');
             }

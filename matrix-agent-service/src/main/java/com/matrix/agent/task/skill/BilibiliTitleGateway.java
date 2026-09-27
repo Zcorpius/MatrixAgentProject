@@ -17,16 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-/** Title search and explicit selection; AgentEngine retains policy, Tool execution and audit. */
+/** Grounded results and explicit selection; the configured model interprets new video requests. */
 public final class BilibiliTitleGateway implements ModelGateway {
-    private static final Pattern TITLE_REQUEST = Pattern.compile(
-            "(?is)^\\s*(?:请|帮我)?\\s*(?:播放|打开|看|观看|搜索)\\s*"
-                    + "(?:哔哩哔哩|哔哩|b站|bilibili)(?:的|上(?:的)?)\\s*"
-                    + "(.{1,64}?)\\s*[。！!]?\\s*$");
-
     private final ModelGateway delegate;
     private final PendingBilibiliSelection pending;
 
@@ -77,12 +70,6 @@ public final class BilibiliTitleGateway implements ModelGateway {
                 return ModelTurn.directAnswer("搜索到多项结果，请回复序号或完整标题；尚未打开视频。");
             }
         }
-        String title = titleRequest(text);
-        if (title != null) {
-            pending.discardBilibili(sessionId);
-            return ModelTurn.ofToolCalls(List.of(new ToolCall(MediaCapabilities.BILI_SEARCH,
-                    Map.of("query", title))), "正在哔哩哔哩搜索标题");
-        }
         return delegate.decide(request);
     }
 
@@ -92,7 +79,6 @@ public final class BilibiliTitleGateway implements ModelGateway {
                 && (MediaCapabilities.BILI_SEARCH.equals(last.getToolName())
                 || MediaCapabilities.BILI_OPEN_RESULT.equals(last.getToolName()))) return true;
         String text = request.getAgentRequest().getText();
-        if (titleRequest(text) != null) return true;
         Optional<PendingBilibiliSelection.Snapshot> snapshot = pending.bilibiliSnapshot(
                 request.getAgentRequest().getSessionId());
         return snapshot.isPresent() && (MediaSelectionUtterance.isConfirmationReply(text)
@@ -149,13 +135,6 @@ public final class BilibiliTitleGateway implements ModelGateway {
             found = candidate.index();
         }
         return found;
-    }
-
-    private static String titleRequest(String text) {
-        if (ExplicitMediaTarget.singleTarget(text) != MediaApp.BILIBILI
-                || ExplicitMediaTarget.hasBvid(text)) return null;
-        Matcher match = TITLE_REQUEST.matcher(text);
-        return match.matches() ? match.group(1).strip() : null;
     }
 
     private static AgentMessage lastMessage(List<AgentMessage> conversation) {

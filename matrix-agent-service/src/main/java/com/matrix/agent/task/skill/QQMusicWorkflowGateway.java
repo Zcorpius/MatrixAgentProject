@@ -17,22 +17,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Executes the narrow search → confirmation workflow without a remote model round trip.
- * The ordinary AgentEngine still owns policy, Tool execution, readback, audit and budgets.
- * All other requests retain the configured model gateway.
+ * Renders grounded search results and handles explicit replies without another model call.
+ * New requests always reach the configured model, which owns artist/title interpretation.
+ * AgentEngine retains policy, Tool execution, readback, audit and budgets.
  */
 public final class QQMusicWorkflowGateway implements ModelGateway {
-    private static final Pattern EXACT_SONG = Pattern.compile(
-            "^\\s*(?:请|帮我)?\\s*(?:播放|放|听)\\s*"
-                    + "([\\p{IsHan}A-Za-z0-9]{2,24})的(.{2,48}?)\\s*[。！!]?\\s*$");
-    private static final Pattern ARTIST_SONGS = Pattern.compile(
-            "^\\s*(?:请|帮我)?\\s*(?:播放|放|听)\\s*"
-                    + "([\\p{IsHan}A-Za-z0-9]{2,24})的(?:歌|歌曲)\\s*[。！!]?\\s*$");
-
     private final ModelGateway delegate;
     private final PendingMediaConfirmation pending;
 
@@ -100,17 +91,6 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
             return ModelTurn.directAnswer("上次搜索结果已过期，请重新说出歌手和歌名。没有播放歌曲。");
         }
 
-        String artist = artistSongs(text);
-        if (artist != null) {
-            return ModelTurn.ofToolCalls(List.of(new ToolCall(MediaCapabilities.QQ_SEARCH,
-                    Map.of("query", artist))), "正在搜索该歌手的歌曲");
-        }
-        SongRequest song = exactSong(text);
-        if (song != null) {
-            return ModelTurn.ofToolCalls(List.of(new ToolCall(MediaCapabilities.QQ_SEARCH,
-                    Map.of("query", song.artist() + " " + song.title()))),
-                    "正在搜索指定歌手和歌曲");
-        }
         return delegate.decide(request);
     }
 
@@ -122,7 +102,6 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
                 && (MediaCapabilities.QQ_SEARCH.equals(last.getToolName())
                 || MediaCapabilities.QQ_PLAY_RESULT.equals(last.getToolName()))) return true;
         String text = request.getAgentRequest().getText();
-        if (artistSongs(text) != null || exactSong(text) != null) return true;
         Optional<PendingMediaConfirmation.Snapshot> snapshot = pending.snapshot(
                 request.getAgentRequest().getSessionId());
         if (snapshot.isEmpty() && MediaSelectionUtterance.isConfirmationReply(text)
@@ -136,6 +115,8 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
         if (!observation.getContent().startsWith("SUCCESS:")) {
             return ModelTurn.directAnswer(observation.getContent().contains("SEARCH_NO_RESULTS")
                     ? "QQ 音乐没有找到匹配歌曲，请换个歌名或歌手再试。"
+                    : observation.getContent().contains("OPERATION_DEADLINE_EXCEEDED")
+                    ? "等待 QQ 音乐搜索页面更新超时，请稍后重试。没有播放歌曲。"
                     : observation.getContent().contains("SEARCH_UI_CHANGED")
                     ? "QQ 音乐当前页面无法进入歌曲搜索，请回到 QQ 音乐首页后重试。没有播放新歌曲。"
                     : "QQ 音乐搜索未成功，请稍后重试。没有播放歌曲。");
@@ -179,8 +160,9 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
     }
 
     private static String confirmationQuestion(PendingMediaConfirmation.Snapshot snapshot) {
-        QQMusicUiPort.Candidate candidate = snapshot.candidates()
-                .get(snapshot.confirmableIndex() - 1);
+        QQMusicUiPort.Candidate candidate = snapshot.candidates().stream()
+                .filter(value -> value.index() == snapshot.confirmableIndex())
+                .findFirst().orElseThrow();
         return "找到第 " + candidate.index() + " 首《" + candidate.title() + "》— "
                 + candidate.detail() + "。是否播放这首？";
     }
@@ -197,21 +179,6 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
                     && message.getContent().contains("是否播放这首")) return true;
         }
         return false;
-    }
-
-    private static SongRequest exactSong(String text) {
-        Matcher match = EXACT_SONG.matcher(text);
-        if (!match.matches()) return null;
-        String artist = match.group(1).strip();
-        String title = match.group(2).strip().replaceAll("^[《〈\"“]+|[》〉\"”]+$", "");
-        if (title.length() < 2 || title.length() > 40
-                || title.matches("(?:歌|歌曲|歌单|所有歌|所有歌曲|一些歌|几首歌)")) return null;
-        return new SongRequest(artist, title);
-    }
-
-    private static String artistSongs(String text) {
-        Matcher match = ARTIST_SONGS.matcher(text);
-        return match.matches() ? match.group(1).strip() : null;
     }
 
     private static int selectedCandidate(String text, List<QQMusicUiPort.Candidate> candidates) {
@@ -232,5 +199,4 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
         return found;
     }
 
-    private record SongRequest(String artist, String title) {}
 }

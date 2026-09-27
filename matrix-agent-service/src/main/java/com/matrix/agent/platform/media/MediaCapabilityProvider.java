@@ -166,9 +166,16 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             if (MediaCapabilities.BILI_OPEN_RESULT.equals(capability)) {
                 return openBilibiliResult(request, call, started, ctx);
             }
-            if (MediaCapabilities.QQ_PLAY.equals(capability)
-                    && hasPendingConfirmation(request.getSessionId())
-                    && MediaSelectionUtterance.isAffirmative(request.getText())) {
+            SearchContext pendingSong = searchContexts.get(request.getSessionId());
+            if (MediaCapabilities.QQ_PLAY.equals(capability) && pendingSong != null
+                    && (request.getRequestId().equals(pendingSong.requestId())
+                    || MediaSelectionUtterance.isAffirmative(request.getText()))) {
+                return result(call, ToolResult.Status.EXECUTION_FAILED,
+                        "SELECTION_REQUIRES_RESULT", app, "NOT_SENT", false, started);
+            }
+            BilibiliSearchContext pendingVideo = bilibiliSearchContexts.get(request.getSessionId());
+            if (MediaCapabilities.BILI_RESUME.equals(capability) && pendingVideo != null
+                    && request.getRequestId().equals(pendingVideo.requestId())) {
                 return result(call, ToolResult.Status.EXECUTION_FAILED,
                         "SELECTION_REQUIRES_RESULT", app, "NOT_SENT", false, started);
             }
@@ -196,13 +203,18 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             return result(call, ToolResult.Status.EXECUTION_FAILED, "INVALID_ARGUMENT",
                     MediaApp.QQMUSIC, "NOT_SENT", false, started);
         }
+        SongSearchTarget target = SongSearchTarget.from(call);
         if (request.isCancelled() || request.remainingMillis() <= RETURN_MARGIN_MS + 500L) {
             throw new MediaPlatformException("NOT_DISPATCHED");
         }
         String query = ((String) raw).strip();
+        // A new search replaces the old proposal even if this attempt subsequently fails.
+        discard(request.getSessionId());
+        discardBilibili(request.getSessionId());
         handoff.prepare(ctx, MediaApp.QQMUSIC, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
         QQMusicUiPort.SearchPage page = qqUi.search(query, ctx);
-        rememberSearch(request, page);
+        int confirmableIndex = target.confirmableIndex(page.candidates());
+        rememberSearch(request, page, confirmableIndex);
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (QQMusicUiPort.Candidate candidate : page.candidates()) {
             candidates.add(Map.of("index", candidate.index(), "title", candidate.title(),
@@ -212,7 +224,6 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         observed.put("media.app", MediaApp.QQMUSIC.wireName());
         observed.put("media.query", query);
         observed.put("media.candidates", candidates);
-        int confirmableIndex = confirmableIndex(request.getText(), page.candidates());
         if (confirmableIndex > 0) observed.put("media.confirmable_index", confirmableIndex);
         observed.put("media.dispatch_state", "CONFIRMED");
         return new ToolResult(ToolResult.Status.SUCCESS, call.getCapabilityName(),
@@ -234,6 +245,8 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             throw new MediaPlatformException("NOT_DISPATCHED");
         }
         String query = ((String) raw).strip();
+        discard(request.getSessionId());
+        discardBilibili(request.getSessionId());
         handoff.prepare(ctx, MediaApp.BILIBILI, com.matrix.agent.api.handoff.HandoffProtocol.INTERACT_EXISTING_APP);
         BilibiliUiPort.SearchPage page = bilibiliUi.search(query, ctx);
         rememberBilibiliSearch(request, page);
@@ -394,7 +407,8 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         return true;
     }
 
-    private synchronized void rememberSearch(AgentRequest request, QQMusicUiPort.SearchPage page) {
+    private synchronized void rememberSearch(AgentRequest request, QQMusicUiPort.SearchPage page,
+            int confirmableIndex) {
         long now = SystemClock.elapsedRealtime();
         searchContexts.entrySet().removeIf(entry ->
                 now - entry.getValue().createdElapsedMillis() > SEARCH_CONTEXT_TTL_MS);
@@ -407,26 +421,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         }
         searchContexts.put(request.getSessionId(), new SearchContext(page,
                 request.getRequestId(), request.getText(),
-                confirmableIndex(request.getText(), page.candidates()), now));
-    }
-
-    private static int confirmableIndex(String requestText,
-            List<QQMusicUiPort.Candidate> candidates) {
-        int match = 0;
-        for (QQMusicUiPort.Candidate candidate : candidates) {
-            String title = candidate.title().strip();
-            String artist = primaryArtist(candidate.detail());
-            if (title.length() < 2 || artist.length() < 2
-                    || !requestText.contains(title) || !requestText.contains(artist)) continue;
-            if (match != 0) return 0;
-            match = candidate.index();
-        }
-        return match;
-    }
-
-    private static String primaryArtist(String detail) {
-        int divider = detail.indexOf('·');
-        return (divider < 0 ? detail : detail.substring(0, divider)).strip();
+                confirmableIndex, now));
     }
 
     private static boolean explicitlySelected(String text, QQMusicUiPort.Candidate candidate,

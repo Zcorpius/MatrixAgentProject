@@ -21,6 +21,13 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class SkillSelectorTest {
+    @Test public void naturalListeningRequestsReceiveMusicGuidance() {
+        SkillSelector selector = selector(new AtomicInteger(), noBilibiliPending());
+        for (String text : List.of("我想听李健唱的消失的月光", "放周杰伦的晴天", "来首歌曲")) {
+            assertTrue(selector.promptFor(request(text)).contains("id=\"qqmusic-control\""));
+        }
+    }
+
     @Test public void picksSwitchSkillForSingleNamedTargetWithoutBinderRead() {
         AtomicInteger hintReads = new AtomicInteger();
         SkillSelector selector = selector(hintReads, noBilibiliPending());

@@ -32,11 +32,22 @@ public final class BilibiliTitleGatewayTest {
                 @Override public void discardBilibili(String sessionId) {}
             });
 
-    @Test public void titleOnlyRequestSearchesBilibiliWithoutOpeningQQMusic() {
-        ModelTurn result = gateway.prepare(turn(
-                "播放哔哩哔哩的逃避可耻但是有用", "fresh-session")).call();
-        assertTrue(result.hasToolCalls());
-        assertTrue(result.getToolCalls().get(0).getCapabilityName().contains("bilibili.search_videos"));
+    @Test public void newVideoRequestReachesModelThroughBothMediaWrappers() {
+        for (String text : List.of("播放哔哩哔哩的逃避可耻但是有用",
+                "我想在B站找一下逃避可耻但是有用", "用QQ音乐听李健的消失的月光")) {
+            var video = new BilibiliTitleGateway(request -> {
+                assertEquals(text, request.getAgentRequest().getText());
+                return ModelTurn.directAnswer("model");
+            }, new PendingBilibiliSelection() {
+                @Override public java.util.Optional<Snapshot> bilibiliSnapshot(String sessionId) {
+                    return java.util.Optional.empty();
+                }
+                @Override public void discardBilibili(String sessionId) {}
+            });
+            var combined = new QQMusicWorkflowGateway(video, sessionId -> false);
+            ModelTurn result = combined.prepare(turn(text, "fresh-session")).call();
+            assertEquals("model", result.getAssistantMessage().getContent());
+        }
     }
 
     @Test public void successfulSearchListsCandidatesWithoutOpeningOne() {

@@ -9,7 +9,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -275,36 +274,22 @@ public final class AndroidQQMusicUiPort implements QQMusicUiPort {
     private static List<Candidate> waitForCandidates(QQMusicAccessibilityService service,
             String query, String previousQuery, List<Candidate> previousCandidates, long deadline, LaunchContext ctx)
             throws MediaPlatformException {
+        var gate = new SongSearchResultGate(query, previousQuery, previousCandidates);
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = service.qqRoot();
-            if (root != null && query.contentEquals(searchText(root))) {
+            if (root != null) {
                 List<Candidate> results = candidates(root);
-                // A changed input can precede the network response. The prior result list must
-                // change too; otherwise a matching row from the old query could be returned.
-                boolean refreshed = query.equals(previousQuery)
-                        || !results.equals(previousCandidates);
-                if (refreshed && queryRepresented(query, results)) return results;
+                // QQ Music can correct or expand a query. Return stable, fresh rows even when
+                // literal query tokens differ; the Provider decides whether one matches exactly.
+                if (gate.accept(searchText(root), results, SystemClock.elapsedRealtime())) {
+                    return results;
+                }
+            } else {
+                gate.accept("", List.of(), SystemClock.elapsedRealtime());
             }
             pause(ctx);
         }
         throw new MediaPlatformException("SEARCH_NO_RESULTS");
-    }
-
-    static boolean queryRepresented(String query, List<Candidate> results) {
-        String[] terms = query.toLowerCase(Locale.ROOT).strip().split("\\s+");
-        for (Candidate candidate : results) {
-            String searchable = (candidate.title() + " " + candidate.detail())
-                    .toLowerCase(Locale.ROOT);
-            boolean allTermsFound = true;
-            for (String term : terms) {
-                if (!searchable.contains(term)) {
-                    allTermsFound = false;
-                    break;
-                }
-            }
-            if (allTermsFound) return true;
-        }
-        return false;
     }
 
     private static List<Candidate> candidates(AccessibilityNodeInfo root) {
