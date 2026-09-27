@@ -107,7 +107,7 @@ Tool 是原子动作；Skill 负责选择和排列动作。无论 ToolCall 来�
 | media.qqmusic.next | 空对象 | R1 写，不可幂等 | NONE，Provider 自行验证变化 | 2,500 | 可识别的曲目或队列项发生变化 |
 | media.qqmusic.previous | 空对象 | R1 写，不可幂等 | NONE，Provider 自行验证变化 | 2,500 | 可识别的曲目或队列项发生变化 |
 | media.qqmusic.seek | position_ms：非负整数 | R1 写，可幂等 | READBACK_FIELD | 4,000 | 位置回读达到目标附近 |
-| media.qqmusic.search_songs | query：1～64 字符 | R1 写，可幂等 | NONE | 12,000 | QQ 音乐搜索页返回至多 8 条编号、歌名、歌手/专辑候选；不播放 |
+| media.qqmusic.search_songs | query：1～64 字符；可选 artist、title：至多 64 字符 | R1 写，可幂等 | NONE | 12,000 | QQ 音乐搜索页返回至多 8 条编号、歌名、歌手/专辑候选；不播放 |
 | media.qqmusic.play_search_result | index：1～8 的整数 | R1 写，不可幂等 | READBACK_FIELD | 15,000 | 仅接受另一轮用户明确选中的候选；页面重查一致，且会话回读所选曲目为 PLAYING |
 | media.bilibili.get_state | 空对象 | R0 只读 | NONE | 1,500 | 返回目标会话状态和支持动作 |
 | media.bilibili.open_video | bvid：受限字符串；page：可选正整数 | R1 写，可幂等 | NONE | 8,000 | 视频 Intent 已解析，startActivity 调用未失败；不证明页面显示或视频播放 |
@@ -350,9 +350,13 @@ SkillCatalog 加载并验证清单：id 唯一、版本合法、依赖能力已�
 
 “下一首”未指定应用、且 B 站与 QQ 音乐都存在可控会话时，Skill 应请求明确目标；首期不推断其它 App 的播放状态。
 
-### 7.3 确定性执行的第二阶段
+### 7.3 模型理解与确定性确认的边界
 
-明确的“播放某歌手的某首歌”已由 `QQMusicWorkflowGateway` 做窄范围确定性决策：只解析歌手和歌曲都明确的请求、唯一匹配项的肯定/否定答复，以及本轮 QQ 搜索/选曲 Tool 的观察值；其余请求转交原模型。它只产出 ModelTurn，实际 Tool 仍由 AgentEngine 经 PolicyEngine、ToolExecutor、Provider、审计和回读执行。`MediaWorkflowIntentClassifier` 对这两类明确命令直接标为写意图，避免提交前额外请求云端模型；其他命令保留云端分类及关键词兜底。这样搜歌、确认问句及确认后的答复无需为每一步再请求云端模型；上下文丢失时也立即提示重搜，不让模型在剩余期限内反复猜测。重复原请求不算肯定确认，Provider 再次核验用户下一轮的明确答复或序号。
+新媒体请求统一交给配置的模型理解。`QQMusicWorkflowGateway` 不再用正则拆分歌手/歌名，`BilibiliTitleGateway` 不再按固定话术截取标题；两者仅处理真实搜索结果的展示、明确的下一轮选择，以及执行后的结果说明。QQ 搜索 Tool 接收 `query` 和可选的 `artist`、`title`；模型只填写用户明确指定或对话中明确指代的实体，未知字段省略或填空字符串。`SongSearchTarget` 用这些字段与 View 树的真实歌名、歌手做精确比较：保留版本后缀，多个匹配不自动挑选，只有唯一匹配才返回 `media.confirmable_index`。query-only / artist-only 搜索始终展示候选，不从原始文本再次猜测分词。
+
+`SongSearchResultGate` 只判断页面输入、列表新鲜度和连续 240ms 的候选稳定性。它不要求搜索词每个字面片段都出现在结果中，允许 QQ 音乐纠错后返回候选；更换 query 后仍显示上一列表时继续等待，不把旧列表当作新搜索结果。相似或不匹配结果仅供用户明确选择；纠错后的实际候选仍须通过结构化实体的精确匹配才能产生确认项。`LlmPlanner` 的结构化 JSON 兼容路径同步提供 CanonicalSchema，让当前云端配置与原生 Tool Calling 看到相同参数约束。
+
+`MediaWorkflowIntentClassifier` 的窄规则仅判断读写调度，不再承担内容理解。首次请求需要一次模型规划；真实结果展示及明确确认仍可本地完成。原始请求重复不算同意；新搜索开始时清除上一轮两款应用的待选上下文；同一轮 search 后调用 play_search_result 或恢复当前队列均不能绕过确认。实际 Tool 继续由 AgentEngine 经 PolicyEngine、ToolExecutor、Provider、审计和回读执行。
 
 跨应用切换若需稳定的失败恢复，仍可增加 SkillRunner 和受限 SkillStep 类型（TOOL_CALL、BRANCH、STOP）。SkillRunner 必须调用从 AgentEngine 中抽取的 CapabilityInvoker；不可直接调用 MediaCapabilityProvider。这样一次 Skill 内每一步仍拥有 PolicyDecision、PRE_TOOL / POST_TOOL 审计、截止时间、取消与结果回读。
 
@@ -370,7 +374,8 @@ SkillCatalog 加载并验证清单：id 唯一、版本合法、依赖能力已�
 | task/prompt/PromptContextAssembler.java | 接入选中 Skill 的简短 PromptSegment |
 | task/AgentEngineConfiguration.java | 承载一次性注入的 SkillCatalog / SkillSelector，旧构造器保持安全默认值 |
 | task/skill/SkillCatalog.java 与 task/skill/SkillSelector.java | 校验签名随包发布的 Skill 清单，基于请求和可用性快照选择说明 |
-| task/skill/QQMusicWorkflowGateway.java | 明确歌曲请求及下一轮确认的快速确定性决策；不直接操作应用，普通请求透传模型网关 |
+| task/skill/QQMusicWorkflowGateway.java / BilibiliTitleGateway.java | 新请求透传模型；真实候选展示、下一轮明确确认和执行结果说明本地处理 |
+| platform/media/SongSearchTarget.java / SongSearchResultGate.java | 结构化实体与真实候选精确匹配；页面新鲜度与列表稳定性判定分离 |
 | host/di/AppContainer.java | 装配 Android 媒体适配器，并将所有新能力显式路由到 MediaCapabilityProvider |
 | host/di/TaskRuntimeGraph.java | 在 Dependencies 中接收 RuntimeProfileResolver、SkillCatalog 和 SkillSelector；Repository 构造时传递 resolver，engineFactory 创建 AgentEngineConfiguration 时接入 Skills |
 | platform/media/ | 增加 PackageProbe、MediaSessionPort、AppLaunchPort、MediaAvailabilitySnapshot 及 Android 实现；QQMusicAccessibilityService 与 AndroidQQMusicUiPort 只处理 QQ 音乐 View 树搜索及明确选曲，MediaCapabilityProvider 保存按 session 隔离的短期候选上下文 |

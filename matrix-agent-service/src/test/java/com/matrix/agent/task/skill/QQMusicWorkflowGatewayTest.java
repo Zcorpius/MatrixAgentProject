@@ -19,12 +19,20 @@ import com.matrix.agent.task.capability.MediaCapabilities;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.matrix.agent.contract.CancellableModelCall;
 
 public final class QQMusicWorkflowGatewayTest {
-    @Test public void exactSongSearchAndConfirmationDoNotCallRemoteModel() {
+    @Test public void modelUnderstandsNewRequestAndGroundedConfirmationStaysLocal() {
         FakePending pending = new FakePending();
-        ModelGateway remote = request -> { throw new AssertionError("remote model must not run"); };
+        AtomicInteger modelCalls = new AtomicInteger();
+        ModelGateway remote = request -> {
+            modelCalls.incrementAndGet();
+            return ModelTurn.ofToolCalls(List.of(new ToolCall(MediaCapabilities.QQ_SEARCH,
+                    Map.of("query", "李健 传奇", "artist", "李健", "title", "传奇"))), "搜索歌曲");
+        };
         QQMusicWorkflowGateway gateway = new QQMusicWorkflowGateway(remote, pending);
 
         ModelTurn search = gateway.decide(turn("播放李健的传奇",
@@ -54,6 +62,7 @@ public final class QQMusicWorkflowGatewayTest {
                         "SUCCESS: verified observed={media.playback_state=PLAYING}"))));
         assertFalse(done.hasToolCalls());
         assertTrue(done.getAssistantMessage().getContent().contains("已确认开始播放"));
+        assertEquals(1, modelCalls.get());
     }
 
     @Test public void repeatedRequestStillAsksAndNegativeReplyDiscards() {
@@ -72,16 +81,40 @@ public final class QQMusicWorkflowGatewayTest {
         assertTrue(pending.discarded);
     }
 
-    @Test public void artistOnlyRequestSearchesWithoutChoosingOrPlaying() {
-        QQMusicWorkflowGateway gateway = new QQMusicWorkflowGateway(
-                request -> { throw new AssertionError("remote model must not run"); },
-                new FakePending());
-        ModelTurn search = gateway.decide(turn("播放周深的歌",
-                List.of(AgentMessage.user("播放周深的歌"))));
-        assertEquals(1, search.getToolCalls().size());
-        assertEquals(MediaCapabilities.QQ_SEARCH,
-                search.getToolCalls().get(0).getCapabilityName());
-        assertEquals("周深", search.getToolCalls().get(0).argument("query"));
+    @Test public void allNewPhrasingsReachModelUnmodified() {
+        for (String text : List.of("播放李健的消失的月光", "播放李健消失的月光",
+                "我想听李健唱的那首消失的月光", "播放周深的歌", "放周杰伦的晴天",
+                "Play Adele's Someone Like You", "用QQ音乐听告五人的带我去找夜生活")) {
+            AtomicInteger modelCalls = new AtomicInteger();
+            QQMusicWorkflowGateway gateway = new QQMusicWorkflowGateway(request -> {
+                modelCalls.incrementAndGet();
+                assertEquals(text, request.getAgentRequest().getText());
+                return ModelTurn.directAnswer("模型理解结果");
+            }, new FakePending());
+            assertEquals("模型理解结果", gateway.prepare(turn(text,
+                    List.of(AgentMessage.user(text)))).call().getAssistantMessage().getContent());
+            assertEquals(1, modelCalls.get());
+        }
+    }
+
+    @Test public void delegatedSearchPreservesCancellationAndExecutionLane() {
+        AtomicInteger aborts = new AtomicInteger();
+        ModelGateway delegate = new ModelGateway() {
+            @Override public ExecutionLane executionLane() { return ExecutionLane.SERIAL_LOCAL; }
+            @Override public ModelTurn decide(ModelTurnRequest request) { throw new AssertionError(); }
+            @Override public CancellableModelCall prepare(ModelTurnRequest request) {
+                return new CancellableModelCall() {
+                    @Override public ModelTurn call() { return ModelTurn.directAnswer("prepared"); }
+                    @Override public void abort() { aborts.incrementAndGet(); }
+                };
+            }
+        };
+        var gateway = new QQMusicWorkflowGateway(delegate, new FakePending());
+        var call = gateway.prepare(turn("播放李健的消失的月光", List.of()));
+        assertEquals("prepared", call.call().getAssistantMessage().getContent());
+        call.abort();
+        assertEquals(1, aborts.get());
+        assertEquals(ModelGateway.ExecutionLane.SERIAL_LOCAL, gateway.executionLane());
     }
 
     @Test public void ambiguousResultsRequireAnExplicitCandidate() {

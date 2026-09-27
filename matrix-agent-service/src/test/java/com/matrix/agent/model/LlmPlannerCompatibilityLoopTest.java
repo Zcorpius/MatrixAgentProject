@@ -22,6 +22,28 @@ import java.util.List;
 import java.util.Map;
 
 public final class LlmPlannerCompatibilityLoopTest {
+    @Test public void structuredPlannerReceivesCanonicalSearchParameters() {
+        CapturingClient client = new CapturingClient();
+        client.response = """
+                {"summary":"搜索指定歌曲","steps":[{"capability":"media.qqmusic.search_songs",
+                  "arguments":{"query":"李健 消失的月光","artist":"李健","title":"消失的月光"}}]}
+                """;
+        LlmPlanner planner = new LlmPlanner(client, new ModelConfig("test", "test",
+                ApiProtocol.OPENAI_CHAT, "http://localhost/v1", "test", "", false));
+        AgentRequest request = AgentRequest.builder("我想听李健唱的消失的月光", Actor.DRIVER).build();
+        var tools = com.matrix.agent.task.capability.CapabilityRegistry.createRuntimeRegistry()
+                .toToolDefinitions();
+        ModelTurn result = planner.decide(new ModelTurnRequest(request,
+                List.of(AgentMessage.user(request.getText())), tools, "规则",
+                new SessionManager().getOrCreate("schema-test")));
+        assertTrue(client.system.contains("arguments schema="));
+        assertTrue(client.system.contains("\"artist\""));
+        assertTrue(client.system.contains("\"title\""));
+        assertTrue(client.system.contains("\"additionalProperties\":false"));
+        assertEquals("消失的月光", result.getToolCalls().get(0).argument("title"));
+        assertEquals("李健", result.getToolCalls().get(0).argument("artist"));
+    }
+
     @Test public void nextTurnReceivesSkillAndObservationThenChoosesOneAction() {
         CapturingClient client = new CapturingClient();
         LlmPlanner planner = new LlmPlanner(client, new ModelConfig("test", "test",

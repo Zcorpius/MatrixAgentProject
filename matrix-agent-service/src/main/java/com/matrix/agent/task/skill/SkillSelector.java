@@ -49,6 +49,8 @@ public final class SkillSelector {
         boolean bilibili = ExplicitMediaTarget.mentions(request.getText(), MediaApp.BILIBILI);
         boolean qqmusic = ExplicitMediaTarget.mentions(request.getText(), MediaApp.QQMUSIC);
         boolean mediaAction = text.contains("播放") || text.contains("暂停")
+                || text.contains("听") || text.startsWith("放") || text.contains("首歌")
+                || text.matches(".*\\b(play|listen|song|songs)\\b.*")
                 || text.contains("下一首") || text.contains("上一首")
                 || text.contains("切歌") || text.contains("切换媒体")
                 || text.contains("的歌") || text.contains("歌曲")

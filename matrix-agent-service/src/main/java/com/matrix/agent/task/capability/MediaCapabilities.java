@@ -48,11 +48,18 @@ public final class MediaCapabilities {
                 CanonicalSchema.object()
                         .property("position_ms", CanonicalSchema.integer().minimum(0).build())
                         .required("position_ms").additionalProperties(false).build()));
-        registry.register(write(QQ_SEARCH, "在 QQ 音乐中搜索歌曲，参数 query 为歌名和/或歌手；返回候选及唯一精确匹配时的 media.confirmable_index，不播放。需用户启用 QQ 音乐搜索与选曲辅助功能", 12_000,
+        registry.register(write(QQ_SEARCH, "在 QQ 音乐搜索歌曲，不播放。query 为模型根据用户语义生成的搜索词；artist、title 为用户指定的歌手和完整歌名，未指定时省略或填空字符串，不得猜测。返回真实候选，只有指定歌名唯一精确匹配时返回 media.confirmable_index，等待用户下一轮确认。需启用搜索与选曲辅助功能", 12_000,
                 VerifyMethod.NONE, true,
                 CanonicalSchema.object()
                         .property("query", CanonicalSchema.string()
-                                .minLength(1).maxLength(64).build())
+                                .description("搜索关键词，保留完整歌名及版本信息；歌手和歌名之间可用空格")
+                                .minLength(1).maxLength(64).sensitive(true).build())
+                        .property("artist", CanonicalSchema.string()
+                                .description("用户指定的歌手，未指定时省略或填空字符串")
+                                .maxLength(64).sensitive(true).build())
+                        .property("title", CanonicalSchema.string()
+                                .description("用户指定的完整歌名，保留歌名中的的字和版本后缀；未指定时省略或填空字符串")
+                                .maxLength(64).sensitive(true).build())
                         .required("query").additionalProperties(false).build()));
         registry.register(write(QQ_PLAY_RESULT, "仅在用户新一轮明确指定歌曲/序号，或对唯一匹配项回复肯定确认后播放；参数 index 为先前搜索结果编号", 15_000,
                 VerifyMethod.READBACK_FIELD, false,

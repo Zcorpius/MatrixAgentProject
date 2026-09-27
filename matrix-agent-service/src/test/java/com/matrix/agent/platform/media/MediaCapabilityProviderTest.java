@@ -23,6 +23,58 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MediaCapabilityProviderTest {
+    @Test public void modelEntitiesGroundConfirmationWithoutReparsingUserPhrasing() {
+        QQMusicUiPort ui = new QQMusicUiPort() {
+            @Override public SearchPage search(String query, LaunchContext context) {
+                return new SearchPage(query, 1L, List.of(
+                        new Candidate(1, "消失的月光", "李健·李健"),
+                        new Candidate(2, "消失的月光-乐心制作", "李健")));
+            }
+            @Override public void select(SearchPage page, Candidate candidate, LaunchContext context) {
+                throw new AssertionError("search must not play");
+            }
+        };
+        MediaCapabilityProvider provider = new MediaCapabilityProvider(app -> true,
+                app -> { throw new AssertionError("search needs no media session"); }, new FakeLaunch(), ui);
+        AgentRequest request = AgentRequest.builder("我想听他唱的那首月光，歌名是消失的月光", Actor.DRIVER)
+                .sessionId("semantic-search").build();
+        var result = provider.execute(request, new ToolCall(MediaCapabilities.QQ_SEARCH,
+                Map.of("query", "李健 消失的月光", "artist", "李健", "title", "消失的月光")));
+        assertEquals(ToolResult.Status.SUCCESS, result.getStatus());
+        assertEquals(1, result.getObservedState().get("media.confirmable_index"));
+        var blocked = provider.execute(request,
+                new ToolCall(MediaCapabilities.QQ_PLAY_RESULT, Map.of("index", 1)));
+        assertEquals("SELECTION_NOT_CONFIRMED", blocked.getObservedState().get("media.error_code"));
+    }
+
+    @Test public void failedReplacementSearchDoesNotLeaveOldConfirmationArmed() {
+        AtomicBoolean failSearch = new AtomicBoolean();
+        QQMusicUiPort ui = new QQMusicUiPort() {
+            @Override public SearchPage search(String query, LaunchContext context) throws MediaPlatformException {
+                if (failSearch.get()) throw new MediaPlatformException("SEARCH_UI_CHANGED");
+                return new SearchPage(query, 1L, List.of(new Candidate(1, "传奇", "李健·似水流年")));
+            }
+            @Override public void select(SearchPage page, Candidate candidate, LaunchContext context) {
+                throw new AssertionError("expired selection");
+            }
+        };
+        MediaCapabilityProvider provider = new MediaCapabilityProvider(app -> true,
+                app -> { throw new AssertionError(); }, new FakeLaunch(), ui);
+        var first = AgentRequest.builder("播放李健的传奇", Actor.DRIVER).sessionId("replace-search").build();
+        provider.execute(first, new ToolCall(MediaCapabilities.QQ_SEARCH,
+                Map.of("query", "李健 传奇", "artist", "李健", "title", "传奇")));
+        assertTrue(provider.hasPendingConfirmation("replace-search"));
+        failSearch.set(true);
+        var next = AgentRequest.builder("换个歌", Actor.DRIVER).sessionId("replace-search").build();
+        assertEquals(ToolResult.Status.EXECUTION_FAILED, provider.execute(next,
+                new ToolCall(MediaCapabilities.QQ_SEARCH, Map.of("query", "晴天"))).getStatus());
+        assertFalse(provider.hasPendingConfirmation("replace-search"));
+        var yes = AgentRequest.builder("是", Actor.DRIVER).sessionId("replace-search").build();
+        assertEquals("SEARCH_CONTEXT_EXPIRED", provider.execute(yes,
+                new ToolCall(MediaCapabilities.QQ_PLAY_RESULT, Map.of("index", 1)))
+                .getObservedState().get("media.error_code"));
+    }
+
     @Test public void missingAppIsProviderFailureWithStructuredCode() {
         MediaCapabilityProvider provider = new MediaCapabilityProvider(app -> false,
                 app -> { throw new AssertionError("session must not be queried"); },
@@ -153,10 +205,16 @@ public final class MediaCapabilityProviderTest {
         AgentRequest searchRequest = AgentRequest.builder("播放李健的传奇", Actor.DRIVER)
                 .sessionId("confirmation-conversation").build();
         ToolResult search = provider.execute(searchRequest,
-                new ToolCall(MediaCapabilities.QQ_SEARCH, Map.of("query", "李健 传奇")));
+                new ToolCall(MediaCapabilities.QQ_SEARCH,
+                        Map.of("query", "李健 传奇", "artist", "李健", "title", "传奇")));
         assertEquals(ToolResult.Status.SUCCESS, search.getStatus());
         assertEquals(1, search.getObservedState().get("media.confirmable_index"));
         assertTrue(provider.hasPendingConfirmation("confirmation-conversation"));
+        assertFalse(selected.get());
+
+        ToolResult prematureResume = provider.execute(searchRequest, call(MediaCapabilities.QQ_PLAY));
+        assertEquals("SELECTION_REQUIRES_RESULT",
+                prematureResume.getObservedState().get("media.error_code"));
         assertFalse(selected.get());
 
         AgentRequest repeated = AgentRequest.builder("播放李健的传奇", Actor.DRIVER)
