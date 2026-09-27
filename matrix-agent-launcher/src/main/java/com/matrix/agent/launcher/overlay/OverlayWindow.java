@@ -20,6 +20,7 @@ import com.matrix.agent.api.handoff.HandoffProtocol;
 import com.matrix.agent.launcher.R;
 import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
 import com.matrix.agent.launcher.overlay.pet.YukinoPetView;
+import com.matrix.agent.api.interaction.OverlayPointerSample;
 
 /** Android window mechanics only. Owner and conversation state live in the controller/presenter. */
 public final class OverlayWindow implements AutoCloseable {
@@ -58,6 +59,7 @@ public final class OverlayWindow implements AutoCloseable {
     private int bubbleX, bubbleY, panelX, panelY;
     private boolean bubblePositionInitialized, panelPositionInitialized;
     private int imeBottom;
+    private long ignoredPointerGesture = -1;
     private final int foreground, muted;
 
     public OverlayWindow(Context appContext, Actions actions, PetSpriteRepository petSprites,
@@ -242,7 +244,9 @@ public final class OverlayWindow implements AutoCloseable {
                 case MotionEvent.ACTION_DOWN -> {
                     cancel();
                     gesture.begin(event.getRawX(), event.getRawY(), layout.x, layout.y);
+                    if (!panelTarget) ignoredPointerGesture = event.getDownTime();
                     if (!panelTarget) bubble.prepareDrag();
+                    if (!panelTarget) lookAt(event.getRawX(), event.getRawY());
                     yield true;
                 }
                 case MotionEvent.ACTION_MOVE -> { move(event); yield true; }
@@ -266,11 +270,12 @@ public final class OverlayWindow implements AutoCloseable {
         }
         void cancel() {
             gesture.cancel();
-            if (!panelTarget) bubble.endDrag();
+            if (!panelTarget) { bubble.endDrag(); bubble.cancelLook(); }
         }
         private void move(MotionEvent event) {
             var position = gesture.move(event.getRawX(), event.getRawY());
             if (position == null) return;
+            if (!panelTarget) ignoredPointerGesture = event.getDownTime();
             if (panelTarget) { panelX = position.x(); panelY = position.y(); }
             else {
                 bubbleX = position.x(); bubbleY = position.y();
@@ -287,6 +292,25 @@ public final class OverlayWindow implements AutoCloseable {
     public boolean visible() { return attached && !hidden; }
     public boolean expanded() { return expanded; }
     public boolean editing() { return editing; }
+    public boolean interactive() { return interactive; }
+    public boolean petVisible() { return visible() && interactive && !expanded; }
+    public void wave() { if (petVisible()) bubble.wave(); }
+    public void cancelLook() { bubble.cancelLook(); }
+    public void pointer(OverlayPointerSample sample) {
+        if (!petVisible() || sample.gestureId() == ignoredPointerGesture) return;
+        var display = context.getSystemService(android.hardware.display.DisplayManager.class)
+                .getDisplay(android.view.Display.DEFAULT_DISPLAY);
+        if (sample.phase() == OverlayPointerSample.CANCEL || display == null
+                || display.getRotation() != sample.rotation()) { bubble.cancelLook(); return; }
+        lookAt(sample.x(), sample.y());
+        if (sample.phase() == OverlayPointerSample.UP) bubble.releaseLook();
+    }
+    private void lookAt(float x, float y) {
+        int[] origin = new int[2];
+        bubble.getLocationOnScreen(origin);
+        // The head is above the body center in the 192x208 source artwork.
+        bubble.lookAt(x - origin[0] - bubble.getWidth() * .5f, y - origin[1] - bubble.getHeight() * .37f);
+    }
     /** A mounted candidate cannot issue commands against the previous owner before ACK commit. */
     public void setInteractive(boolean value) {
         interactive = value;
@@ -294,6 +318,7 @@ public final class OverlayWindow implements AutoCloseable {
         root.setImportantForAccessibility(value ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
                 : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         update();
+        actions.changed();
     }
     public void attach(boolean hidden) {
         this.hidden = hidden;

@@ -29,6 +29,11 @@ public final class OverlayController implements HandoffClient.Presentation, Over
     private final HandoffDiagnostics diagnostics;
     private final Context context;
     private final PetSpriteRepository petSprites;
+    private final OverlayPointerSource pointers;
+    private final com.matrix.agent.launcher.overlay.pet.PetGreetingPolicy greetings =
+            new com.matrix.agent.launcher.overlay.pet.PetGreetingPolicy();
+    private OverlayPointerSource.Observation pointerObservation;
+    private OverlayWindow observedWindow;
     private final LauncherHostGateway gateway;
     private final com.matrix.agent.launcher.data.OverlayConversationSource repository;
     private final OverlayDraftStore drafts = new OverlayDraftStore();
@@ -96,6 +101,12 @@ public final class OverlayController implements HandoffClient.Presentation, Over
 
     public OverlayController(Context context, LauncherHostGateway gateway,
             OverlayConversationSource repository, HandoffDiagnostics diagnostics, PetSpriteRepository petSprites) {
+        this(context, gateway, repository, diagnostics, petSprites, OverlayPointerSource.NONE);
+    }
+    public OverlayController(Context context, LauncherHostGateway gateway,
+            OverlayConversationSource repository, HandoffDiagnostics diagnostics, PetSpriteRepository petSprites,
+            OverlayPointerSource pointers) {
+        this.pointers = pointers;
         this.diagnostics = diagnostics;
         this.petSprites = petSprites;
         this.context = context.getApplicationContext(); this.gateway = gateway; this.repository = repository;
@@ -412,6 +423,7 @@ public final class OverlayController implements HandoffClient.Presentation, Over
         advanceQueuedRound(); publish();
     }
     private void publish() {
+        reconcilePetInteraction();
         Preparation candidate = preparing;
         if (candidate != null && candidate.valid() && isPresentationReady(candidate.result)) {
             snapshot = new Snapshot(OverlayBinding.from(candidate.request), visibleConversation,
@@ -428,6 +440,22 @@ public final class OverlayController implements HandoffClient.Presentation, Over
         var guard = context.getSystemService(KeyguardManager.class);
         return Settings.canDrawOverlays(context) && (guard == null || !guard.isKeyguardLocked());
     }
+    private void reconcilePetInteraction() {
+        String visibleId = connected && window != null && window.visible() && window.interactive() && presenter != null
+                ? presenter.binding().conversationId() : null;
+        if (greetings.visibility(visibleId, SystemClock.elapsedRealtime()) && window != null) window.wave();
+        OverlayWindow target = visibleId != null && window.petVisible() ? window : null;
+        if (observedWindow == target) return;
+        stopPointerObservation();
+        observedWindow = target;
+        if (target != null) pointerObservation = pointers.observe(target::pointer, target::cancelLook);
+    }
+    private void stopPointerObservation() {
+        if (pointerObservation != null) pointerObservation.close();
+        pointerObservation = null;
+        if (observedWindow != null) observedWindow.cancelLook();
+        observedWindow = null;
+    }
     private void clear(boolean userDismissed) {
         Log.i("MatrixOverlay", "clear userDismissed=" + userDismissed);
         if (userDismissed && presenter != null && presenter.binding().runtimeId() != null) {
@@ -438,6 +466,7 @@ public final class OverlayController implements HandoffClient.Presentation, Over
         releaseCurrent(); bindingVersion++; queuedRounds.clear(); publish();
     }
     private void releaseCurrent() {
+        stopPointerObservation();
         committedAsPrepared = false;
         ticket = null; cancelRevealExpiry();
         if (window != null) window.close(); window = null;

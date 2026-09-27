@@ -47,6 +47,17 @@ record PetSpriteCatalog(int width, int height, Map<String, List<Frame>> animatio
             animations.put(key, List.copyOf(values));
         }
         animations.put("neutral", List.of(new Frame(frameFile(root.getJSONObject("neutral")), 1)));
+        JSONArray directions = root.getJSONObject("look").getJSONArray("frames");
+        if (directions.length() != 16) throw new JSONException("Expected 16 look directions");
+        List<Frame> look = new ArrayList<>(16);
+        for (int i = 0; i < 16; i++) {
+            JSONObject direction = directions.getJSONObject(i);
+            if (direction.getDouble("angleDegreesClockwiseFromUp") != i * 22.5) {
+                throw new JSONException("Unexpected look direction order");
+            }
+            look.add(new Frame(frameFile(direction), 1));
+        }
+        animations.put("look", List.copyOf(look));
         for (var motion : PetPresentation.Motion.values()) {
             if (!animations.containsKey(motion.assetKey())) throw new JSONException("Missing motion: " + motion);
         }

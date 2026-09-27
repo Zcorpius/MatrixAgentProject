@@ -53,6 +53,10 @@ public final class LauncherExecutorRegistry {
     public ScheduledExecutorService polling() { return polling; }
     public ExecutorService draftCommands() { return draftCommands; }
     public ExecutorService petDecoding() { return petDecoding; }
+    private final ExecutorService petInteractions = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), daemonFactory("matrix-launcher-pointer"),
+            new ThreadPoolExecutor.AbortPolicy());
+    public ExecutorService petInteractions() { return petInteractions; }
 
     public void shutdown() {
         handoffCalls.shutdownNow();
@@ -60,6 +64,7 @@ public final class LauncherExecutorRegistry {
         polling.shutdownNow();
         draftCommands.shutdownNow();
         petDecoding.shutdownNow();
+        petInteractions.shutdownNow();
     }
 
     private static ThreadFactory daemonFactory(String prefix) {

@@ -31,7 +31,8 @@ public final class ParcelSchema {
     // v10 adds the schedule domain. Existing DTO field order and enum values remain unchanged.
     // v11 appends per-channel delivery facts to ScheduleRunInfo.
     // v12 appends frozen workflow identity and safe step input/timing summaries.
-    public static final int CURRENT = 12;
+    // v13 adds Launcher-only ephemeral pointer observation for the visible overlay.
+    public static final int CURRENT = 13;
 
     private ParcelSchema() {
     }
