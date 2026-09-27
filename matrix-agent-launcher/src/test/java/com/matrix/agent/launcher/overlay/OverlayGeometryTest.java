@@ -4,6 +4,12 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 public final class OverlayGeometryTest {
+    @Test public void petSnapsUsingItsActualWidthAndCenter() {
+        assertEquals(8, OverlayGeometry.snapToEdge(20, 400, 96, 8));
+        assertEquals(296, OverlayGeometry.snapToEdge(300, 400, 96, 8));
+        assertEquals(296, OverlayGeometry.snapToEdge(170, 400, 96, 8));
+        assertEquals(0, OverlayGeometry.snapToEdge(100, 50, 96, 8));
+    }
     @Test public void ordinaryPanelUsesSixtyPercent() {
         assertEquals(600, OverlayGeometry.panelHeight(1000, 0, 48));
     }

@@ -1,0 +1,5 @@
+<resources>
+    <!-- Match the 192:208 sprite cells; all actions share the same stable canvas. -->
+    <dimen name="overlay_pet_width">96dp</dimen>
+    <dimen name="overlay_pet_height">104dp</dimen>
+</resources>

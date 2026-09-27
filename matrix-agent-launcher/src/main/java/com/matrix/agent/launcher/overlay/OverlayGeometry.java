@@ -3,6 +3,10 @@ package com.matrix.agent.launcher.overlay;
 /** Pixel geometry independent of WindowManager and density. Available space is a hard cap. */
 final class OverlayGeometry {
     private OverlayGeometry() {}
+    static int snapToEdge(int x, int displayWidth, int windowWidth, int margin) {
+        int preferred = x + windowWidth / 2 < displayWidth / 2 ? margin : displayWidth - windowWidth - margin;
+        return clampPosition(preferred, displayWidth, windowWidth, margin, margin);
+    }
     static int clampPosition(int preferred, int displaySize, int windowSize, int before, int after) {
         int end = Math.max(0, displaySize - windowSize - Math.max(0, after));
         int start = Math.min(Math.max(0, before), end);

@@ -1,0 +1,110 @@
+> Task :matrix-agent-launcher:preBuild UP-TO-DATE
+> Task :matrix-agent-launcher:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :matrix-agent-service-lib:generateContractHash UP-TO-DATE
+> Task :matrix-agent-service-lib:preBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugBuildConfig UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugNavigationResources UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugAidl UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:packageDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:parseDebugLocalResources UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-service-lib:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugResources
+> Task :matrix-agent-service-lib:compileDebugJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:writeDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugManifest UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugLibraryResources UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugJavaRes NO-SOURCE
+> Task :matrix-agent-service-lib:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugJniLibFolders UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugNativeLibs NO-SOURCE
+> Task :matrix-agent-service-lib:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :matrix-agent-service-lib:checkDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:stripDebugDebugSymbols NO-SOURCE
+> Task :matrix-agent-service-lib:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDebugAnnotations UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:prepareDebugArtProfile UP-TO-DATE
+> Task :matrix-agent-service-lib:prepareLintJarForPublish UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugJavaResource UP-TO-DATE
+> Task :matrix-agent-service-lib:syncDebugLibJars UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleDebugLocalLintAar UP-TO-DATE
+> Task :matrix-agent-service-lib:createFullJarDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:writeDebugLintModelMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugLintModel UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugAndroidTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-launcher:packageDebugResources
+> Task :matrix-agent-launcher:processDebugNavigationResources
+> Task :matrix-agent-launcher:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugAssets UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugAssets UP-TO-DATE
+> Task :matrix-agent-launcher:compressDebugAssets UP-TO-DATE
+> Task :matrix-agent-launcher:desugarDebugFileDependencies UP-TO-DATE
+> Task :matrix-agent-launcher:checkDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugNavigationResources UP-TO-DATE
+> Task :matrix-agent-launcher:mapDebugSourceSetPaths
+> Task :matrix-agent-launcher:parseDebugLocalResources
+> Task :matrix-agent-launcher:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-launcher:compileDebugJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-launcher:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :matrix-agent-launcher:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugMainManifest UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugManifest UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugManifestForPackage UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugJavaRes NO-SOURCE
+> Task :matrix-agent-launcher:mergeDebugJavaResource UP-TO-DATE
+> Task :matrix-agent-launcher:checkDebugDuplicateClasses UP-TO-DATE
+> Task :matrix-agent-launcher:mergeExtDexDebug UP-TO-DATE
+> Task :matrix-agent-launcher:mergeLibDexDebug UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugJniLibFolders UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugNativeLibs NO-SOURCE
+> Task :matrix-agent-launcher:stripDebugDebugSymbols NO-SOURCE
+> Task :matrix-agent-launcher:validateSigningDebug UP-TO-DATE
+> Task :matrix-agent-launcher:writeDebugAppMetadata UP-TO-DATE
+> Task :matrix-agent-launcher:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :matrix-agent-launcher:preDebugAndroidTestBuild SKIPPED
+> Task :matrix-agent-launcher:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugLintReportModel
+> Task :matrix-agent-launcher:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugResources
+> Task :matrix-agent-launcher:processDebugResources
+> Task :matrix-agent-launcher:dexBuilderDebug UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :matrix-agent-launcher:mergeProjectDexDebug UP-TO-DATE
+> Task :matrix-agent-launcher:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :matrix-agent-launcher:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-launcher:packageDebug
+> Task :matrix-agent-launcher:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :matrix-agent-launcher:assembleDebug
+> Task :matrix-agent-launcher:lintAnalyzeDebug
+
+> Task :matrix-agent-launcher:lintReportDebug
+Wrote HTML report to file:///Users/zhangyongbin/Desktop/Learn/AI/MatrixAgentProject/matrix-agent-launcher/build/reports/lint-results-debug.html
+
+> Task :matrix-agent-launcher:lintDebug
+
+BUILD SUCCESSFUL in 1s
+83 actionable tasks: 12 executed, 71 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.1/userguide/configuration_cache_enabling.html

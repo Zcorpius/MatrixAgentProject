@@ -1,0 +1,4 @@
+Desktop label: Matrix AI
+Tapped bounds: [437,861][644,1236]
+    topResumedActivity=ActivityRecord{57887154 u0 com.matrix.agent.launcher/.LauncherActivity t397}
+  ResumedActivity: ActivityRecord{57887154 u0 com.matrix.agent.launcher/.LauncherActivity t397}

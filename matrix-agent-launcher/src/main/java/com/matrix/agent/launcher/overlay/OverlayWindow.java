@@ -18,6 +18,8 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import com.matrix.agent.api.handoff.HandoffProtocol;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
+import com.matrix.agent.launcher.overlay.pet.YukinoPetView;
 
 /** Android window mechanics only. Owner and conversation state live in the controller/presenter. */
 public final class OverlayWindow implements AutoCloseable {
@@ -38,7 +40,8 @@ public final class OverlayWindow implements AutoCloseable {
     private final WindowManager windows;
     private final Actions actions;
     private final FrameLayout root;
-    private final TextView bubble, title, progress, notice, gate;
+    private final BubbleView bubble;
+    private final TextView title, progress, notice, gate;
     private final LinearLayout panel, heading, body, composer, commands;
     private final PanelDragHandle dragHandle;
     private final TextView dragHint;
@@ -57,10 +60,8 @@ public final class OverlayWindow implements AutoCloseable {
     private int imeBottom;
     private final int foreground, muted;
 
-    public OverlayWindow(Context appContext, Actions actions) {
-        this(appContext, actions, ignored -> {});
-    }
-    public OverlayWindow(Context appContext, Actions actions, java.util.function.LongConsumer firstDraw) {
+    public OverlayWindow(Context appContext, Actions actions, PetSpriteRepository petSprites,
+            java.util.function.LongConsumer firstDraw) {
         this.firstDraw = firstDraw;
         this.actions = actions;
         var display = appContext.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
@@ -94,16 +95,11 @@ public final class OverlayWindow implements AutoCloseable {
         });
         root.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(expanded ? 20 : 28));
+                if (expanded) outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(20));
+                else outline.setEmpty();
             }
         });
-        root.setElevation(dp(12));
-        bubble = new BubbleView(context);
-        bubble.setText(context.getString(R.string.overlay_bubble_marker, "···"));
-        bubble.setTextSize(16); bubble.setTextColor(color(R.color.overlay_on_header));
-        bubble.setTypeface(null, Typeface.BOLD);
-        bubble.setGravity(Gravity.CENTER);
-        bubble.setBackground(background(color(R.color.overlay_header), 28, color(R.color.overlay_active)));
+        bubble = new BubbleView(context, petSprites);
         bubble.setContentDescription(context.getString(R.string.overlay_bubble_description,
                 context.getString(R.string.overlay_sync_task)));
         root.addView(bubble, new FrameLayout.LayoutParams(-1, -1));
@@ -184,7 +180,7 @@ public final class OverlayWindow implements AutoCloseable {
         send = button(R.string.overlay_send, actions::send, color(R.color.overlay_card), color(R.color.overlay_send));
         send.setTypeface(null, Typeface.BOLD);
         commands.addView(send); body.addView(commands);
-        layout = new WindowManager.LayoutParams(dp(56), dp(56),
+        layout = new WindowManager.LayoutParams(petWidth(), petHeight(),
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
@@ -228,9 +224,10 @@ public final class OverlayWindow implements AutoCloseable {
         @Override public boolean performClick() { return interactive && super.performClick(); }
         @Override public boolean onTouchEvent(MotionEvent event) { return drag.touch(this, event); }
     }
-    private final class BubbleView extends androidx.appcompat.widget.AppCompatTextView {
+    private final class BubbleView extends YukinoPetView {
         private final WindowDrag drag = new WindowDrag(false);
-        BubbleView(Context context) { super(context); }
+        BubbleView(Context context, PetSpriteRepository sprites) { super(context, sprites); }
+        void cancelDrag() { drag.cancel(); }
         @Override public boolean performClick() { return interactive && super.performClick(); }
         @Override public boolean onTouchEvent(MotionEvent event) { return drag.touch(this, event); }
     }
@@ -240,35 +237,45 @@ public final class OverlayWindow implements AutoCloseable {
                 ViewConfiguration.get(context).getScaledTouchSlop());
         WindowDrag(boolean panelTarget) { this.panelTarget = panelTarget; }
         boolean touch(View target, MotionEvent event) {
-            if (!interactive || hidden || expanded != panelTarget) { gesture.cancel(); return false; }
+            if (!interactive || hidden || expanded != panelTarget) { cancel(); return false; }
             return switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN -> {
+                    cancel();
                     gesture.begin(event.getRawX(), event.getRawY(), layout.x, layout.y);
+                    if (!panelTarget) bubble.prepareDrag();
                     yield true;
                 }
                 case MotionEvent.ACTION_MOVE -> { move(event); yield true; }
                 case MotionEvent.ACTION_UP -> {
                     move(event);
                     var completion = gesture.finish();
+                    if (!panelTarget) bubble.endDrag();
                     if (completion == OverlayDragGesture.Completion.TAP) target.performClick();
                     else if (completion == OverlayDragGesture.Completion.DRAG && !panelTarget) {
-                        bubbleX = layout.x < bounds().width() / 2 ? dp(8) : bounds().width() - dp(64);
+                        bubbleX = OverlayGeometry.snapToEdge(layout.x, bounds().width(), layout.width, dp(8));
                         update();
                     }
                     yield true;
                 }
                 // Do not transfer a gesture to another finger or turn a cancelled drag into a tap.
                 case MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
-                    gesture.cancel(); yield true;
+                    cancel(); yield true;
                 }
                 default -> true;
             };
+        }
+        void cancel() {
+            gesture.cancel();
+            if (!panelTarget) bubble.endDrag();
         }
         private void move(MotionEvent event) {
             var position = gesture.move(event.getRawX(), event.getRawY());
             if (position == null) return;
             if (panelTarget) { panelX = position.x(); panelY = position.y(); }
-            else { bubbleX = position.x(); bubbleY = position.y(); }
+            else {
+                bubbleX = position.x(); bubbleY = position.y();
+                bubble.drag(gesture.movingLeft());
+            }
             update();
             // Persist the clamped position, so rendering or reopening cannot restore off-screen coordinates.
             if (panelTarget) { panelX = layout.x; panelY = layout.y; }
@@ -283,6 +290,7 @@ public final class OverlayWindow implements AutoCloseable {
     /** A mounted candidate cannot issue commands against the previous owner before ACK commit. */
     public void setInteractive(boolean value) {
         interactive = value;
+        if (!value) bubble.cancelDrag();
         root.setImportantForAccessibility(value ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
                 : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         update();
@@ -295,12 +303,13 @@ public final class OverlayWindow implements AutoCloseable {
     }
     public void setHidden(boolean value) {
         if (hidden == value) return;
-        if (value) { dismissActionsMenu(); finishEditing(); }
+        if (value) { bubble.cancelDrag(); dismissActionsMenu(); finishEditing(); }
         hidden = value;
         if (!value) visibleSince = android.os.SystemClock.elapsedRealtime();
         update(); actions.changed();
     }
     public void expand() {
+        bubble.cancelDrag();
         expanded = true; root.invalidateOutline();
         bubble.setVisibility(View.GONE); panel.setVisibility(View.VISIBLE);
         update(); actions.changed();
@@ -350,15 +359,8 @@ public final class OverlayWindow implements AutoCloseable {
         if (!input.getText().toString().equals(draft)) {
             applyingDraft = true; input.setText(draft); input.setSelection(input.length()); applyingDraft = false;
         }
-        String marker = switch (state.status()) {
-            case ConversationMessage.STATUS_COMPLETED -> "✓";
-            case ConversationMessage.STATUS_FAILED, ConversationMessage.STATUS_REJECTED,
-                    ConversationMessage.STATUS_EXECUTION_UNKNOWN -> "!";
-            case ConversationMessage.STATUS_CANCELLED -> "–";
-            default -> "···";
-        };
-        bubble.setText(context.getString(R.string.overlay_bubble_marker, marker));
-        bubble.setContentDescription(context.getString(R.string.overlay_bubble_description, state.progress()));
+        bubble.present(state.primaryMessageId(), OverlayPetState.from(state));
+        bubble.setContentDescription(context.getString(R.string.overlay_bubble_description, progress.getText()));
     }
     public void update() {
         if (!attached) return;
@@ -369,11 +371,11 @@ public final class OverlayWindow implements AutoCloseable {
     private void configure() {
         Rect area = bounds();
         if (!bubblePositionInitialized) {
-            bubbleX = area.width() - dp(64); bubbleY = area.height() / 3;
+            bubbleX = area.width() - petWidth() - dp(8); bubbleY = area.height() / 3;
             bubblePositionInitialized = true;
         }
-        layout.width = expanded ? Math.min(dp(420), (int) (area.width() * .88f)) : dp(56);
-        layout.height = expanded ? OverlayGeometry.panelHeight(area.height(), imeBottom, dp(48)) : dp(56);
+        layout.width = expanded ? Math.min(dp(420), (int) (area.width() * .88f)) : petWidth();
+        layout.height = expanded ? OverlayGeometry.panelHeight(area.height(), imeBottom, dp(48)) : petHeight();
         if (expanded) applyCompactLayout(layout.height < dp(320));
         if (expanded && !panelPositionInitialized) {
             panelX = (area.width() - layout.width) / 2; panelY = bubbleY;
@@ -387,6 +389,8 @@ public final class OverlayWindow implements AutoCloseable {
                 | (editing && !hidden ? 0 : WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
                 | (hidden || !interactive ? WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE : 0);
         root.setVisibility(hidden ? View.INVISIBLE : View.VISIBLE);
+        root.setElevation(expanded ? dp(12) : 0);
+        bubble.setPlaybackEnabled(!hidden && !expanded && interactive);
     }
     private Rect bounds() {
         if (Build.VERSION.SDK_INT >= 30) return windows.getMaximumWindowMetrics().getBounds();
@@ -482,8 +486,11 @@ public final class OverlayWindow implements AutoCloseable {
         return value;
     }
     private int color(int resource) { return context.getColor(resource); }
+    private int petWidth() { return context.getResources().getDimensionPixelSize(R.dimen.overlay_pet_width); }
+    private int petHeight() { return context.getResources().getDimensionPixelSize(R.dimen.overlay_pet_height); }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
     @Override public void close() {
+        bubble.close();
         dismissActionsMenu(); finishEditing();
         if (attached) {
             attached = false;

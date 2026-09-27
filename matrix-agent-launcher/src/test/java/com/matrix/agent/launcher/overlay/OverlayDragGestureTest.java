@@ -38,4 +38,39 @@ public final class OverlayDragGestureTest {
         assertEquals(new OverlayDragGesture.Position(18, 54), gesture.move(110, 230));
         assertEquals(DRAG, gesture.finish());
     }
+    @Test public void facingFollowsReversalBeforeThePointerReturnsToDownPosition() {
+        gesture.begin(200, 200, 20, 40);
+        gesture.move(120, 200);
+        assertTrue(gesture.movingLeft());
+        gesture.move(150, 200);
+        assertFalse(gesture.movingLeft());
+        gesture.move(130, 200);
+        assertTrue(gesture.movingLeft());
+    }
+    @Test public void directionHasHysteresisButAccumulatesSmallReverseMoves() {
+        gesture.begin(200, 200, 20, 40);
+        gesture.move(120, 200);
+        for (int x : new int[]{123, 126, 124, 128}) {
+            gesture.move(x, 200);
+            assertTrue(gesture.movingLeft());
+        }
+        gesture.move(129, 200);
+        assertFalse(gesture.movingLeft());
+    }
+    @Test public void verticalDragRetainsLastFacingAcrossGestures() {
+        gesture.begin(200, 200, 20, 40);
+        gesture.move(120, 200);
+        gesture.finish();
+        gesture.begin(300, 100, 8, 40);
+        assertNotNull(gesture.move(300, 200));
+        assertTrue(gesture.movingLeft());
+    }
+    @Test public void tapsAndCancelledMovesCannotChangeFacing() {
+        gesture.begin(200, 200, 20, 40);
+        assertNull(gesture.move(194, 199));
+        assertFalse(gesture.movingLeft());
+        gesture.cancel();
+        assertNull(gesture.move(100, 200));
+        assertFalse(gesture.movingLeft());
+    }
 }

@@ -103,7 +103,7 @@ public final class LauncherActivity extends AppCompatActivity {
         overlaySettings.setBackgroundColor(Color.TRANSPARENT);
         overlaySettings.setOnClickListener(view -> new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("跨应用悬浮窗")
-                .setMessage("Agent 操作其他应用时，以悬浮球保留任务入口。点按可查看进度、补充输入或取消任务。可随时关闭，不影响任务继续执行。")
+                .setMessage("Agent 操作其他应用时，以雪乃形象保留任务入口。点按可查看进度、补充输入或取消任务，拖动可移动位置。可随时关闭，不影响任务继续执行。")
                 .setPositiveButton(android.provider.Settings.canDrawOverlays(this) ? "管理权限" : "开启悬浮窗",
                         (dialog, which) -> startActivity(new android.content.Intent(
                                 android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
