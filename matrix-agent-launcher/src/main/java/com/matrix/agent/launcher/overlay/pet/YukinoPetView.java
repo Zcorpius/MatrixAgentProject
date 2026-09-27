@@ -38,7 +38,10 @@ public class YukinoPetView extends View implements AutoCloseable {
     private String roundId;
     private PetPresentation presentation = new PetPresentation(Motion.IDLE, Indicator.NONE);
     private Motion playing = Motion.IDLE;
-    private Motion dragMotion;
+    private enum Attention { NONE, DRAG, LOOK, WAVE }
+    private Attention attention = Attention.NONE;
+    private int lookDirection = -1;
+    private final Runnable releaseLook = this::cancelLook;
     private record Resume(Motion motion, PetSpriteRepository.Clip clip, int frame, long elapsedMs) {}
     private Resume suspended;
     private int frame;
@@ -76,8 +79,11 @@ public class YukinoPetView extends View implements AutoCloseable {
         presentation = value;
         // A completed one-shot remains completed across history, draft, and connection updates.
         if (newMotion) {
-            if (dragMotion == null) select(value.motion());
-            else suspended = new Resume(value.motion(), null, 0, 0);
+            if (attention == Attention.NONE) select(value.motion());
+            else {
+                suspended = new Resume(value.motion(), null, 0, 0);
+                if (attention != Attention.DRAG && important(value.motion())) endAttention();
+            }
         }
         invalidate();
     }
@@ -87,24 +93,72 @@ public class YukinoPetView extends View implements AutoCloseable {
         if (closed) return;
         sprites.load(Motion.RUN_LEFT, ignored -> {});
         sprites.load(Motion.RUN_RIGHT, ignored -> {});
+        sprites.load(Motion.LOOK, ignored -> {});
     }
 
     /** Temporary gesture presentation. Task updates keep their badge and become the next resume target. */
     public void drag(boolean movingLeft) {
         if (closed || !playbackEnabled) return;
         Motion motion = movingLeft ? Motion.RUN_LEFT : Motion.RUN_RIGHT;
-        if (dragMotion == motion) return;
-        if (dragMotion == null) {
+        if (attention == Attention.DRAG && playing == motion) return;
+        override(Attention.DRAG, motion, 0);
+    }
+
+    /** Direction frames are poses, not an animation timeline. */
+    public void lookAt(float dx, float dy) {
+        if (closed || !playbackEnabled || attention == Attention.DRAG || feedbackPending()) return;
+        main.removeCallbacks(releaseLook);
+        lookDirection = LookDirection.select(dx, dy, dp(12), attention == Attention.LOOK ? lookDirection : -1);
+        Motion motion = lookDirection < 0 ? Motion.NEUTRAL : Motion.LOOK;
+        int nextFrame = Math.max(0, lookDirection);
+        if (attention == Attention.LOOK && playing == motion) {
+            frame = nextFrame; invalidate(); return;
+        }
+        override(Attention.LOOK, motion, nextFrame);
+    }
+
+    public void releaseLook() {
+        if (attention == Attention.LOOK) {
+            main.removeCallbacks(releaseLook);
+            main.postDelayed(releaseLook, 800);
+        }
+    }
+
+    public void cancelLook() { if (attention == Attention.LOOK) endAttention(); }
+
+    public void wave() {
+        if (closed || !playbackEnabled || attention != Attention.NONE
+                || presentation.indicator() != Indicator.NONE || feedbackPending()) return;
+        override(Attention.WAVE, Motion.WAVING, 0);
+    }
+
+    private static boolean important(Motion motion) {
+        return motion == Motion.SUCCEEDED || motion == Motion.FAILED || motion == Motion.REVIEW;
+    }
+
+    private boolean feedbackPending() {
+        return attention == Attention.NONE && important(playing)
+                && (clip == null || elapsed() < clip.timeline().durationMs());
+    }
+
+    private void override(Attention next, Motion motion, int pose) {
+        main.removeCallbacks(releaseLook);
+        if (attention == Attention.NONE) {
             pause();
             suspended = new Resume(playing, clip, frame, elapsedBeforeRun);
         }
-        dragMotion = motion;
-        select(motion);
+        attention = next;
+        select(new Resume(motion, null, pose, 0));
     }
 
     public void endDrag() {
-        if (dragMotion == null) return;
-        dragMotion = null;
+        if (attention == Attention.DRAG) endAttention();
+    }
+
+    private void endAttention() {
+        main.removeCallbacks(releaseLook);
+        if (attention == Attention.NONE) return;
+        attention = Attention.NONE;
         Resume resume = suspended;
         suspended = null;
         select(resume);
@@ -112,7 +166,7 @@ public class YukinoPetView extends View implements AutoCloseable {
 
     public void setPlaybackEnabled(boolean enabled) {
         playbackEnabled = enabled;
-        if (!enabled) endDrag();
+        if (!enabled) endAttention();
         reconcilePlayback();
     }
 
@@ -138,6 +192,7 @@ public class YukinoPetView extends View implements AutoCloseable {
                 loading = null;
                 // Loading failure keeps a neutral, clickable entry; it must not abort a handoff.
                 clip = result.clip();
+                if (clip == null && attention != Attention.NONE) { endAttention(); return; }
                 reconcilePlayback();
                 invalidate();
             });
@@ -149,6 +204,7 @@ public class YukinoPetView extends View implements AutoCloseable {
         boolean visible = !closed && playbackEnabled && isAttachedToWindow() && isShown()
                 && getWindowVisibility() == VISIBLE;
         if (!visible || clip == null) { pause(); return; }
+        if (attention == Attention.LOOK) { pause(); invalidate(); return; }
         if (running) return;
         runStarted = SystemClock.uptimeMillis();
         running = true;
@@ -173,6 +229,7 @@ public class YukinoPetView extends View implements AutoCloseable {
         if (sample.finished()) {
             pause();
             if (playing.repeat() == Repeat.THEN_IDLE) select(Motion.IDLE);
+            else if (playing.repeat() == Repeat.RESUME) endAttention();
         } else main.postDelayed(tick, sample.nextFrameInMs());
     }
 
@@ -184,11 +241,11 @@ public class YukinoPetView extends View implements AutoCloseable {
     @Override public void onVisibilityAggregated(boolean visible) {
         super.onVisibilityAggregated(visible);
         if (visible) reconcilePlayback();
-        else { endDrag(); pause(); }
+        else { endAttention(); pause(); }
     }
 
     @Override protected void onDetachedFromWindow() {
-        endDrag();
+        endAttention();
         pause();
         super.onDetachedFromWindow();
     }
@@ -265,6 +322,7 @@ public class YukinoPetView extends View implements AutoCloseable {
         clip = null;
         poster = null;
         suspended = null;
-        dragMotion = null;
+        attention = Attention.NONE;
+        main.removeCallbacks(releaseLook);
     }
 }

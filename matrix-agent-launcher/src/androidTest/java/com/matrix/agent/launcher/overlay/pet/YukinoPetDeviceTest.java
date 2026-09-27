@@ -52,6 +52,9 @@ public final class YukinoPetDeviceTest {
                     case FAILED -> clip(Color.RED, Color.BLACK);
                     case RUN_LEFT -> clip(Color.rgb(255, 128, 0), Color.rgb(255, 192, 0));
                     case RUN_RIGHT -> clip(Color.rgb(128, 0, 255), Color.rgb(192, 0, 255));
+                    case WAVING -> clip(Color.LTGRAY, Color.WHITE);
+                    case LOOK -> clip(java.util.stream.IntStream.range(0, 16)
+                            .map(i -> Color.rgb(i * 16, 64, 128)).toArray());
                     default -> clip(Color.DKGRAY);
                 };
             });
@@ -274,6 +277,83 @@ public final class YukinoPetDeviceTest {
         assertEquals(1, snapshot().frame());
         runDecode(0);
         await(() -> snapshot().motion() == IDLE);
+    }
+
+    @Test public void lookIsAStaticPoseAndReleaseRestoresPausedTaskAfterEightHundredMs() {
+        runDecode(1); runDecode(0);
+        main(() -> pet.present("one", new PetPresentation(WORKING, NONE)));
+        runDecode(0);
+        await(() -> snapshot().frame() == 1);
+        main(() -> pet.lookAt(200, 0));
+        runDecode(0);
+        assertEquals(LOOK, snapshot().motion());
+        assertEquals(4, snapshot().frame());
+        assertFalse(snapshot().advancing());
+        SystemClock.sleep(400);
+        assertEquals(4, snapshot().frame());
+        main(() -> pet.lookAt(0, -200));
+        assertEquals(0, snapshot().frame());
+        main(pet::releaseLook);
+        SystemClock.sleep(550);
+        assertEquals(LOOK, snapshot().motion());
+        await(() -> snapshot().motion() == WORKING);
+        assertTrue(snapshot().advancing());
+    }
+
+    @Test public void waveResumesTaskOnceAndTouchInterruptsWithoutReplayingWave() {
+        runDecode(1); runDecode(0);
+        main(pet::wave);
+        runDecode(0);
+        assertEquals(WAVING, snapshot().motion());
+        await(() -> snapshot().motion() == IDLE);
+        main(() -> { pet.wave(); pet.lookAt(-200, 0); });
+        runDecode(0);
+        assertEquals(LOOK, snapshot().motion());
+        assertEquals(12, snapshot().frame());
+        main(pet::cancelLook);
+        assertEquals(IDLE, snapshot().motion());
+        SystemClock.sleep(450);
+        assertEquals(IDLE, snapshot().motion());
+    }
+
+    @Test public void importantResultPreemptsLookAndDragPreemptsBothUntilRelease() {
+        runDecode(1); runDecode(0);
+        main(() -> pet.lookAt(200, 0));
+        runDecode(0);
+        main(() -> pet.present("one", new PetPresentation(FAILED, ERROR)));
+        runDecode(0);
+        main(() -> pet.lookAt(-200, 0));
+        assertEquals(FAILED, snapshot().motion()); // Initial result feedback cannot be interrupted by gaze.
+        main(() -> { pet.drag(true); pet.present("two", new PetPresentation(SUCCEEDED, SUCCESS)); });
+        runDecode(0);
+        assertEquals(RUN_LEFT, snapshot().motion());
+        main(pet::endDrag);
+        runDecode(0);
+        assertEquals(SUCCEEDED, snapshot().motion());
+        await(() -> snapshot().motion() == IDLE);
+        main(() -> pet.lookAt(200, 0));
+        assertEquals(LOOK, snapshot().motion());
+        main(() -> { pet.drag(true); pet.endDrag(); });
+        assertEquals(IDLE, snapshot().motion()); // Never resume an interrupted gaze or greeting.
+    }
+
+    @Test public void neutralCenterAndNewTouchesResetHoldWhileHideAndLateLoadsCannotReviveAttention() {
+        runDecode(1); runDecode(0);
+        main(() -> { pet.lookAt(0, 0); pet.releaseLook(); });
+        assertEquals(NEUTRAL, snapshot().motion());
+        SystemClock.sleep(550);
+        main(() -> { pet.lookAt(200, 0); pet.releaseLook(); });
+        runDecode(0);
+        SystemClock.sleep(400);
+        assertEquals(LOOK, snapshot().motion());
+        main(() -> pet.setPlaybackEnabled(false));
+        assertEquals(IDLE, snapshot().motion());
+        assertFalse(snapshot().advancing());
+        main(() -> { pet.setPlaybackEnabled(true); pet.wave(); pet.setPlaybackEnabled(false); });
+        runDecode(0); // Delayed wave load must not revive attention.
+        SystemClock.sleep(450);
+        assertEquals(IDLE, snapshot().motion());
+        assertFalse(snapshot().advancing());
     }
 
     private PetSpriteRepository.Clip clip(int... colors) {

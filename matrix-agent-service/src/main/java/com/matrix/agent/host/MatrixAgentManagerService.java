@@ -58,6 +58,7 @@ public final class MatrixAgentManagerService extends Service {
             // are Host-private facades obtained only after this trusted transaction succeeds.
             if (MatrixServiceConstants.MANAGER_SERVICE.equals(serviceName)) return binder;
             if (MatrixServiceConstants.SCHEDULE_SERVICE.equals(serviceName)) return graph.scheduleBinder();
+            if (MatrixServiceConstants.OVERLAY_INTERACTION_SERVICE.equals(serviceName)) return graph.overlayInteractionBinder();
             return MatrixServiceConstants.MODEL_SERVICE.equals(serviceName) ? modelServiceBinder()
                     : MatrixServiceConstants.DOWNLOAD_SERVICE.equals(serviceName) ? downloadServiceBinder()
                     : MatrixServiceConstants.VOICE_SERVICE.equals(serviceName) ? voiceServiceBinder()

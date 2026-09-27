@@ -30,6 +30,8 @@ public final class MatrixServiceConstants {
      * 刻意不复用对话域键：附件是窄能力，老 Host 不通告时客户端按位独立降级。
      */
     public static final String HANDOFF_SERVICE = "matrix.service.HANDOFF";
+    public static final String OVERLAY_INTERACTION_SERVICE = "matrix.service.OVERLAY_INTERACTION";
+    public static final int FEATURE_OVERLAY_INTERACTION = 1 << 13;
     public static final int FEATURE_HANDOFF_DOMAIN = 1 << 7;
 
     public static final String ATTACHMENT_SERVICE = "matrix.service.ATTACHMENT";

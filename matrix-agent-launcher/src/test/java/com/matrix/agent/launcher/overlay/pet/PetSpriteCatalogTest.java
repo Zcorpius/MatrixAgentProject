@@ -16,8 +16,8 @@ public final class PetSpriteCatalogTest {
 
     @Test public void bundledCatalogTimingsAndPngDimensionsAgree() throws Exception {
         var catalog = PetSpriteCatalog.parse(bundled());
-        assertEquals(10, catalog.animations().size()); // Nine actions plus neutral.
-        assertEquals(58, catalog.animations().values().stream().mapToInt(java.util.List::size).sum());
+        assertEquals(11, catalog.animations().size()); // Nine actions, neutral, and sixteen gaze poses.
+        assertEquals(74, catalog.animations().values().stream().mapToInt(java.util.List::size).sum());
         assertEquals(1100, new SpriteTimeline(catalog.animations().get("idle").stream()
                 .map(PetSpriteCatalog.Frame::durationMs).toList()).durationMs());
         for (var frames : catalog.animations().values()) for (var frame : frames) {
@@ -46,5 +46,17 @@ public final class PetSpriteCatalogTest {
         assertThrows(JSONException.class, () -> PetSpriteCatalog.parse(json.toString()));
         var future = new JSONObject(bundled()).put("schemaVersion", 2);
         assertThrows(JSONException.class, () -> PetSpriteCatalog.parse(future.toString()));
+    }
+
+    @Test public void requiresSixteenOrderedAndSafeLookFrames() throws Exception {
+        var count = new JSONObject(bundled());
+        count.getJSONObject("look").getJSONArray("frames").remove(15);
+        assertThrows(JSONException.class, () -> PetSpriteCatalog.parse(count.toString()));
+        var order = new JSONObject(bundled());
+        order.getJSONObject("look").getJSONArray("frames").getJSONObject(1).put("angleDegreesClockwiseFromUp", 45);
+        assertThrows(JSONException.class, () -> PetSpriteCatalog.parse(order.toString()));
+        var path = new JSONObject(bundled());
+        path.getJSONObject("look").getJSONArray("frames").getJSONObject(0).put("file", "../outside.png");
+        assertThrows(JSONException.class, () -> PetSpriteCatalog.parse(path.toString()));
     }
 }

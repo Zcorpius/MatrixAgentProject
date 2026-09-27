@@ -20,6 +20,8 @@ public final class MatrixServiceGraph {
     private final VoiceGraph voice;
     private final ConversationGraph conversation;
     private final com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub handoff;
+    private final com.matrix.agent.host.rpc.OverlayInteractionServiceStub overlayInteraction;
+    public IBinder overlayInteractionBinder() { return overlayInteraction; }
     public IBinder handoffBinder() { return handoff.asBinder(); }
 
     public MatrixServiceGraph(AppContainer container, ModelServiceStub.CallerResolver callers) {
@@ -51,6 +53,8 @@ public final class MatrixServiceGraph {
                 container.getExecutorRegistry().networkExecutor());
         handoff = new com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub(
                 container.getAppContext(), container.getHandoffCoordinator());
+        overlayInteraction = android.os.Build.VERSION.SDK_INT >= 35
+                ? new com.matrix.agent.host.rpc.OverlayInteractionServiceStub(container.getAppContext()) : null;
         conversation.setHandoffDiagnostics(container.getHandoffDiagnostics());
         conversation.setHandoffContexts(container.getHandoffContexts());
         container.getAgentRuntimeRepository().addConversationClearHook(container.getHandoffContexts()::clear);
@@ -82,6 +86,7 @@ public final class MatrixServiceGraph {
                 | MatrixServiceConstants.FEATURE_DOWNLOAD_DOMAIN
                 | MatrixServiceConstants.FEATURE_PERSISTENCE_GATE;
         if (voice.isAvailable()) flags |= MatrixServiceConstants.FEATURE_VOICE_DOMAIN;
+        if (overlayInteraction != null) flags |= MatrixServiceConstants.FEATURE_OVERLAY_INTERACTION;
         if (conversation.isAvailable()) {
             flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN
                     | MatrixServiceConstants.FEATURE_HANDOFF_DOMAIN;
@@ -97,6 +102,7 @@ public final class MatrixServiceGraph {
     public void shutdown() {
         schedule.close();
         handoff.close();
+        if (android.os.Build.VERSION.SDK_INT >= 35 && overlayInteraction != null) overlayInteraction.close();
         voice.shutdown();
         conversation.shutdown();
         tasks.shutdown();

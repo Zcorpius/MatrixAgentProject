@@ -16,6 +16,7 @@ public final class LauncherApplication extends Application {
     private PetSpriteRepository petSprites;
     private com.matrix.agent.launcher.overlay.OverlayController overlay;
     private com.matrix.agent.launcher.data.HandoffClient handoff;
+    private com.matrix.agent.launcher.data.OverlayPointerClient pointerClient;
     private com.matrix.agent.launcher.data.DraftCommandLane draftLane;
     public com.matrix.agent.launcher.overlay.OverlayController overlay() { return overlay; }
     public com.matrix.agent.launcher.data.DraftCommandLane draftLane() { return draftLane; }
@@ -26,9 +27,10 @@ public final class LauncherApplication extends Application {
         petSprites = new PetSpriteRepository(getAssets(), executors.petDecoding());
         petSprites.warmUp();
         hostGateway = new LauncherHostGateway(this, executors);
+        pointerClient = new com.matrix.agent.launcher.data.OverlayPointerClient(hostGateway, executors);
         draftLane = new com.matrix.agent.launcher.data.DraftCommandLane(hostGateway, executors.draftCommands());
         overlay = new com.matrix.agent.launcher.overlay.OverlayController(this, hostGateway,
-                new com.matrix.agent.launcher.data.ConversationRepository(hostGateway, draftLane), diagnostics, petSprites);
+                new com.matrix.agent.launcher.data.ConversationRepository(hostGateway, draftLane), diagnostics, petSprites, pointerClient);
         handoff = new com.matrix.agent.launcher.data.HandoffClient(hostGateway, executors, overlay);
     }
 
@@ -51,6 +53,7 @@ public final class LauncherApplication extends Application {
         // controlled test lifecycles where Application is explicitly terminated.
         handoff.close();
         overlay.close();
+        pointerClient.close();
         petSprites.close();
         hostGateway.disconnect();
         executors.shutdown();

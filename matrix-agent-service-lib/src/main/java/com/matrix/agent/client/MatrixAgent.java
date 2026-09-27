@@ -221,6 +221,10 @@ public final class MatrixAgent {
         return (HandoffManager) getMatrixManager(MatrixServiceConstants.HANDOFF_SERVICE);
     }
 
+    public OverlayInteractionManager getOverlayInteractionManager() {
+        return (OverlayInteractionManager) getMatrixManager(MatrixServiceConstants.OVERLAY_INTERACTION_SERVICE);
+    }
+
     public AttachmentManager getAttachmentManager() {
         return (AttachmentManager) getMatrixManager(MatrixServiceConstants.ATTACHMENT_SERVICE);
     }
@@ -581,6 +585,8 @@ public final class MatrixAgent {
                 return new DebugTraceManager(this, serviceBinder);
             case MatrixServiceConstants.HANDOFF_SERVICE:
                 return new HandoffManager(this, serviceBinder);
+            case MatrixServiceConstants.OVERLAY_INTERACTION_SERVICE:
+                return new OverlayInteractionManager(this, serviceBinder);
             case MatrixServiceConstants.ATTACHMENT_SERVICE:
                 return new AttachmentManager(this, serviceBinder);
             default:

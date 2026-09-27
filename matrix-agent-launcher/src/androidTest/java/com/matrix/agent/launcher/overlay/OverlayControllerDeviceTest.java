@@ -37,6 +37,33 @@ public final class OverlayControllerDeviceTest {
         });
     }
     @After public void close() { main(controller::close); }
+    @Test public void pointerObservationBelongsOnlyToCommittedVisibleCollapsedWindow() throws Exception {
+        AtomicInteger active = new AtomicInteger(), opened = new AtomicInteger();
+        main(() -> {
+            controller.close();
+            var app = (LauncherApplication) instrumentation.getTargetContext().getApplicationContext();
+            controller = new OverlayController(app, app.hostGateway(), source, diagnostics, app.petSprites(),
+                    (pointer, unavailable) -> {
+                        assertEquals(1, active.incrementAndGet()); opened.incrementAndGet();
+                        return () -> assertEquals(0, active.decrementAndGet());
+                    });
+            controller.connectionChanged(true);
+        });
+        assertEquals(0, active.get());
+        assertEquals(OVERLAY_READY, prepare(request("a", CREATE_OR_REBIND, INTERACT_EXISTING_APP, 1200)).result());
+        assertEquals(1, active.get());
+        main(() -> awaitView("Agent 雪乃", true).performClick());
+        assertEquals(0, active.get());
+        main(() -> awaitView("收起", false).performClick());
+        assertEquals(1, active.get());
+        assertEquals(2, opened.get());
+        main(() -> controller.connectionChanged(false));
+        assertEquals(0, active.get());
+        main(() -> controller.connectionChanged(true));
+        assertEquals(1, active.get());
+        main(controller::dismiss);
+        assertEquals(0, active.get());
+    }
     @Test public void yukinoEntryHasTransparentProportionalBoundsAndSnapsBothEdges() throws Exception {
         assertEquals(OVERLAY_READY, prepare(request("a", CREATE_OR_REBIND, INTERACT_EXISTING_APP, 1200)).result());
         var pet = awaitView("Agent 雪乃", true);
