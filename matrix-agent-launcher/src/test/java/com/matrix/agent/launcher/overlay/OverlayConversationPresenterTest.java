@@ -37,10 +37,14 @@ public final class OverlayConversationPresenterTest {
         presenter.start(ignored -> {});
         var old = source.listeners.get(0);
         old.onRuntimeStageChanged(new ConversationRuntimeStage("conv", "task", 100, 3, "旧阶段", 1, false));
+        assertEquals(3, presenter.state().runtimeStage());
+        assertEquals("primary", presenter.state().primaryMessageId());
         presenter.setConnected(false); presenter.setConnected(true);
+        assertEquals(-1, presenter.state().runtimeStage());
         old.onMessageStatusChanged("conv", "primary", 2, 0);
         source.listeners.get(1).onRuntimeStageChanged(new ConversationRuntimeStage("conv", "task", 1, 3, "新阶段", 2, true));
         assertFalse(presenter.terminal()); assertEquals("新阶段", presenter.state().progress());
+        assertEquals(3, presenter.state().runtimeStage());
     }
     @Test public void terminalStatusCallbackBeatsLateRunningSnapshot() {
         presenter.start(ignored -> {});

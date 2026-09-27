@@ -15,6 +15,7 @@ import com.matrix.agent.api.conversation.ConversationSubmission;
 import com.matrix.agent.api.handoff.*;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.data.*;
+import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -27,6 +28,7 @@ public final class OverlayController implements HandoffClient.Presentation, Over
     private record SendAttempt(OverlayBinding binding, OverlayDraftStore.Draft draft, String operationId) {}
     private final HandoffDiagnostics diagnostics;
     private final Context context;
+    private final PetSpriteRepository petSprites;
     private final LauncherHostGateway gateway;
     private final com.matrix.agent.launcher.data.OverlayConversationSource repository;
     private final OverlayDraftStore drafts = new OverlayDraftStore();
@@ -93,12 +95,9 @@ public final class OverlayController implements HandoffClient.Presentation, Over
     }
 
     public OverlayController(Context context, LauncherHostGateway gateway,
-            com.matrix.agent.launcher.data.OverlayConversationSource repository) {
-        this(context, gateway, repository, HandoffDiagnostics.NONE);
-    }
-    public OverlayController(Context context, LauncherHostGateway gateway,
-            OverlayConversationSource repository, HandoffDiagnostics diagnostics) {
+            OverlayConversationSource repository, HandoffDiagnostics diagnostics, PetSpriteRepository petSprites) {
         this.diagnostics = diagnostics;
+        this.petSprites = petSprites;
         this.context = context.getApplicationContext(); this.gateway = gateway; this.repository = repository;
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_USER_BACKGROUND);
@@ -203,7 +202,7 @@ public final class OverlayController implements HandoffClient.Presentation, Over
             long attachStarted = SystemClock.elapsedRealtime();
             boolean attachRecorded = false;
             try {
-                candidate.window = new OverlayWindow(context, this, duration ->
+                candidate.window = new OverlayWindow(context, this, petSprites, duration ->
                         recordWindow(candidate, FIRST_DRAW, true, duration));
                 candidate.window.setInteractive(false);
                 candidate.window.render(candidate.presenter.state(), drafts.get(candidate.request.conversationId()).text(), activity, false);

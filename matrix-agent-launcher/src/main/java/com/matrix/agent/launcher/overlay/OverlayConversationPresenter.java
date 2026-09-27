@@ -17,7 +17,8 @@ import java.util.function.Consumer;
 /** A full conversation timeline with an independently bound operation/primary-message owner. */
 public final class OverlayConversationPresenter implements AutoCloseable {
     public record State(String title, String progress, List<UiMessage> messages, int status, boolean connected,
-            boolean cancelling, String notice, boolean hasMoreHistory, boolean loadingHistory, String historyError) {}
+            boolean cancelling, String notice, boolean hasMoreHistory, boolean loadingHistory, String historyError,
+            String primaryMessageId, int runtimeStage) {}
     private final com.matrix.agent.launcher.data.OverlayConversationSource repository;
     private final Runnable changed;
     private final Map<String, UiMessage> messages = new LinkedHashMap<>();
@@ -267,7 +268,7 @@ public final class OverlayConversationPresenter implements AutoCloseable {
                 .sorted(Comparator.comparingLong(UiMessage::sequence).thenComparing(UiMessage::messageId))
                 .collect(java.util.stream.Collectors.toList());
         return new State(title, progress, List.copyOf(timeline), status, connected, cancelling, notice,
-                hasMoreHistory, loadingHistory, historyError);
+                hasMoreHistory, loadingHistory, historyError, binding.userMessageId(), stage == null ? -1 : stage.stage);
     }
     private void closeSubscription() {
         if (debugSubscription != null) {

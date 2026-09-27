@@ -1,0 +1,4 @@
+Desktop label: Matrix AI
+Tapped desktop shortcut bounds: [437,861][644,1236]
+    topResumedActivity=ActivityRecord{259257844 u0 com.matrix.agent.launcher/.LauncherActivity t396}
+  ResumedActivity: ActivityRecord{259257844 u0 com.matrix.agent.launcher/.LauncherActivity t396}

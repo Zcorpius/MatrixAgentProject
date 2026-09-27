@@ -7,6 +7,8 @@
 把身份、调度、模型、记忆、语音、下载与审计收敛到可信系统进程，<br>
 让应用只通过稳定 SDK 使用 Agent 能力。
 
+Launcher 的桌面名称为 **Matrix AI**，采用深青色背景与薄荷绿立体矩阵图标。
+
 <p>
   <img src="https://img.shields.io/badge/version-v0.7.1-F36F4A?style=flat-square" alt="Version 0.7.1" />
   <img src="https://img.shields.io/badge/Android-15-0F766E?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 15" />
@@ -15,7 +17,7 @@
   <img src="https://img.shields.io/badge/ABI-arm64--v8a-173B46?style=flat-square" alt="arm64-v8a" />
 </p>
 
-[定时任务](#定时任务与工作流v071) · [界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [跨应用悬浮窗](#跨应用悬浮窗) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
+[桌面与角色入口](#matrix-ai-桌面与雪乃入口) · [定时任务](#定时任务与工作流v071) · [界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [跨应用悬浮窗](#跨应用悬浮窗) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
 
 </div>
 
@@ -55,7 +57,24 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 
 ## 界面预览
 
-以下为 **v0.6.14 · Mi 9 SE · Android 15 / LineageOS 22.2** 真机截图，更新于 **2026-09-25**。点击图片可查看原图；页面中的模型、会话和安装状态为采集时的设备状态。
+### Matrix AI 桌面与雪乃入口
+
+以下为 **2026-09-27 · v0.7.1 · Mi 9 SE / Android 15** 真机截图。桌面名称更新为 **Matrix AI**，图标中心采用实心金属交叠结构；跨应用入口改为透明雪乃角色，拖动时根据方向切换跑步动作，松手恢复任务状态动画。
+
+<table>
+  <tr><th align="center">Matrix AI 桌面图标</th><th align="center">向左拖动</th><th align="center">向右拖动</th></tr>
+  <tr>
+    <td align="center"><a href="docs/verification/matrix-ai-icon-solid-2026-09-27/home.png"><img src="docs/verification/matrix-ai-icon-solid-2026-09-27/home.png" width="260" alt="Matrix AI 桌面名称与中心实心的深青色自适应图标" /></a></td>
+    <td align="center"><a href="docs/verification/yukino-drag-2026-09-27/screenshots/01-drag-left.png"><img src="docs/verification/yukino-drag-2026-09-27/screenshots/01-drag-left.png" width="260" alt="雪乃悬浮入口向左拖动时播放向左跑步动画" /></a></td>
+    <td align="center"><a href="docs/verification/yukino-drag-2026-09-27/screenshots/02-drag-right.png"><img src="docs/verification/yukino-drag-2026-09-27/screenshots/02-drag-right.png" width="260" alt="雪乃悬浮入口向右拖动时播放向右跑步动画" /></a></td>
+  </tr>
+</table>
+
+图标使用独立前景、渐变背景与单色图层，适配系统桌面裁切；包名和启动入口保持兼容，更新沿用原有应用数据。设计素材与提示词见[桌面图标说明](docs/Matrix-AI-桌面图标.md)，实心版本的构建、安装与启动检查见[验证记录](docs/verification/matrix-ai-icon-solid-2026-09-27/README.md)。
+
+### 应用工作区
+
+以下为 **v0.6.14 · Mi 9 SE · Android 15 / LineageOS 22.2** 历史真机截图，采集于 **2026-09-25**。点击图片可查看原图；页面中的模型、会话和安装状态为采集时的设备状态。
 
 <table>
   <tr>
@@ -94,14 +113,14 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 
 ### 跨应用会话预览
 
-以下为 **2026-09-26 · Mi 9 SE · Android 15** 真机截图。Agent 操作 QQ 音乐时，可以从悬浮球展开会话，继续查看消息、补充输入或返回全屏。
+以下为 **2026-09-27 · Mi 9 SE · Android 15** 真机截图。Agent 操作 QQ 音乐时，可以从雪乃角色展开会话，继续查看消息、补充输入或返回全屏。
 
 <table>
-  <tr><th align="center">悬浮球</th><th align="center">完整会话小窗</th><th align="center">展开执行过程</th></tr>
+  <tr><th align="center">雪乃角色入口</th><th align="center">完整会话小窗</th><th align="center">展开执行过程</th></tr>
   <tr>
-    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/01-bubble.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/01-bubble.png" width="260" alt="外部应用上方的可拖动 Agent 悬浮球" /></a></td>
-    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03b-reopened.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03b-reopened.png" width="260" alt="小窗显示用户提问、执行过程、助手回复及输入框" /></a></td>
-    <td align="center"><a href="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03e-process-expanded.png"><img src="docs/verification/agent-overlay-conversation-2026-09-26/screenshots/03e-process-expanded.png" width="260" alt="小窗中展开思考与工具过程，消息区域可独立滚动" /></a></td>
+    <td align="center"><a href="docs/verification/yukino-overlay-2026-09-27/screenshots/01-working.png"><img src="docs/verification/yukino-overlay-2026-09-27/screenshots/01-working.png" width="260" alt="QQ 音乐上方显示正在工作的雪乃角色" /></a></td>
+    <td align="center"><a href="docs/verification/yukino-overlay-2026-09-27/end-to-end-screenshots/03b-reopened.png"><img src="docs/verification/yukino-overlay-2026-09-27/end-to-end-screenshots/03b-reopened.png" width="260" alt="小窗显示用户提问、执行过程、助手回复及输入框" /></a></td>
+    <td align="center"><a href="docs/verification/yukino-overlay-2026-09-27/end-to-end-screenshots/03e-process-expanded.png"><img src="docs/verification/yukino-overlay-2026-09-27/end-to-end-screenshots/03e-process-expanded.png" width="260" alt="小窗中展开思考与工具过程，消息区域可独立滚动" /></a></td>
   </tr>
 </table>
 
@@ -114,7 +133,7 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 | **05 · 模型市场与语音资源**<br><br>目录缓存、Range 断点续传、暂停、恢复、取消、删除和原子安装；识别与 Piper 语音模型同样具有安装事实与可见进度。 | **06 · 数据、安全与 SDK**<br><br>Room + SQLCipher、Android KeyStore、敏感字段脱敏、epoch gate、签名权限和逐事务调用方校验；Launcher 只依赖 AAR。 |
 | **07 · 四层记忆**<br><br>Working 核验状态、Preference 偏好、Semantic 事实与 Episodic 事件协同召回；相关性过滤、分层预算与统一安全投影控制进入模型的内容。 | **08 · 用户数据控制**<br><br>偏好目录、历史 key 安全别名、逐条忘记与事务化清除；清除后拒绝旧请求写回，恢复失败时保留待清理标记并使用易失存储。 |
 
-- **跨应用任务入口**：打开或操作 QQ 音乐、B 站时保留悬浮球；点击展开与全屏共享内容的会话小窗，支持历史翻页、标题拖动、草稿与当前任务控制。
+- **跨应用任务入口**：打开或操作 QQ 音乐、B 站时保留雪乃角色入口；按任务状态播放动画，拖动时切换左右跑步，点击展开与全屏共享内容的会话小窗，支持历史翻页、标题拖动、草稿与当前任务控制。
 
 ### 模型接入矩阵
 
@@ -169,14 +188,22 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 
 ## 跨应用悬浮窗
 
-### 从悬浮球展开为会话小窗
+### 从雪乃角色入口展开为会话小窗
 
-1. Agent 准备打开或操作外部应用时，Host 与 Launcher 进行有界交接，在屏幕边缘保留可拖动、贴边的悬浮球。
-2. 点击球展开小窗，显示同一会话的用户、助手与系统消息；最近 30 条先加载，更早消息按需翻页。小窗与全屏共享消息渲染器；开启 `matrix.debugTraceUi` 时，也共享“思考与工具”折叠过程。
-3. 按住标题栏即可移动小窗。球与小窗分别记住位置，收起再展开保留草稿；阅读历史时，新回复不会强制跳到底部。
+1. Agent 准备打开或操作外部应用时，Host 与 Launcher 进行有界交接，在屏幕边缘保留可拖动、贴边的雪乃角色。角色使用透明背景、96×104dp 画布；等待、工作、完成、失败和结果待确认分别对应不同动作。拖动时按方向切换左右跑步，松手恢复任务动作。
+2. 点击角色展开小窗，显示同一会话的用户、助手与系统消息；最近 30 条先加载，更早消息按需翻页。小窗与全屏共享消息渲染器；开启 `matrix.debugTraceUi` 时，也共享“思考与工具”折叠过程。
+3. 按住标题栏即可移动小窗。角色与小窗分别记住位置，收起再展开保留草稿；阅读历史时，新回复不会强制跳到底部。
 4. 可发送补充内容、取消当前任务、返回 Agent、收起或关闭。关闭窗口不取消 Host 任务；返回同一会话页时隐藏重复浮层，并提供小窗草稿恢复入口。
 
 深蓝标题栏、浅色消息区、角色气泡与状态色区分内容层级。横屏或可用高度不足时使用紧凑布局：发送位于输入框旁，返回与取消收进“更多”；输入法弹出后仍按可用区域约束位置。
+
+角色图片由独立后台线程按动作加载，使用 3MiB 共享缓存；隐藏、展开面板或关闭窗口时停止动画回调。完成动作每轮只播放一次，随后回到待机并保留完成标记；失败停留末帧并保留失败标记。素材原始帧与时长保持不变。
+
+跑步是临时的手势动画：越过拖动阈值才触发，方向带防抖，上下拖动沿用最近朝向。松手或取消后从原动画进度恢复；拖动期间收到的新任务状态在松手后展示，已经结束的完成/失败动画不会重播。
+
+2026-09-27 在 Mi 9 SE / Android 15 上首次接入通过 28 项组件测试及 2 项真实对话流程测试；拖动跑步追加后通过 35 项组件测试和 63 项 JVM 单元测试。实现边界、状态表与分批验证证据见[雪乃悬浮入口接入与验证](docs/雪乃悬浮入口接入与验证.md)。
+
+<p><a href="docs/verification/yukino-overlay-2026-09-27/screenshots/01-working.png"><img src="docs/verification/yukino-overlay-2026-09-27/screenshots/01-working.png" width="220" alt="QQ 音乐上方的透明雪乃角色入口" /></a> <a href="docs/verification/yukino-overlay-2026-09-27/screenshots/02-completed.png"><img src="docs/verification/yukino-overlay-2026-09-27/screenshots/02-completed.png" width="220" alt="任务完成后雪乃回到待机并保留完成标记" /></a></p>
 
 ### 使用与实现边界
 
@@ -463,6 +490,19 @@ Doze 样本运行于 system UID 1000，不作为普通应用绕过待机配额�
 
 ### 跨应用浮层验收记录
 
+**2026-09-27 · 雪乃角色、拖动跑步与 Matrix AI 桌面图标**：
+
+| 验收范围 | 结果 |
+|---|---|
+| 合入前完整质量门禁 | `verifyArchitecture` 通过；当前五模块 JVM 报告合计 **1,494 项通过**，失败 / 错误 / 跳过均为 0；未变模块沿用 Gradle 已验证的增量结果 |
+| Launcher JVM | **63 项通过**，覆盖状态映射、素材清单、逐帧时长、拖动方向和布局约束 |
+| 真机组件与手势 | **35 项通过**，覆盖窗口、小窗会话、动画生命周期、拖动方向切换及松手恢复 |
+| 首次接入的真实会话流程 | **2 项通过**，覆盖生产 Host / QQ 音乐交接、消息、草稿与输入法；与后续组件测试分批记录 |
+| 桌面图标 | 中心改为实心金属交叠；真机覆盖安装、`Matrix AI` 名称、圆形裁切及点击启动通过 |
+| Launcher 构建与 lint | `assembleDebug`、`lintDebug` 通过；0 errors、39 warnings |
+
+角色实现及完整边界见[接入与验证](docs/雪乃悬浮入口接入与验证.md)，最新图标结果见[实心版本验证](docs/verification/matrix-ai-icon-solid-2026-09-27/README.md)，完整门禁与测试数量分别见[执行日志](docs/verification/yukino-drag-2026-09-27/final-architecture-check.txt)和[报告汇总](docs/verification/yukino-drag-2026-09-27/final-test-summary.json)。以下保留前一阶段的跨应用基础能力验收记录。
+
 **2026-09-26 · Mi 9 SE / Android 15**，已安装版本与本地 APK 的 SHA-256 一致：
 
 | 验收范围 | 结果 |
@@ -509,6 +549,8 @@ adb shell am instrument -w -r \
 
 ## 设计文档
 
+- [Matrix AI 桌面图标](docs/Matrix-AI-桌面图标.md)：自适应图标资源、生成与编辑提示词、实心中心和真机验证
+- [雪乃悬浮入口接入与验证](docs/雪乃悬浮入口接入与验证.md)：动画状态、后台解码与缓存、拖动跑步和生命周期测试
 - [Agent 定时任务与子任务编排专题](docs/Agent定时任务与子任务编排专题.md)：时间语义、事务、授权、工作流预算与验收矩阵
 - [定时任务实施与真机验证记录](docs/Agent定时任务实施记录.md)：v0.7.1 交付范围、验证证据与运行方式
 - [Agent 跨应用悬浮球与小窗技术执行方案](docs/Agent跨应用悬浮球与小窗模式技术执行方案.md)：交接协议、窗口生命周期、完整会话与输入规则

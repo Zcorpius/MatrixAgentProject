@@ -1,0 +1,15 @@
+{
+  "size": [
+    1254,
+    1254
+  ],
+  "mode": "RGBA",
+  "sha256": "272f000a271bf0ba1ae6a1de5c7ec7dc043d1275b69c1004a69a157c207e19f0",
+  "central_8_percent_square_alpha_histogram": {
+    "253": 8614,
+    "254": 1587
+  },
+  "central_8_percent_square_alpha_min": 253,
+  "central_8_percent_square_alpha_max": 254,
+  "corner_alpha": 0
+}

@@ -1,0 +1,38 @@
+{
+  "matrix-agent-service": {
+    "tests": 1399,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-service-lib": {
+    "tests": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-launcher": {
+    "tests": 63,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-test": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "ondevice": {
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "total": {
+    "tests": 1494,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

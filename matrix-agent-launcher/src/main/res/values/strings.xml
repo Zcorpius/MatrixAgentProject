@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MatrixAgent Launcher</string>
+    <string name="app_name">Matrix AI</string>
     <string name="nav_tasks">任务中心</string>
     <string name="nav_voice">语音功能</string>
     <string name="nav_models">模型接入</string>

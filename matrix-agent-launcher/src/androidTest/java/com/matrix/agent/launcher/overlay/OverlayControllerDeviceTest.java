@@ -32,11 +32,63 @@ public final class OverlayControllerDeviceTest {
             app.overlay().dismiss();
             source = new Source();
             diagnostics = new com.matrix.agent.diagnostics.HandoffDiagnostics();
-            controller = new OverlayController(app, app.hostGateway(), source, diagnostics);
+            controller = new OverlayController(app, app.hostGateway(), source, diagnostics, app.petSprites());
             controller.connectionChanged(true);
         });
     }
     @After public void close() { main(controller::close); }
+    @Test public void yukinoEntryHasTransparentProportionalBoundsAndSnapsBothEdges() throws Exception {
+        assertEquals(OVERLAY_READY, prepare(request("a", CREATE_OR_REBIND, INTERACT_EXISTING_APP, 1200)).result());
+        var pet = awaitView("Agent 雪乃", true);
+        assertTrue(pet instanceof com.matrix.agent.launcher.overlay.pet.YukinoPetView);
+        SystemClock.sleep(500);
+        main(() -> {
+            var params = (android.view.WindowManager.LayoutParams) pet.getRootView().getLayoutParams();
+            assertEquals(pet.getResources().getDimensionPixelSize(com.matrix.agent.launcher.R.dimen.overlay_pet_width), params.width);
+            assertEquals(pet.getResources().getDimensionPixelSize(com.matrix.agent.launcher.R.dimen.overlay_pet_height), params.height);
+            assertEquals(0f, pet.getRootView().getElevation(), 0f);
+            assertNull(pet.getBackground());
+            var image = android.graphics.Bitmap.createBitmap(pet.getWidth(), pet.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+            pet.draw(new android.graphics.Canvas(image));
+            assertEquals(0, android.graphics.Color.alpha(image.getPixel(0, 0)));
+            assertNotEquals(0, android.graphics.Color.alpha(image.getPixel(image.getWidth() / 2, image.getHeight() / 2)));
+            image.recycle();
+            int edge = Math.round(8 * pet.getResources().getDisplayMetrics().density);
+            dragView(pet, -10000, 0);
+            assertEquals(edge, params.x);
+            dragView(pet, 10000, 0);
+            var metrics = new android.util.DisplayMetrics();
+            instrumentation.getTargetContext().getSystemService(android.hardware.display.DisplayManager.class)
+                    .getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealMetrics(metrics);
+            assertEquals(metrics.widthPixels - params.width - edge, params.x);
+        });
+        petScreenshot("01-working");
+        main(() -> source.listeners.get(0).onMessageStatusChanged("a", "user-a", ConversationMessage.STATUS_COMPLETED, 0));
+        SystemClock.sleep(1200);
+        petScreenshot("02-completed");
+        main(pet::performClick);
+        assertNotNull(awaitView("返回 Agent", false));
+        petScreenshot("03-panel");
+        main(() -> awaitView("收起", false).performClick());
+        assertNotNull(awaitView("Agent 雪乃", true));
+        main(() -> source.terminalOwners.add("a"));
+        assertEquals(OVERLAY_READY, prepare(request("b", CREATE_OR_REBIND, INTERACT_EXISTING_APP, 1200)).result());
+        main(() -> source.listeners.get(source.listeners.size() - 1)
+                .onMessageStatusChanged("b", "user-b", ConversationMessage.STATUS_FAILED, 1));
+        SystemClock.sleep(1500);
+        petScreenshot("04-failed");
+    }
+
+    private void petScreenshot(String name) throws Exception {
+        var directory = new java.io.File(instrumentation.getTargetContext().getExternalFilesDir(null), "yukino-verification");
+        assertTrue(directory.isDirectory() || directory.mkdirs());
+        var ui = instrumentation.getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+        var image = ui.takeScreenshot();
+        assertNotNull(image);
+        try (var output = new java.io.FileOutputStream(new java.io.File(directory, name + ".png"))) {
+            assertTrue(image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output));
+        } finally { image.recycle(); }
+    }
     @Test public void samePageInteractionHasNoOverlayAndManualDepartureCannotReveal() throws Exception {
         main(() -> controller.conversationPageVisible("a"));
         var initial = request("a", CREATE_OR_REBIND, INTERACT_EXISTING_APP, 1200);
