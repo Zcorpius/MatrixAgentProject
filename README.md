@@ -65,12 +65,12 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
   <tr><th align="center">Matrix AI 桌面图标</th><th align="center">向左拖动</th><th align="center">向右拖动</th></tr>
   <tr>
     <td align="center"><a href="docs/verification/matrix-ai-icon-solid-2026-09-27/home.png"><img src="docs/verification/matrix-ai-icon-solid-2026-09-27/home.png" width="260" alt="Matrix AI 桌面名称与中心实心的深青色自适应图标" /></a></td>
-    <td align="center"><a href="docs/verification/yukino-drag-2026-09-27/screenshots/01-drag-left.png"><img src="docs/verification/yukino-drag-2026-09-27/screenshots/01-drag-left.png" width="260" alt="雪乃悬浮入口向左拖动时播放向左跑步动画" /></a></td>
-    <td align="center"><a href="docs/verification/yukino-drag-2026-09-27/screenshots/02-drag-right.png"><img src="docs/verification/yukino-drag-2026-09-27/screenshots/02-drag-right.png" width="260" alt="雪乃悬浮入口向右拖动时播放向右跑步动画" /></a></td>
+    <td align="center"><a href="docs/verification/matrix-ai-drag-2026-09-27/screenshots/01-drag-left.png"><img src="docs/verification/matrix-ai-drag-2026-09-27/screenshots/01-drag-left.png" width="260" alt="Matrix AI 新版桌面图标旁，雪乃向左拖动时播放跑步动画" /></a></td>
+    <td align="center"><a href="docs/verification/matrix-ai-drag-2026-09-27/screenshots/02-drag-right.png"><img src="docs/verification/matrix-ai-drag-2026-09-27/screenshots/02-drag-right.png" width="260" alt="Matrix AI 新版桌面图标旁，雪乃向右拖动时播放跑步动画" /></a></td>
   </tr>
 </table>
 
-图标使用独立前景、渐变背景与单色图层，适配系统桌面裁切；包名和启动入口保持兼容，更新沿用原有应用数据。设计素材与提示词见[桌面图标说明](docs/Matrix-AI-桌面图标.md)，实心版本的构建、安装与启动检查见[验证记录](docs/verification/matrix-ai-icon-solid-2026-09-27/README.md)。
+图标使用独立前景、渐变背景与单色图层，适配系统桌面裁切；包名和启动入口保持兼容，更新沿用原有应用数据。设计素材与提示词见[桌面图标说明](docs/Matrix-AI-桌面图标.md)，实心版本的构建、安装与启动检查见[验证记录](docs/verification/matrix-ai-icon-solid-2026-09-27/README.md)。左右拖动截图已在实心图标版本上重新采集，来源及手势复验见[截图记录](docs/verification/matrix-ai-drag-2026-09-27/README.md)。
 
 ### 应用工作区
 
