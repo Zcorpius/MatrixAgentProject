@@ -8,14 +8,14 @@
 让应用只通过稳定 SDK 使用 Agent 能力。
 
 <p>
-  <img src="https://img.shields.io/badge/version-v0.6.14-F36F4A?style=flat-square" alt="Version 0.6.14" />
+  <img src="https://img.shields.io/badge/version-v0.7.1-F36F4A?style=flat-square" alt="Version 0.7.1" />
   <img src="https://img.shields.io/badge/Android-15-0F766E?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 15" />
   <img src="https://img.shields.io/badge/LineageOS-22.2-167C80?style=flat-square&amp;logo=lineageos&amp;logoColor=white" alt="LineageOS 22.2" />
   <img src="https://img.shields.io/badge/Java-17-173B46?style=flat-square&amp;logo=openjdk&amp;logoColor=white" alt="Java 17" />
   <img src="https://img.shields.io/badge/ABI-arm64--v8a-173B46?style=flat-square" alt="arm64-v8a" />
 </p>
 
-[界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [跨应用悬浮窗](#跨应用悬浮窗) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
+[定时任务](#定时任务与工作流v071) · [界面预览](#界面预览) · [功能概览](#功能概览) · [对话与语音](#对话与语音) · [跨应用悬浮窗](#跨应用悬浮窗) · [分层记忆](#分层记忆) · [系统架构](#系统架构) · [快速开始](#快速开始) · [SDK 接入](#sdk-接入) · [质量验证](#质量验证)
 
 </div>
 
@@ -34,6 +34,24 @@ MatrixAgent 将 Agent 的执行能力放在系统 Host 中统一管理。Host �
 | **对话与语音闭环** | 文字、PTT 与唤醒后的语音最终转写进入同一对话执行链；Host 管理录音、模型、焦点与播报 |
 | **可控的分层记忆** | 按用户与音区隔离；偏好、事实显式保存，事件摘要自动保存，支持精确读取、逐条删除与清除恢复 |
 | **默认安全失败** | 签名权限、调用方复验、受控网络端点、SQLCipher 与 KeyStore 共同构成安全边界 |
+
+## 定时任务与工作流（v0.7.1）
+
+侧边栏第二项“任务中心”提供计划、运行记录、编排模板和临时任务。支持一次性、相对延迟、每天、每周与具体日历实例绑定；Host 使用单个物理闹钟、加密持久化和稳定执行请求 ID 管理恢复。两个内置日程模板分别使用确定性摘要与 Agent 摘要，运行详情展示各步骤、重试与交付状态。
+
+计划触发使用独立执行会话，继承创建时的能力、网络和播报授权。系统时钟使用标准 Intent 委托，回执明确标记未核验；不提供 ROM 私有闹钟数据库的增删改查。SDK、Host 与 Launcher 必须同步升级。
+
+| 能力 | 当前行为 |
+|---|---|
+| 计划管理 | 创建前预览、编辑、暂停、恢复与删除；关闭任务中心后由 Host 继续管理触发 |
+| 通知授权 | 通知不可用时新建为阻塞草稿，恢复权限后显式启用；已启用计划显示阻塞原因 |
+| 子任务编排 | 两个固定模板，支持依赖、并行只读步骤、共享父预算、有界重试和取消；历史保留模板版本 |
+| 结果与交付 | 分别记录通知和播报事实；播报被勿扰等条件抑制时显示部分交付，不把通知发布等同于用户已听到 |
+| 任务中心 | 计划与运行分页、步骤输入摘要和耗时、编辑草稿恢复、通知跳转；保留原有临时任务入口 |
+
+当前存储为 Room schema 16，SDK Parcel schema 12。升级沿既有数据库执行迁移，历史记录没有的渠道交付事实保持为空。
+
+实现说明、测试证据和未覆盖的设备边界见[实施记录](docs/Agent定时任务实施记录.md)。
 
 ## 界面预览
 
@@ -333,8 +351,8 @@ matrix-agent-service/tools/framework/framework-lineage-grus.jar
 脚本会执行 clean、构建、签名指纹校验与原子归档。产物位于 `outputs/`，版本统一读取根目录的 `gradle.properties`：
 
 ```properties
-MATRIX_VERSION_NAME=0.6.14
-MATRIX_VERSION_CODE=6014
+MATRIX_VERSION_NAME=0.7.1
+MATRIX_VERSION_CODE=7001
 ```
 
 ### 5. 安装与启动
@@ -342,8 +360,8 @@ MATRIX_VERSION_CODE=6014
 目标设备必须使用与 APK 相同的 platform 证书：
 
 ```bash
-adb install -r outputs/matrix-agent-service-debug-v0.6.14-6014-*.apk
-adb install -r outputs/matrix-agent-launcher-debug-v0.6.14-6014-*.apk
+adb install -r outputs/matrix-agent-service-debug-v0.7.1-7001-*.apk
+adb install -r outputs/matrix-agent-launcher-debug-v0.7.1-7001-*.apk
 adb shell am start -n com.matrix.agent.launcher/.LauncherActivity
 ```
 
@@ -365,7 +383,7 @@ adb shell am start -n com.matrix.agent.launcher/.LauncherActivity
 
 ```kotlin
 dependencies {
-    implementation("com.matrix.agent:matrix-agent-service-lib:0.6.14")
+    implementation("com.matrix.agent:matrix-agent-service-lib:0.7.1")
 }
 ```
 
@@ -392,7 +410,9 @@ MatrixAgent agent = MatrixAgent.createAsyncHandle(context, (client, state) -> {
 agent.release();
 ```
 
-`MatrixAgent` 提供 `getAgentManager()`、`getConversationManager()`、`getModelManager()`、`getDownloadManager()` 和 `getVoiceManager()`。另提供 `getHandoffManager()`、`getAttachmentManager()` 和 `getDebugTraceManager()` 扩展域。订阅接口返回 `AutoCloseable`，调用方必须在生命周期结束时关闭。
+`MatrixAgent` 提供 `getAgentManager()`、`getConversationManager()`、`getModelManager()`、`getDownloadManager()` 和 `getVoiceManager()`。另提供 `getScheduleManager()`、`getHandoffManager()`、`getAttachmentManager()` 和 `getDebugTraceManager()` 扩展域。订阅接口返回 `AutoCloseable`，调用方必须在生命周期结束时关闭。
+
+`ScheduleManager` 提供就绪检查、预览、计划控制、运行/步骤查询、模板及日历绑定接口。同步方法应在后台线程调用；修改请求使用稳定 `operationId`，更新携带当前 revision，回执不确定时重试原操作编号。计划与运行列表同时按数量和 Parcel 字节分页，客户端应以返回游标继续读取。
 
 对话接口同样只经 SDK 使用；不要让客户端直接访问 Host 数据库：
 
@@ -426,6 +446,20 @@ PTT 绑定通过 `createVoiceBinding()` 创建一次性关联，再由语音域�
 | Host 与 trusted / untrusted 跨 APK | `./gradlew :matrix-agent-test:connectedLocalHostIntegrationAndroidTest` |
 | Vosk / Sherpa、麦克风、TTS、焦点与前台服务 | `./gradlew :matrix-agent-service:connectedVoiceCertificationAndroidTest` |
 | MNN 模型与 native tool-call | `./gradlew :matrix-agent-service:connectedOnDeviceCertificationAndroidTest` |
+
+### 定时任务与工作流验收记录
+
+**2026-09-27 · v0.7.1 · Mi 9 SE / LineageOS 22.2 / Android 15**：
+
+| 验收范围 | 结果 |
+|---|---|
+| 完整质量门禁 | `verifyArchitecture` 通过；Host 1399、SDK 20、Launcher 48、独立测试模块 4，共 **1471 项 JVM 测试通过**，失败 / 错误 / 跳过均为 0 |
+| 最终核心真机套件 | **13 项通过**：计划生命周期、40 条大载荷计划分页、日历与重复实例、真实 Agent、两种工作流、勿扰交付和 Parcel 兼容边界 |
+| 通知权限变化 | 真实关闭渠道、阻塞草稿、恢复后显式启用与交付通过 |
+| 深度 Doze | 100 个同刻计划各交付一次，单个物理业务闹钟；约 203 秒后的第二批 10 个计划同样各交付一次 |
+| Launcher | 130% / 200% 字体的编辑操作可见；跨标签及字体配置变化后本地草稿保留 |
+
+Doze 样本运行于 system UID 1000，不作为普通应用绕过待机配额的保证。完整证据、旧版冷启动/重启/时间变化验证及未覆盖的验收项见[实施记录](docs/Agent定时任务实施记录.md)。最终安装包摘要见[SHA-256 清单](docs/verification/scheduling-v0.7.1/apk-sha256.txt)。
 
 ### 跨应用浮层验收记录
 
@@ -471,9 +505,12 @@ adb shell am instrument -w -r \
 - 当模型市场上游目录没有发布者签名或逐文件摘要时，Host 只能提供固定 HTTPS 来源、大小限制、结构校验和最后一次可用缓存，不能将其描述为独立可信根。
 - 系统语音、端侧推理和跨 APK 权限属于真机能力；普通 JVM 测试通过不代表真机认证已经通过。
 - 腾讯云 TTS 的凭证配置、云端返回、Piper/系统 TTS 回退和实际扬声器输出必须一起做真机闭环验收；仅配置成功不等于已验证播报成功。
+- 定时任务首期只支持已解锁且处于前台的 Android user 0；子任务编排只开放两个固定模板。可选 ROM 私有时钟桥未实现，磁盘满、密钥失效、多用户切换及部分精确崩溃窗口尚未完成专项真机认证。
 
 ## 设计文档
 
+- [Agent 定时任务与子任务编排专题](docs/Agent定时任务与子任务编排专题.md)：时间语义、事务、授权、工作流预算与验收矩阵
+- [定时任务实施与真机验证记录](docs/Agent定时任务实施记录.md)：v0.7.1 交付范围、验证证据与运行方式
 - [Agent 跨应用悬浮球与小窗技术执行方案](docs/Agent跨应用悬浮球与小窗模式技术执行方案.md)：交接协议、窗口生命周期、完整会话与输入规则
 - [Agent 跨应用悬浮窗实现与真机验证记录](docs/Agent跨应用悬浮窗实现与真机验证记录.md)：实现结构、测试结果、真机截图、已知边界与复验步骤
 - [`MatrixAgent对话交互与统一语音架构设计.md`](MatrixAgent对话交互与统一语音架构设计.md)：对话持久化、语音 ingress、TTS 回注与恢复语义
