@@ -19,6 +19,7 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="com.matrix.agent.action.OPEN_DOWNLOADS" />
+                <action android:name="com.matrix.agent.action.OPEN_SCHEDULE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

@@ -14,13 +14,23 @@ import com.matrix.agent.voice.vosk.VoskVoiceAssemblyFactory;
 import com.matrix.agent.voice.sherpa.SherpaVoiceAssemblyFactory;
 
 public final class MatrixAgentApplication extends Application implements DownloadRuntimeProvider,
-        VoiceRuntimeProvider {
+        VoiceRuntimeProvider, com.matrix.agent.schedule.ScheduleRuntimeProvider, com.matrix.agent.schedule.execution.ScheduleExecutionRuntime.Provider {
     /** 懒构建(双检 volatile)：系统入口拉起进程时不做全量装配，首个 Host Service 触达才构建。 */
     private volatile AppContainer container;
+    private volatile ScheduleGraph schedules;
+    private volatile ScheduledExecutionGraph scheduleExecutions;
+    private volatile CalendarBindingGateway calendarBindings;
+    private final com.matrix.agent.schedule.android.ScheduleWakeReceiver scheduleUserReceiver =
+            new com.matrix.agent.schedule.android.ScheduleWakeReceiver();
 
     @Override
     public void onCreate() {
         super.onCreate();
+        android.content.IntentFilter users = new android.content.IntentFilter();
+        users.addAction(android.content.Intent.ACTION_USER_FOREGROUND);
+        users.addAction(android.content.Intent.ACTION_USER_BACKGROUND);
+        if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(scheduleUserReceiver, users, RECEIVER_EXPORTED);
+        else registerReceiver(scheduleUserReceiver, users);
     }
 
     public AppContainer getContainer() {
@@ -35,6 +45,32 @@ public final class MatrixAgentApplication extends Application implements Downloa
             }
         }
         return c;
+    }
+
+    @Override public ScheduleGraph scheduleRuntime() {
+        ScheduleGraph current = schedules;
+        if (current == null) {
+            synchronized (this) {
+                current = schedules;
+                if (current == null) {
+                    current = new ScheduleGraph(this);
+                    current.setLongExecutionStarter(run -> startForegroundService(new android.content.Intent()
+                            .setClassName(this, "com.matrix.agent.schedule.android.ScheduleExecutionService")
+                            .putExtra("runId", run)));
+                    schedules = current;
+                }
+            }
+        }
+        return current;
+    }
+
+    public synchronized CalendarBindingGateway calendarBindings() {
+        if (calendarBindings == null) calendarBindings = new CalendarBindingGateway(scheduleRuntime(), this::getContainer);
+        return calendarBindings;
+    }
+    @Override public synchronized com.matrix.agent.schedule.execution.ScheduleExecutionRuntime scheduleExecutionRuntime() {
+        if (scheduleExecutions == null) scheduleExecutions = new ScheduledExecutionGraph(scheduleRuntime(), this::getContainer, calendarBindings());
+        return scheduleExecutions;
     }
 
     @Override
@@ -76,8 +112,12 @@ public final class MatrixAgentApplication extends Application implements Downloa
     @Override
     public void onTerminate() {
         super.onTerminate();
+        if (scheduleExecutions != null) scheduleExecutions.close();
+        if (schedules != null) schedules.close();
         if (container != null) {
             container.shutdown();
         }
+        // Shared persistence is process-owned, not tied to the lifetime of any Host Service.
+        PersistenceRuntimeGraph.closeIfInitialized();
     }
 }

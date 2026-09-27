@@ -233,6 +233,19 @@ public final class AgentRuntimeRepository {
      * 本方法只做 request 构造与既有调度派发——deadline 从此处构造 request 起算，
      * 排队等待不消耗任务预算（设计文档 §4.3）。</p>
      */
+    public AgentRequest prepareAutomaticRequest(
+            com.matrix.agent.task.scheduler.PreparedAutomaticTask task, CancellationToken token) {
+        return requestFactory.newAutomaticRequestBuilder(task, token).build();
+    }
+
+    public AutoCloseable tryAutomaticLease(CancellationToken token, boolean readOnly) throws InterruptedException {
+        return scheduler.tryAutomaticLease(token, readOnly);
+    }
+    public AgentOutcome executeAutomatic(
+            com.matrix.agent.task.scheduler.PreparedAutomaticTask task, CancellationToken token) {
+        return taskDispatchCoordinator.dispatchAutomatic(requestFactory.newAutomaticRequestBuilder(task, token).build(), token, modelRuntime.currentEngine());
+    }
+
     public AgentOutcome executePrepared(
             com.matrix.agent.task.conversation.ConversationTaskSubmitter.PreparedTask task,
             CancellationToken token) {

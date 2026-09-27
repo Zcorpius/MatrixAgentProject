@@ -291,7 +291,8 @@ public final class AgentEngine {
         String systemPrompt = buildSystemPrompt(request);
         // per-request zone 投影——主驾/副驾看到不同 tool 列表,
         // 此前加的 toToolDefinitions(VehicleZone) 才真正接入。
-        List<ToolDefinition> tools = registry.toToolDefinitions(request.getOccupantZone());
+        List<ToolDefinition> tools = registry.toToolDefinitions(request.getOccupantZone()).stream()
+                .filter(tool -> request.getExecutionScope().allows(tool.getCapabilityName())).collect(java.util.stream.Collectors.toList());
         List<AgentMessage> conversation = new ArrayList<>();
         // maxMessageChars 限制单条消息长度——system/user 输入过长会撑爆总字符预算,
         // 也可能直接被模型 API 拒绝。所有进入 conversation 的消息统一过 enforceMessageBudget。

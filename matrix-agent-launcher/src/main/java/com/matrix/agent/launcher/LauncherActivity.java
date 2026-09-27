@@ -80,7 +80,7 @@ public final class LauncherActivity extends AppCompatActivity {
                 getString(R.string.launcher_version, versionName()));
         conversation.setOnClickListener(v -> show(new ConversationFragment(), conversation,
                 R.string.nav_conversation));
-        tasks.setOnClickListener(v -> show(new AgentTaskFragment(), tasks, R.string.nav_tasks));
+        tasks.setOnClickListener(v -> show(new com.matrix.agent.launcher.presentation.ScheduleFragment(), tasks, R.string.nav_tasks));
         voice.setOnClickListener(v -> show(new VoiceFragment(), voice, R.string.nav_voice));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
         downloads.setOnClickListener(v -> show(new DownloadFragment(), downloads, R.string.nav_downloads));
@@ -121,7 +121,11 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void showInitialPage(android.content.Intent intent) {
-        if (intent != null && MatrixServiceConstants.ACTION_OPEN_DOWNLOADS.equals(intent.getAction())) {
+        if (intent != null && MatrixServiceConstants.ACTION_OPEN_SCHEDULE.equals(intent.getAction())) {
+            String run = intent.getStringExtra(MatrixServiceConstants.EXTRA_SCHEDULE_RUN_ID);
+            show(run == null ? com.matrix.agent.launcher.presentation.ScheduleFragment.forHistory()
+                    : com.matrix.agent.launcher.presentation.ScheduleFragment.forRun(run), tasks, R.string.nav_tasks);
+        } else if (intent != null && MatrixServiceConstants.ACTION_OPEN_DOWNLOADS.equals(intent.getAction())) {
             show(new DownloadFragment(), downloads, R.string.nav_downloads);
         } else {
             if (intent != null && com.matrix.agent.api.handoff.HandoffProtocol.ACTION_OPEN_CONVERSATION.equals(intent.getAction())) {

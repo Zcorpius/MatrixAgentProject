@@ -22,6 +22,8 @@ final class PendingUserDataReset {
 
     private PendingUserDataReset() { }
 
+    static boolean isPending(Context context) { return prefs(context).getBoolean(PENDING, false); }
+
     static void mark(Context context) {
         if (!prefs(context).edit().putBoolean(PENDING, true).commit()) {
             throw new IllegalStateException("could not persist pending reset tombstone");
@@ -35,7 +37,7 @@ final class PendingUserDataReset {
     }
 
     static void recoverIfNeeded(Context context, MatrixDatabase database, Executor databaseExecutor) {
-        if (!prefs(context).getBoolean(PENDING, false)) return;
+        if (!isPending(context)) return;
         if (database == null) throw new IllegalStateException("pending reset: encrypted database unavailable");
         FutureTask<Void> recovery = new FutureTask<>(() -> {
             recoverNow(context, database);
@@ -96,6 +98,7 @@ final class PendingUserDataReset {
                 database.auditEventDao().deleteByUser(user);
             }
             new RoomConversationStore(database, Runnable::run).clearForUsers(users);
+            database.scheduleDao().clearAll();
         });
         if (!RoomMemoryMigrator.clearLegacySharedPreferences(context)) {
             throw new IllegalStateException("pending reset: legacy source could not be removed");

@@ -213,7 +213,7 @@ public final class LlmPlanner {
             List<MemorySnippet> recalled = memoryRecaller.recall(scope, request.getSessionId(), request.getText(), 8);
             if (recalled == null || recalled.isEmpty()) return preferenceBlock;
             List<MemorySnippet> extra = recalled.stream()
-                    .filter(snippet -> snippet.getLayer() != MemoryLayer.PREFERENCE).toList();
+                    .filter(snippet -> snippet.getLayer() != MemoryLayer.PREFERENCE).collect(java.util.stream.Collectors.toList());
             if (extra.isEmpty()) return preferenceBlock;
             return preferenceBlock + "\n其他已召回的 Memory:"
                     + com.matrix.agent.task.prompt.DefaultPromptBuilder.formatRecalledMemory(extra);

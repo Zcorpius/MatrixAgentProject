@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MatrixAgent Launcher</string>
-    <string name="nav_tasks">任务工作</string>
+    <string name="nav_tasks">任务中心</string>
     <string name="nav_voice">语音功能</string>
     <string name="nav_models">模型接入</string>
     <string name="nav_downloads">模型市场</string>
@@ -91,7 +91,7 @@
     <string name="voice_status_session_unavailable">无法启动语音会话（错误码：%1$d）</string>
     <string name="agent_eyebrow_format">●  %1$s</string>
     <string name="agent_eyebrow">AGENT DESK</string>
-    <string name="agent_title">任务工作台</string>
+    <string name="agent_title">临时任务</string>
     <string name="agent_workspace_intro">把自然语言意图交给 Host；执行身份、调度与可审计运行轨迹始终由系统侧保存。</string>
     <string name="agent_new_intent">NEW INTENT</string>
     <string name="agent_quick_start">QUICK START</string>

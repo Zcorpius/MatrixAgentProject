@@ -40,7 +40,15 @@ public final class ConversationTaskSubmitter {
             InputSource inputSource,
             String languageTag,
             float asrConfidence,
-            boolean confidenceAvailable) { }
+            boolean confidenceAvailable, com.matrix.agent.identity.InteractiveOrigin origin) {
+        public PreparedTask(String runtimeRequestId, String conversationTaskId, String conversationId,
+                ClassificationSnapshot classification, ConversationSeedContext seed, String text, Actor actor,
+                String agentSessionId, String arbitrationKey, InputSource inputSource, String languageTag,
+                float asrConfidence, boolean confidenceAvailable) {
+            this(runtimeRequestId, conversationTaskId, conversationId, classification, seed, text, actor,
+                    agentSessionId, arbitrationKey, inputSource, languageTag, asrConfidence, confidenceAvailable, null);
+        }
+    }
 
     /** conversation 域提交入口的输入（不含 Host 内部派生字段）。 */
     public record SubmitInput(
@@ -54,7 +62,14 @@ public final class ConversationTaskSubmitter {
             InputSource inputSource,
             String languageTag,
             Float asrConfidence,
-            boolean confidenceAvailable) { }
+            boolean confidenceAvailable, com.matrix.agent.identity.InteractiveOrigin origin) {
+        public SubmitInput(String conversationTaskId, String runtimeRequestId, String conversationId,
+                String text, Actor actor, String agentSessionId, String arbitrationKey, InputSource inputSource,
+                String languageTag, Float asrConfidence, boolean confidenceAvailable) {
+            this(conversationTaskId, runtimeRequestId, conversationId, text, actor, agentSessionId,
+                    arbitrationKey, inputSource, languageTag, asrConfidence, confidenceAvailable, null);
+        }
+    }
 
     private final IntentClassifier classifier;
     private final MemoryIntentDetector memoryIntentDetector;
@@ -97,7 +112,7 @@ public final class ConversationTaskSubmitter {
                 input.inputSource(),
                 languageTag,
                 confidence,
-                input.confidenceAvailable());
+                input.confidenceAvailable(), input.origin());
     }
 
     /**
@@ -111,7 +126,7 @@ public final class ConversationTaskSubmitter {
                 assembler.assemble(prepared.conversationId(), prepared.text()), prepared.text(),
                 prepared.actor(), prepared.agentSessionId(), prepared.arbitrationKey(),
                 prepared.inputSource(), prepared.languageTag(), prepared.asrConfidence(),
-                prepared.confidenceAvailable());
+                prepared.confidenceAvailable(), prepared.origin());
     }
 
     private static void requireNonBlank(String value, String name) {

@@ -71,7 +71,7 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
             }
             List<LiveRow> matches = liveRows(root).stream()
                     .filter(row -> BilibiliResultRules.sameResult(row.candidate(), candidate))
-                    .toList();
+                    .collect(java.util.stream.Collectors.toList());
             if (matches.size() != 1 || !click(matches.get(0).node(), ctx)) {
                 throw new MediaPlatformException("SEARCH_RESULT_CHANGED");
             }
@@ -183,7 +183,7 @@ public final class AndroidBilibiliUiPort implements BilibiliUiPort {
     }
 
     private static List<Candidate> candidates(AccessibilityNodeInfo root) {
-        return liveRows(root).stream().map(LiveRow::candidate).toList();
+        return liveRows(root).stream().map(LiveRow::candidate).collect(java.util.stream.Collectors.toList());
     }
 
     private static List<LiveRow> liveRows(AccessibilityNodeInfo root) {

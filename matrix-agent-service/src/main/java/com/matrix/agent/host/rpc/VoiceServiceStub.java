@@ -149,7 +149,7 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
             String operationId, IVoiceSessionCallback callback) throws RemoteException {
         Log.i("MatrixAgent", "[VoiceSession] PTT enter op=" + operationId
                 + " runtimeBuilt=" + (VoiceRuntimeHolder.get() != null));
-        callerResolver.caller();
+        CallerContext originCaller = callerResolver.caller();
         String safeOperation = HostInputValidator.requireOperationId(operationId);
         validateRequest(request);
         // 尝试领取对话绑定：operationId 可能是对话页创建的 bindingOperationId。
@@ -194,7 +194,8 @@ public final class VoiceServiceStub extends IVoiceService.Stub {
             currentSessionId = sessionId;
             // 无论是否绑定都必须设置真实 sid：PTT 幂等键与语音回注 token 都以它为根。
             // Runtime 尚未装配 controller 时会暂存并在发布前补注入。
-            runtime.setVoiceSessionContext(sessionId, boundConversationId);
+            runtime.setVoiceSessionContext(sessionId, boundConversationId,
+                    new com.matrix.agent.identity.InteractiveOrigin(originCaller.uid, originCaller.userId, originCaller.packageName, ""));
             try {
                 sessionCallbacks.add(callback);
             } catch (RemoteException dead) {

@@ -1,0 +1,176 @@
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+com.matrix.agent.test.ScheduleHostInstrumentedTest:
+INSTRUMENTATION_STATUS: test=createReplayConflictRevisionPauseResumeAndDelete
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=createReplayConflictRevisionPauseResumeAndDelete
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=exactReminderIsAdmittedAndDeliveredOnce
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=2
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=exactReminderIsAdmittedAndDeliveredOnce
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest:
+INSTRUMENTATION_STATUS: test=clockDelegationIsExplicitlyUnverifiedAndRejectsDateParameter
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=3
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=clockDelegationIsExplicitlyUnverifiedAndRejectsDateParameter
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=scheduledAgentUsesIndependentRequestAndReturnsActualModelResult
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=4
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: NETWORK_UNAVAILABLE expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.scheduledAgentUsesIndependentRequestAndReturnsActualModelResult(CalendarWorkflowHostInstrumentedTest.java:113)
+
+INSTRUMENTATION_STATUS: stream=
+Error in scheduledAgentUsesIndependentRequestAndReturnsActualModelResult(com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest):
+java.lang.AssertionError: NETWORK_UNAVAILABLE expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.scheduledAgentUsesIndependentRequestAndReturnsActualModelResult(CalendarWorkflowHostInstrumentedTest.java:113)
+
+INSTRUMENTATION_STATUS: test=scheduledAgentUsesIndependentRequestAndReturnsActualModelResult
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=calendarMoveEarlierRearmsAndDeliversOnce
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=5
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=calendarMoveEarlierRearmsAndDeliversOnce
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=boundedAgendaWorkflowRunsThroughForegroundService
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=6
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=boundedAgendaWorkflowRunsThroughForegroundService
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=agentAgendaWorkflowReturnsModelSummaryAfterParallelReads
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=7
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: REQUIRED_STEP_FAILED expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.agentAgendaWorkflowReturnsModelSummaryAfterParallelReads(CalendarWorkflowHostInstrumentedTest.java:124)
+
+INSTRUMENTATION_STATUS: stream=
+Error in agentAgendaWorkflowReturnsModelSummaryAfterParallelReads(com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest):
+java.lang.AssertionError: REQUIRED_STEP_FAILED expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.agentAgendaWorkflowReturnsModelSummaryAfterParallelReads(CalendarWorkflowHostInstrumentedTest.java:124)
+
+INSTRUMENTATION_STATUS: test=agentAgendaWorkflowReturnsModelSummaryAfterParallelReads
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=calendarCreateReplayConflictUpdateAndDelete
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=8
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=calendarCreateReplayConflictUpdateAndDelete
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=
+INSTRUMENTATION_STATUS: test=recurringInstanceCanMoveTwiceWithoutDuplicatingException
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=9
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=9
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=recurringInstanceCanMoveTwiceWithoutDuplicatingException
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 64.952
+There were 2 failures:
+1) scheduledAgentUsesIndependentRequestAndReturnsActualModelResult(com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest)
+java.lang.AssertionError: NETWORK_UNAVAILABLE expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.scheduledAgentUsesIndependentRequestAndReturnsActualModelResult(CalendarWorkflowHostInstrumentedTest.java:113)
+2) agentAgendaWorkflowReturnsModelSummaryAfterParallelReads(com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest)
+java.lang.AssertionError: REQUIRED_STEP_FAILED expected:<3> but was:<5>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:647)
+	at com.matrix.agent.test.CalendarWorkflowHostInstrumentedTest.agentAgendaWorkflowReturnsModelSummaryAfterParallelReads(CalendarWorkflowHostInstrumentedTest.java:124)
+
+FAILURES!!!
+Tests run: 9,  Failures: 2
+
+
+INSTRUMENTATION_CODE: -1

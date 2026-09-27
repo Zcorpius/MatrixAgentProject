@@ -258,7 +258,7 @@ public final class ConversationCoordinator {
                         conversationTaskId, runtimeRequestId, command.conversationId(), agentText,
                         command.actor(), command.agentSessionId(), command.arbitrationKey(),
                         metadata.inputSource(), languageTag, metadata.asrConfidence(),
-                        metadata.confidenceAvailable()));
+                        metadata.confidenceAvailable(), metadata.origin()));
 
         // 2) 原子事务：幂等判重 + sequence + 用户消息(ACCEPTED) + task link + 附件冻结。
         SubmittedUserMessage submitted = store.submitUserMessage(new UserSubmission(
@@ -322,13 +322,23 @@ public final class ConversationCoordinator {
 
     /** 输入来源元数据。文字入口使用 TEXT/TOUCH；语音桥保留 PTT/WAKE 与 ASR 事实。 */
     public record InputMetadata(ConversationInputChannel channel, InputSource inputSource,
-            String idempotencyKey, Float asrConfidence, boolean confidenceAvailable) {
+            String idempotencyKey, Float asrConfidence, boolean confidenceAvailable,
+            com.matrix.agent.identity.InteractiveOrigin origin) {
+        public InputMetadata(ConversationInputChannel channel, InputSource inputSource, String idempotencyKey,
+                Float asrConfidence, boolean confidenceAvailable) {
+            this(channel, inputSource, idempotencyKey, asrConfidence, confidenceAvailable, null);
+        }
         public InputMetadata {
             Objects.requireNonNull(channel, "channel");
             Objects.requireNonNull(inputSource, "inputSource");
             if (idempotencyKey == null || idempotencyKey.isBlank()) {
                 throw new IllegalArgumentException("idempotencyKey 不能为空");
             }
+        }
+        public static InputMetadata text(String conversationId, String operationId,
+                com.matrix.agent.identity.InteractiveOrigin origin) {
+            return new InputMetadata(ConversationInputChannel.TEXT, InputSource.TOUCH,
+                    ConversationIds.textIdempotencyKey(conversationId, operationId), null, true, origin);
         }
         public static InputMetadata text(String conversationId, String clientOperationId) {
             return new InputMetadata(ConversationInputChannel.TEXT, InputSource.TOUCH,
@@ -430,6 +440,8 @@ public final class ConversationCoordinator {
 
         if (normalized.length() <= APPEND_MAX_CHARS) {
             String steerKey = command.metadata() == null
+                    || (command.metadata().channel() == ConversationInputChannel.TEXT
+                        && command.metadata().inputSource() == InputSource.TOUCH)
                     ? ConversationIds.steerIdempotencyKey(command.conversationId(),
                             command.clientOperationId())
                     : command.metadata().idempotencyKey();

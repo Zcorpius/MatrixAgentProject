@@ -45,9 +45,12 @@ public final class VoiceTtsFactory {
         cloudRoute = new TencentCloudTtsRouteFactory(app, cloudHttpClient);
     }
 
-    public ManagedTtsPort create(Executor executionLane) {
+    public ManagedTtsPort create(Executor executionLane) { return create(executionLane, true); }
+
+    /** Automatic work must not inherit an online TTS route without its saved network permission. */
+    public ManagedTtsPort create(Executor executionLane, boolean allowNetwork) {
         ManagedTtsPort local = createLocalFallback(executionLane);
-        return cloudRoute.create(() -> local, executionLane);
+        return allowNetwork ? cloudRoute.create(() -> local, executionLane) : local;
     }
 
     private ManagedTtsPort createLocalFallback(Executor executionLane) {

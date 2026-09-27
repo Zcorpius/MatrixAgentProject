@@ -28,7 +28,10 @@ public final class ParcelSchema {
      * appended fields; writers remain append-only.
      */
     // v9 adds the conversation external-app handoff domain and read-only UI activity.
-    public static final int CURRENT = 9;
+    // v10 adds the schedule domain. Existing DTO field order and enum values remain unchanged.
+    // v11 appends per-channel delivery facts to ScheduleRunInfo.
+    // v12 appends frozen workflow identity and safe step input/timing summaries.
+    public static final int CURRENT = 12;
 
     private ParcelSchema() {
     }

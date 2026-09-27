@@ -33,6 +33,15 @@ public final class MatrixServiceConstants {
     public static final int FEATURE_HANDOFF_DOMAIN = 1 << 7;
 
     public static final String ATTACHMENT_SERVICE = "matrix.service.ATTACHMENT";
+    public static final String SCHEDULE_SERVICE = "matrix.service.SCHEDULE";
+    public static final int FEATURE_SCHEDULE_DOMAIN = 1 << 8;
+    public static final int FEATURE_CALENDAR_DOMAIN = 1 << 9;
+    public static final int FEATURE_CLOCK_DELEGATION = 1 << 10;
+    public static final int FEATURE_SCHEDULE_AGENT = 1 << 11;
+    public static final int FEATURE_SCHEDULE_WORKFLOW = 1 << 12;
+    public static final String ACTION_OPEN_SCHEDULE = "com.matrix.agent.action.OPEN_SCHEDULE";
+    public static final String EXTRA_SCHEDULE_ID = "schedule_id";
+    public static final String EXTRA_SCHEDULE_RUN_ID = "schedule_run_id";
 
     /** Host notification → Launcher download page deep-link contract. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.matrix.agent.action.OPEN_DOWNLOADS";

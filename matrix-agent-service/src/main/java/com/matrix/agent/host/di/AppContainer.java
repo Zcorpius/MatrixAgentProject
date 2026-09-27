@@ -129,14 +129,17 @@ public final class AppContainer implements DownloadRuntime {
         vehicleStateSource = new DefaultVehicleStateSource();
         // MatrixDatabase 提前装配——audit + memory 共用同一 SQLCipher 实例
         // (getInstance 单例,keyProvider 失败 → database=null → audit/memory 均进入显式降级)。
-        this.persistenceGraph = new PersistenceRuntimeGraph(appContext);
-        MatrixDatabase encryptedDatabase = PendingUserDataReset.databaseAfterRecovery(
-                appContext, persistenceGraph.database(),
-                executorRegistry.dbExecutor());
+        this.persistenceGraph = PersistenceRuntimeGraph.get(appContext);
+        PersistenceRuntimeGraph.Admission storage;
+        try {
+            storage = persistenceGraph.await(30_000);
+        } catch (java.util.concurrent.TimeoutException timeout) {
+            throw new IllegalStateException("shared persistence initialization timed out", timeout);
+        }
+        MatrixDatabase encryptedDatabase = storage.database();
         // Memory graph owns the legacy migration plus the encrypted/volatile fallback boundary.
         // It is assembled before models because prompt construction needs the recaller.
-        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(appContext, encryptedDatabase, sessionManager,
-                executorRegistry.dbExecutor());
+        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(storage, sessionManager);
         MatrixDatabase database = memoryGraph.isDegraded() ? null : encryptedDatabase;
         this.activeDatabase = database;
         this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
@@ -164,6 +167,12 @@ public final class AppContainer implements DownloadRuntime {
         mediaAvailability = new MediaAvailabilityCache(appContext,
                 new AndroidPackageProbe(appContext), executorRegistry.networkExecutor());
         java.util.Map<String, CapabilityProvider> platformRoutes = new java.util.LinkedHashMap<>();
+        ScheduleGraph scheduleGraph = ((com.matrix.agent.host.MatrixAgentApplication) appContext).scheduleRuntime();
+        var scheduleProvider = new com.matrix.agent.schedule.tool.ScheduleCapabilityProvider(
+                new ScheduleToolBackend(appContext, scheduleGraph));
+        for (String capability : com.matrix.agent.task.capability.ScheduleCapabilities.ALL) platformRoutes.put(capability, scheduleProvider);
+        var calendarClock = new com.matrix.agent.platform.calendar.CalendarClockProvider(appContext);
+        for (String capability : com.matrix.agent.task.capability.CalendarClockCapabilities.ALL) platformRoutes.put(capability, calendarClock);
         platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
         platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
         for (String capability : MediaCapabilityProvider.capabilities()) {
@@ -259,12 +268,20 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.pendingBilibiliSelection = mediaProvider;
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
+        calendarChanges = new com.matrix.agent.platform.calendar.CalendarChangeObserver(appContext, scheduleGraph::calendarChanged);
+        scheduleGraph.calendarChanged();
+        automaticTasks = new com.matrix.agent.task.scheduler.AutomaticTaskExecutor(
+                agentRuntimeRepository, registry, provider, policyEngine, toolExecutor);
         agentRuntimeRepository.setLegacyMemoryClearHook(
                 () -> com.matrix.agent.data.memory.RoomMemoryMigrator
                         .clearLegacySharedPreferences(appContext));
         agentRuntimeRepository.setResetLifecycleHooks(
                 () -> PendingUserDataReset.mark(appContext),
                 () -> PendingUserDataReset.clearMarker(appContext));
+        if (database != null) {
+            agentRuntimeRepository.addConversationClearHook(
+                    () -> database.runInTransaction(() -> database.scheduleDao().clearAll()));
+        }
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
         // 调试轨迹日志无条件开启。所有构建变体均只由显式 Gradle 属性
         // matrix.debugTraceUi 决定是否把已净化投影写入 SQLCipher 并允许 UI 订阅；
@@ -311,6 +328,10 @@ public final class AppContainer implements DownloadRuntime {
         Log.i(TAG, "[App] AppContainer init done capabilities=" + registry.toToolDefinitions().size()
                 + " durationMs=" + ((System.nanoTime() - started) / 1_000_000L));
     }
+
+    private final com.matrix.agent.platform.calendar.CalendarChangeObserver calendarChanges;
+    private final com.matrix.agent.task.scheduler.AutomaticTaskExecutor automaticTasks;
+    public com.matrix.agent.task.scheduler.AutomaticTaskExecutor automaticTasks() { return automaticTasks; }
 
     public AgentRuntimeRepository getAgentRuntimeRepository() { return agentRuntimeRepository; }
     public ModelGatewayRepository getModelGatewayRepository() { return modelGatewayRepository; }
@@ -400,6 +421,7 @@ public final class AppContainer implements DownloadRuntime {
     public MatrixHttpClient getHttpClient() { return httpClient; }
 
     public void shutdown() {
+        calendarChanges.close();
         Log.i(TAG, "[App] shutdown begin");
         mediaAvailability.close();
         try {

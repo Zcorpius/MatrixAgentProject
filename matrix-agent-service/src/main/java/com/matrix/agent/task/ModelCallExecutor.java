@@ -96,6 +96,13 @@ public final class ModelCallExecutor {
 
     public Result decide(ModelGateway gateway, ModelTurnRequest request) {
         AgentRequest agentRequest = request.getAgentRequest();
+        if (!agentRequest.getExecutionScope().rejection().isEmpty()) {
+            return Result.terminal(StopReason.POLICY_HALT, "计划授权已失效");
+        }
+        if (!agentRequest.getExecutionScope().networkAllowed()
+                && gateway.executionLane() == ModelGateway.ExecutionLane.NETWORK) {
+            return Result.terminal(StopReason.POLICY_HALT, "计划未授权在线模型调用");
+        }
         long budgetMillis = agentRequest.remainingMillis();
         if (budgetMillis <= 0) {
             Log.w(TAG, "[ModelCall] pre-call deadline already passed, terminal=TIMEOUT");
@@ -118,6 +125,10 @@ public final class ModelCallExecutor {
             future = worker.submit(new Callable<ModelTurn>() {
                 @Override
                 public ModelTurn call() {
+                    if (!agentRequest.getExecutionScope().rejection().isEmpty()
+                            || agentRequest.remainingMillis() <= 0 || agentRequest.isCancelled()) {
+                        throw new CancellationException("automatic authority no longer valid");
+                    }
                     return call.call();
                 }
             });
@@ -183,6 +194,9 @@ public final class ModelCallExecutor {
             // gateway 抛 CancellationException（端侧 cancel/retire 在途）→ CANCELLED terminal，
             // 不走 POLICY_HALT（取消不是协议错误）
             if (cause instanceof CancellationException) {
+                if (agentRequest.remainingMillis() <= 0) {
+                    return Result.terminal(StopReason.TIMEOUT, "模型执行前已超过请求截止时间");
+                }
                 Log.w(TAG, "[ModelCall] gateway cancelled (CancellationException), terminal=CANCELLED costMs="
                         + elapsedMillis(callStarted));
                 return Result.terminal(StopReason.CANCELLED, "模型调用已取消(端侧)");

@@ -1,0 +1,4 @@
+Source: adb dumpsys alarm, active pending-alarm section only (excludes history/statistics)
+Host UID: 1000
+Reminder channel: blocked
+Domain pending alarm count: 0

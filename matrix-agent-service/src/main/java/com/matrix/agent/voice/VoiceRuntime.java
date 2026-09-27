@@ -117,6 +117,7 @@ public final class VoiceRuntime {
     private final CopyOnWriteArrayList<Consumer<VoiceSessionController>> controllerConfigurers =
             new CopyOnWriteArrayList<>();
     private volatile String pendingVoiceSessionId;
+    private volatile com.matrix.agent.identity.InteractiveOrigin pendingInteractiveOrigin;
     private volatile String pendingBoundConversationId;
     /** 依赖接口(测试注入假件驱动恢复路径;生产经装配工厂)。 */
     private volatile VoiceCapturePort capture;
@@ -382,10 +383,16 @@ public final class VoiceRuntime {
 
     /** PTT session/binding 是一次会话上下文；controller 尚未装配时先暂存，装配后原子补注入。 */
     public void setVoiceSessionContext(String voiceSessionId, String boundConversationId) {
+        setVoiceSessionContext(voiceSessionId, boundConversationId, null);
+    }
+    public void setVoiceSessionContext(String voiceSessionId, String boundConversationId,
+            com.matrix.agent.identity.InteractiveOrigin origin) {
+        this.pendingInteractiveOrigin = origin;
         this.pendingVoiceSessionId = voiceSessionId;
         this.pendingBoundConversationId = boundConversationId;
         VoiceSessionController current = controller;
         if (current != null) {
+            current.setInteractiveOrigin(origin);
             current.setVoiceSessionId(voiceSessionId);
             current.setBoundConversationId(boundConversationId);
         }
@@ -394,14 +401,15 @@ public final class VoiceRuntime {
     public void clearVoiceSessionContext(String voiceSessionId) {
         if (voiceSessionId == null || !voiceSessionId.equals(pendingVoiceSessionId)) return;
         pendingVoiceSessionId = null;
-        pendingBoundConversationId = null;
+        pendingBoundConversationId = null; pendingInteractiveOrigin = null;
         VoiceSessionController current = controller;
-        if (current != null) current.setBoundConversationId(null);
+        if (current != null) { current.setBoundConversationId(null); current.setInteractiveOrigin(null); }
     }
 
     private void applyControllerConfiguration(VoiceSessionController value) {
         String session = pendingVoiceSessionId;
         if (session != null) {
+            value.setInteractiveOrigin(pendingInteractiveOrigin);
             value.setVoiceSessionId(session);
             value.setBoundConversationId(pendingBoundConversationId);
         }

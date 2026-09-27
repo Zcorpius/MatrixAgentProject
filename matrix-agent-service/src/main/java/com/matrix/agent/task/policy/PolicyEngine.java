@@ -57,6 +57,9 @@ public final class PolicyEngine {
 
     public PolicyDecision evaluate(AgentRequest request, ToolCall call) {
         String cap = call.getCapabilityName();
+        if (!request.getExecutionScope().allows(cap)) return PolicyDecision.denyCapability("计划未授权此能力");
+        String revoked = request.getExecutionScope().rejection();
+        if (!revoked.isEmpty()) return PolicyDecision.denyCapability(revoked);
         // Tool 参数含 destination / home_address / preferred_temperature 等业务敏感字段,
         // 不能整段进 logcat。这里只暴露 capability 名 + 元数据(actor / occupantZone)。
         Log.d(TAG, "[Policy] evaluate cap=" + cap

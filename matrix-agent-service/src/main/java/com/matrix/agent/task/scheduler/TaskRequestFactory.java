@@ -98,6 +98,7 @@ public final class TaskRequestFactory {
                 .arbitrationKey(task.arbitrationKey())
                 .occupantZone(zone)
                 .inputSource(task.inputSource())
+                .interactiveOrigin(task.origin())
                 .languageTag(task.languageTag())
                 .asrConfidence(task.asrConfidence())
                 .confidenceAvailable(task.confidenceAvailable())
@@ -109,6 +110,20 @@ public final class TaskRequestFactory {
                 .memorySaveAllowed(task.classification().memorySaveAllowed())
                 .epoch(capturedEpoch)
                 .conversationSeed(task.seed());
+    }
+
+    public AgentRequest.Builder newAutomaticRequestBuilder(PreparedAutomaticTask task, CancellationToken token) {
+        long currentEpoch = memoryStore.currentEpoch();
+        if (task.dataEpoch() != currentEpoch || !task.scope().rejection().isEmpty()) {
+            throw new IllegalStateException("automatic authorization expired");
+        }
+        return AgentRequest.builder(task.text(), task.actor()).requestId(task.runtimeRequestId())
+                .sessionId("schedule-" + task.runtimeRequestId()).arbitrationKey("demo-vehicle")
+                .occupantZone(task.zone()).inputSource(com.matrix.agent.identity.InputSource.SCHEDULED)
+                .timeoutMillis(task.timeoutMillis()).cancellationToken(token)
+                .vehicleState(vehicleStateSource.snapshot()).runtimeProfile(runtimeProfileSource.snapshot())
+                .readOnlyHint(task.readOnly()).memorySaveAllowed(false).epoch(task.dataEpoch())
+                .executionScope(task.scope());
     }
 
     public void setIntentClassifier(IntentClassifier classifier) {

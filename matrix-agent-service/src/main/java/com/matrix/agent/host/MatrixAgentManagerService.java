@@ -57,6 +57,7 @@ public final class MatrixAgentManagerService extends Service {
             // The root Binder is the sole discovery and authorization boundary. Domain binders
             // are Host-private facades obtained only after this trusted transaction succeeds.
             if (MatrixServiceConstants.MANAGER_SERVICE.equals(serviceName)) return binder;
+            if (MatrixServiceConstants.SCHEDULE_SERVICE.equals(serviceName)) return graph.scheduleBinder();
             return MatrixServiceConstants.MODEL_SERVICE.equals(serviceName) ? modelServiceBinder()
                     : MatrixServiceConstants.DOWNLOAD_SERVICE.equals(serviceName) ? downloadServiceBinder()
                     : MatrixServiceConstants.VOICE_SERVICE.equals(serviceName) ? voiceServiceBinder()

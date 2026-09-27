@@ -7,6 +7,8 @@ import java.util.UUID;
 
 public final class AgentRequest {
     private final String requestId;
+    private final ExecutionScope executionScope;
+    private final InteractiveOrigin interactiveOrigin;
     private final String sessionId;
     /**
      * 调度仲裁键——同车不同座位的请求共享同一仲裁队列,
@@ -115,6 +117,8 @@ public final class AgentRequest {
         epoch = builder.epoch;
         memorySaveAllowed = builder.memorySaveAllowed;
         conversationSeed = builder.conversationSeed;
+        executionScope = builder.executionScope;
+        interactiveOrigin = builder.interactiveOrigin;
     }
 
     private static String requireValidRequestId(String value) {
@@ -131,6 +135,8 @@ public final class AgentRequest {
     }
 
     public String getRequestId() { return requestId; }
+    public InteractiveOrigin getInteractiveOrigin() { return interactiveOrigin; }
+    public ExecutionScope getExecutionScope() { return executionScope; }
     public String getSessionId() { return sessionId; }
     /** 调度仲裁键(默认 = sessionId)。TaskScheduler 内部用此 key。 */
     public String getArbitrationKey() { return arbitrationKey; }
@@ -150,7 +156,7 @@ public final class AgentRequest {
     public CancellationToken getCancellationToken() { return cancellationToken; }
     public boolean isCancelled() { return cancellationToken.isCancelled(); }
     public boolean isTimedOut() { return System.currentTimeMillis() >= deadlineAtMillis; }
-    public long remainingMillis() { return Math.max(0L, deadlineAtMillis - System.currentTimeMillis()); }
+    public long remainingMillis() { return Math.min(executionScope.remainingMillis(), Math.max(0L, deadlineAtMillis - System.currentTimeMillis())); }
     /**
      * TaskScheduler 抢占判断的关键 hint。
      *
@@ -202,6 +208,8 @@ public final class AgentRequest {
         private boolean memorySaveAllowed = false;
         private ConversationSeedContext conversationSeed;
         private String requestIdOverride;
+        private ExecutionScope executionScope = ExecutionScope.INTERACTIVE;
+        private InteractiveOrigin interactiveOrigin;
 
         private Builder(String text, Actor actor) {
             if (actor == null) throw new IllegalArgumentException("actor 不能为空");
@@ -247,6 +255,9 @@ public final class AgentRequest {
         /** 注入跨任务对话历史种子（task 装配器专用；普通任务不设）。 */
         public Builder conversationSeed(ConversationSeedContext value) { conversationSeed = value; return this; }
         /** 注入提交期已持久化的稳定 requestId（对话域专用；小写 UUID，构造时校验）。 */
+        public Builder interactiveOrigin(InteractiveOrigin value) { interactiveOrigin = value; return this; }
+        public Builder executionScope(ExecutionScope value) { executionScope = java.util.Objects.requireNonNull(value); return this; }
+
         public Builder requestId(String value) { requestIdOverride = value; return this; }
         public AgentRequest build() {
             if (occupantZone == null) throw new IllegalArgumentException("occupantZone 不能为空");

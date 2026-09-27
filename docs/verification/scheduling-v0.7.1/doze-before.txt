@@ -1,0 +1,10 @@
+Host UID=1000; mCharging=false; mState=IDLE mLightState=OVERRIDE
+Active scheduling alarm count=1
+    ELAPSED_WAKEUP #1: Alarm{cb6f666 type 2 origWhen 3972078 whenElapsed 3972078 com.matrix.agent}
+      tag=*walarm*:com.matrix.agent.schedule.DUE
+      type=ELAPSED_WAKEUP origWhen=+30s979ms window=0 exactAllowReason=policy_permission repeatInterval=0 count=0 flags=0x9
+      policyWhenElapsed: requester=+30s979ms app_standby=-1ms device_idle=-105ms battery_saver=--
+      whenElapsed=+30s979ms maxWhenElapsed=+30s979ms
+      operation=PendingIntent{1de2da7: PendingIntentRecord{266888d com.matrix.agent broadcastIntent}}
+      idle-options=Bundle[{android.pendingIntent.backgroundActivityAllowed=2, android:broadcast.temporaryAppAllowlistReasonCode=302, android:broadcast.temporaryAppAllowlistDuration=10000, android:broadcast.temporaryAppAllowlistReason=, android:broadcast.temporaryAppAllowlistType=0, android:broadcast.flags=8}]
+    ELAPSED #2: Alarm{3ac8254 type 3 origWhen 3984655 whenElapsed 3984655 android}
