@@ -8,6 +8,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -17,27 +18,39 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.matrix.agent.launcher.LauncherActivity;
+import com.matrix.agent.launcher.LauncherApplication;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.overlay.pet.PetCharacter;
+import com.matrix.agent.launcher.overlay.pet.PetCharacterPreferences;
+import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences.ColorTheme;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences.Mode;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.EnumMap;
 
-/** Appearance controls for persisted light/dark mode and the eight launcher palettes. */
+/** Appearance controls for persisted mode, launcher palettes, and the floating character. */
 public final class SettingsFragment extends Fragment {
+    private static final String STATE_SCROLL_Y = "settings_scroll_y";
+    private record PetOption(LinearLayout card, TextView label, TextView check) {}
     private LauncherActivity activity;
+    private ScrollView settingsScroll;
     private int ink;
     private int muted;
     private int paper;
     private int card;
     private int accent;
+    private final List<PetSpriteRepository.Subscription> petPreviews = new ArrayList<>();
+    private final EnumMap<PetCharacter, PetOption> petOptions = new EnumMap<>(PetCharacter.class);
 
     @Nullable
     @Override
     public View onCreateView(@NonNull android.view.LayoutInflater inflater,
                              @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         activity = (LauncherActivity) requireActivity();
+        petOptions.clear();
         ink = tone(R.attr.matrix_ink);
         muted = tone(R.attr.matrix_ink_muted);
         paper = tone(R.attr.matrix_paper);
@@ -45,6 +58,7 @@ public final class SettingsFragment extends Fragment {
         accent = tone(R.attr.matrix_accent);
 
         ScrollView scroll = new ScrollView(requireContext());
+        settingsScroll = scroll;
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(paper);
         LinearLayout content = new LinearLayout(requireContext());
@@ -92,7 +106,105 @@ public final class SettingsFragment extends Fragment {
         content.addView(colorHeading, colorHeadingParams);
         content.addView(themeChoices(LauncherThemePreferences.colorThemes(),
                 LauncherThemePreferences.colorTheme(requireContext())));
+
+        LinearLayout petHeading = sectionHeading(R.string.launcher_floating_character,
+                R.string.launcher_floating_character_summary);
+        LinearLayout.LayoutParams petHeadingParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        petHeadingParams.topMargin = dp(24);
+        content.addView(petHeading, petHeadingParams);
+        content.addView(petChoices(List.of(PetCharacter.values()), PetCharacterPreferences.get(requireContext())));
+        int restoreY = savedInstanceState == null ? 0 : savedInstanceState.getInt(STATE_SCROLL_Y);
+        if (restoreY > 0) scroll.post(() -> scroll.scrollTo(0, restoreY));
         return scroll;
+    }
+
+    @Override public void onSaveInstanceState(@NonNull Bundle outState) {
+        if (settingsScroll != null) outState.putInt(STATE_SCROLL_Y, settingsScroll.getScrollY());
+        super.onSaveInstanceState(outState);
+    }
+
+    private LinearLayout petChoices(List<PetCharacter> characters, PetCharacter selected) {
+        LinearLayout grid = new LinearLayout(requireContext());
+        grid.setOrientation(LinearLayout.VERTICAL);
+        for (int start = 0; start < characters.size(); start += 2) {
+            LinearLayout row = new LinearLayout(requireContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int column = 0; column < 2; column++) {
+                int index = start + column;
+                if (index >= characters.size()) {
+                    row.addView(new View(requireContext()), new LinearLayout.LayoutParams(0, dp(126), 1f));
+                    continue;
+                }
+                PetCharacter character = characters.get(index);
+                row.addView(petOption(character, character == selected), weightedCardParams(column));
+            }
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (start > 0) rowParams.topMargin = dp(9);
+            grid.addView(row, rowParams);
+        }
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(10);
+        grid.setLayoutParams(params);
+        return grid;
+    }
+
+    private View petOption(PetCharacter character, boolean selected) {
+        LinearLayout option = new LinearLayout(requireContext());
+        option.setOrientation(LinearLayout.VERTICAL);
+        option.setGravity(Gravity.CENTER_HORIZONTAL);
+        option.setPadding(dp(10), dp(10), dp(10), dp(10));
+        option.setMinimumHeight(dp(126));
+        option.setBackground(panelBackground(selected ? tone(R.attr.matrix_selected) : card, dp(16)));
+        option.setClickable(true);
+        option.setFocusable(true);
+
+        ImageView portrait = new ImageView(requireContext());
+        portrait.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        option.addView(portrait, new LinearLayout.LayoutParams(dp(58), dp(62)));
+        PetSpriteRepository repository = ((LauncherApplication) requireActivity().getApplication()).petSprites();
+        petPreviews.add(repository.loadPreview(character, bitmap -> {
+            if (bitmap != null) portrait.setImageBitmap(bitmap);
+        }));
+
+        TextView label = text(getString(character.label()), 13, selected ? tone(R.attr.matrix_accent_deep) : ink,
+                selected, false);
+        label.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        labelParams.topMargin = dp(5);
+        option.addView(label, labelParams);
+        TextView check = text("✓ 已选择", 11, tone(R.attr.matrix_accent_deep), true, false);
+        check.setGravity(Gravity.CENTER);
+        check.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+        option.addView(check);
+        petOptions.put(character, new PetOption(option, label, check));
+        option.setContentDescription(getString(character.label()) + (selected ? "，已选择" : ""));
+        option.setOnClickListener(view -> selectPet(character));
+        return option;
+    }
+
+    private void selectPet(PetCharacter character) {
+        if (PetCharacterPreferences.get(requireContext()) == character) return;
+        PetCharacterPreferences.set(requireContext(), character);
+        ((LauncherApplication) requireActivity().getApplication()).overlay().setPetCharacter(character);
+        petOptions.forEach((candidate, option) -> {
+            boolean selected = candidate == character;
+            option.card().setBackground(panelBackground(selected ? tone(R.attr.matrix_selected) : card, dp(16)));
+            option.label().setTextColor(selected ? tone(R.attr.matrix_accent_deep) : ink);
+            option.label().setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            option.check().setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+            option.card().setContentDescription(getString(candidate.label()) + (selected ? "，已选择" : ""));
+        });
+    }
+
+    @Override public void onDestroyView() {
+        petPreviews.forEach(PetSpriteRepository.Subscription::close);
+        petPreviews.clear();
+        petOptions.clear();
+        super.onDestroyView();
     }
 
     private LinearLayout modeChoices(List<Mode> modes, Mode selected) {

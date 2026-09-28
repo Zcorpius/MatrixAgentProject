@@ -2,7 +2,7 @@
   <img src="matrix-agent-launcher/src/main/res/drawable-nodpi/matrix_ai_mark.png" width="104" alt="Matrix AI 实心矩阵标志" />
   <h1>MatrixAgent</h1>
   <p><strong>面向 Android 系统镜像的 Agent 运行时</strong></p>
-  <p>在系统中执行任务，在应用间延续对话。<br />通过 Matrix AI 工作区与雪乃角色，连接模型、语音、记忆和日程。</p>
+  <p>在系统中执行任务，在应用间延续对话。<br />通过 Matrix AI 工作区与可切换的悬浮角色，连接模型、语音、记忆和日程。</p>
   <p>
     <img src="https://img.shields.io/badge/version-0.7.1-147D73?style=flat-square" alt="版本 0.7.1" />
     <img src="https://img.shields.io/badge/Android-15-173B46?style=flat-square&amp;logo=android&amp;logoColor=white" alt="验证设备 Android 15" />
@@ -66,9 +66,11 @@
 
 <a id="overlay"></a>
 
-### 雪乃，跟随会话的角色入口
+### 四位角色，跟随会话的悬浮入口
 
-透明角色保留在其他应用上方，点击展开会话，拖动切换左右跑步。触碰屏幕时，她按 **16 个方向**看向第一根手指，抬手 **800ms** 后恢复任务动作；会话首次可见，或离开至少 **5 分钟**后返回时，在不抢占结果提示的条件下挥手问候。
+在「设置 → 外观 → 悬浮形象」中，可选择雪之下雪乃、绫波丽、宁姚或鲸鱼娘；默认是雪乃。选择会保存，并立即更新已显示的悬浮角色，设置页保持原来的滚动位置。
+
+透明角色保留在其他应用上方，点击展开会话，拖动切换左右跑步。触碰屏幕时，角色按 **16 个方向**看向第一根手指，抬手 **800ms** 后恢复任务动作；会话首次可见，或离开至少 **5 分钟**后返回时，在不抢占结果提示的条件下挥手问候。
 
 完成、失败与结果不确定各有对应动作和角标。角色交互不改变任务事实；全屏注视需要 Android 15+ 的平台输入观察能力。 [动作、截图与生命周期 →](docs/功能与交互.md#overlay)
 

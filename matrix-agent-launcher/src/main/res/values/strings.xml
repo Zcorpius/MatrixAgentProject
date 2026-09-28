@@ -19,6 +19,12 @@
     <string name="theme_ink">墨黑</string>
     <string name="launcher_appearance_mode_summary">可选择浅色、深色，或跟随 Android 系统设置。</string>
     <string name="launcher_appearance_color_summary">颜色主题会同时调整页面纸色、强调色和消息卡片。</string>
+    <string name="launcher_floating_character">悬浮形象</string>
+    <string name="launcher_floating_character_summary">选择跨应用悬浮入口显示的动漫角色。</string>
+    <string name="pet_character_yukino">雪之下雪乃</string>
+    <string name="pet_character_rei">绫波丽</string>
+    <string name="pet_character_ning_yao">宁姚</string>
+    <string name="pet_character_whale">鲸鱼娘</string>
     <string name="app_name">Matrix AI</string>
     <string name="nav_tasks">任务中心</string>
     <string name="nav_voice">语音功能</string>

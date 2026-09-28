@@ -5,6 +5,7 @@ import android.app.Application;
 import com.matrix.agent.launcher.data.LauncherHostGateway;
 import com.matrix.agent.launcher.data.LauncherExecutorRegistry;
 import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
+import com.matrix.agent.launcher.overlay.pet.PetCharacterPreferences;
 
 /** Process owner for Launcher-only infrastructure.  It never depends on Host implementation code. */
 public final class LauncherApplication extends Application {
@@ -25,7 +26,7 @@ public final class LauncherApplication extends Application {
         super.onCreate();
         executors = new LauncherExecutorRegistry();
         petSprites = new PetSpriteRepository(getAssets(), executors.petDecoding());
-        petSprites.warmUp();
+        petSprites.warmUp(PetCharacterPreferences.get(this));
         hostGateway = new LauncherHostGateway(this, executors);
         pointerClient = new com.matrix.agent.launcher.data.OverlayPointerClient(hostGateway, executors);
         draftLane = new com.matrix.agent.launcher.data.DraftCommandLane(hostGateway, executors.draftCommands());

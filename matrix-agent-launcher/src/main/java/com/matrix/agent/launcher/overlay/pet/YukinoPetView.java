@@ -33,6 +33,7 @@ public class YukinoPetView extends View implements AutoCloseable {
     private final Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF destination = new RectF();
     private final int successColor, errorColor, warningColor, mutedColor, outlineColor;
+    private PetCharacter character;
     private PetSpriteRepository.Subscription loading, posterLoading;
     private PetSpriteRepository.Clip clip;
     private Bitmap poster;
@@ -50,8 +51,13 @@ public class YukinoPetView extends View implements AutoCloseable {
     private boolean playbackEnabled, running, closed;
 
     public YukinoPetView(Context context, PetSpriteRepository sprites) {
+        this(context, sprites, PetCharacterPreferences.get(context));
+    }
+
+    public YukinoPetView(Context context, PetSpriteRepository sprites, PetCharacter character) {
         super(context);
         this.sprites = sprites;
+        this.character = character;
         successColor = LauncherThemePreferences.colorResource(context, R.color.overlay_success);
         errorColor = LauncherThemePreferences.colorResource(context, R.color.overlay_danger);
         warningColor = LauncherThemePreferences.colorResource(context, R.color.overlay_warning);
@@ -59,9 +65,9 @@ public class YukinoPetView extends View implements AutoCloseable {
         outlineColor = LauncherThemePreferences.colorResource(context, R.color.overlay_surface);
         setClickable(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
-        var neutral = sprites.cached(Motion.NEUTRAL);
+        var neutral = sprites.cached(character, Motion.NEUTRAL);
         if (neutral != null) poster = neutral.frames().get(0);
-        else posterLoading = sprites.load(Motion.NEUTRAL, result -> {
+        else posterLoading = sprites.load(character, Motion.NEUTRAL, result -> {
             posterLoading = null;
             if (!closed && result.clip() != null) {
                 poster = result.clip().frames().get(0);
@@ -87,6 +93,23 @@ public class YukinoPetView extends View implements AutoCloseable {
             }
         }
         invalidate();
+    }
+
+    /** Switch identity while retaining the current task motion and any temporary gesture state. */
+    public void setCharacter(PetCharacter value) {
+        if (closed || character == value) return;
+        character = value;
+        poster = null;
+        if (posterLoading != null) posterLoading.close();
+        posterLoading = sprites.load(character, Motion.NEUTRAL, result -> {
+            posterLoading = null;
+            if (!closed && character == value && result.clip() != null) {
+                poster = result.clip().frames().get(0);
+                invalidate();
+            }
+        });
+        if (suspended != null) suspended = new Resume(suspended.motion(), null, 0, 0);
+        select(new Resume(playing, null, 0, 0));
     }
 
     /** Start IO at pointer-down, before the drag threshold is reached; neither request owns this View. */
@@ -183,12 +206,12 @@ public class YukinoPetView extends View implements AutoCloseable {
         playing = motion;
         elapsedBeforeRun = resume.elapsedMs();
         frame = resume.frame();
-        clip = resume.clip() != null ? resume.clip() : sprites.cached(motion);
+        clip = resume.clip() != null ? resume.clip() : sprites.cached(character, motion);
         if (clip != null) {
             loading = null;
             reconcilePlayback();
         } else {
-            loading = sprites.load(motion, result -> {
+            loading = sprites.load(character, motion, result -> {
                 if (closed || generation != loadGeneration) return;
                 loading = null;
                 // Loading failure keeps a neutral, clickable entry; it must not abort a handoff.

@@ -21,6 +21,7 @@ import com.matrix.agent.launcher.R;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
 import com.matrix.agent.launcher.overlay.pet.YukinoPetView;
+import com.matrix.agent.launcher.overlay.pet.PetCharacter;
 import com.matrix.agent.api.interaction.OverlayPointerSample;
 
 /** Android window mechanics only. Owner and conversation state live in the controller/presenter. */
@@ -299,6 +300,7 @@ public final class OverlayWindow implements AutoCloseable {
     public boolean editing() { return editing; }
     public boolean interactive() { return interactive; }
     public boolean petVisible() { return visible() && interactive && !expanded; }
+    public void setPetCharacter(PetCharacter character) { bubble.setCharacter(character); }
     public void wave() { if (petVisible()) bubble.wave(); }
     public void cancelLook() { bubble.cancelLook(); }
     public void pointer(OverlayPointerSample sample) {

@@ -16,6 +16,7 @@ import com.matrix.agent.api.handoff.*;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.data.*;
 import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
+import com.matrix.agent.launcher.overlay.pet.PetCharacter;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -132,6 +133,9 @@ public final class OverlayController implements HandoffClient.Presentation, Over
         revealIfReady(); publish();
     }
     public void configurationChanged() { if (window != null) window.update(); }
+    public void setPetCharacter(PetCharacter character) {
+        if (window != null) window.setPetCharacter(character);
+    }
 
     @Override public HandoffClient.Decision fastDecision(ExternalAppHandoffRequest request) {
         Snapshot current = snapshot;

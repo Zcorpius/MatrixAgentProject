@@ -30,6 +30,24 @@ public final class PetSpriteCatalogTest {
         assertEquals("frames/neutral.png", catalog.animations().get("neutral").get(0).file());
     }
 
+    @Test public void allBundledCharacterCatalogsMatchTheirIdentityAndFrames() throws Exception {
+        for (PetCharacter character : PetCharacter.values()) {
+            Path directory = assets.resolveSibling(character.assetDirectory());
+            String json = new String(Files.readAllBytes(directory.resolve("animations.json")),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            var catalog = PetSpriteCatalog.parse(json, character);
+            assertEquals(11, catalog.animations().size());
+            assertEquals(74, catalog.animations().values().stream().mapToInt(java.util.List::size).sum());
+            for (var frames : catalog.animations().values()) for (var frame : frames) {
+                byte[] png = Files.readAllBytes(directory.resolve(frame.file()));
+                var header = ByteBuffer.wrap(png);
+                assertEquals(character + ": " + frame.file(), 0x89504e470d0a1a0aL, header.getLong());
+                assertEquals(character + ": " + frame.file(), catalog.width(), header.getInt(16));
+                assertEquals(character + ": " + frame.file(), catalog.height(), header.getInt(20));
+            }
+        }
+    }
+
     @Test public void rejectsInvalidDurationsAndMissingRequiredActions() throws Exception {
         var json = new JSONObject(bundled());
         json.getJSONObject("animations").getJSONObject("idle").getJSONArray("frames")

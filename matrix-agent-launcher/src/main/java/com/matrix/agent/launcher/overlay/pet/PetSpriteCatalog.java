@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 
-/** The bundled v1 asset contract. Paths are relative to assets/yukino, never Android resource IDs. */
+/** Shared bundled sprite contract. Paths are relative to a character's asset directory. */
 record PetSpriteCatalog(int width, int height, Map<String, List<Frame>> animations) {
     record Frame(String file, int durationMs) {}
 
@@ -18,14 +18,23 @@ record PetSpriteCatalog(int width, int height, Map<String, List<Frame>> animatio
     }
 
     static PetSpriteCatalog parse(String json) throws JSONException {
+        return parse(json, PetCharacter.YUKINO);
+    }
+
+    static PetSpriteCatalog parse(String json, PetCharacter character) throws JSONException {
         JSONObject root = new JSONObject(json);
-        if (!"yukino-android-sprite-assets".equals(root.getString("schema"))
-                || root.getInt("schemaVersion") != 1) {
+        String expectedSchema = character == PetCharacter.YUKINO
+                ? "yukino-android-sprite-assets" : "codex-v2-android-sprite-assets";
+        if (!expectedSchema.equals(root.getString("schema")) || root.getInt("schemaVersion") != 1
+                || !character.displayName().equals(root.getString("displayName"))
+                || (character.petId() != null && !character.petId().equals(root.getString("petId")))) {
             throw new JSONException("Unsupported pet asset schema");
         }
         JSONObject atlas = root.getJSONObject("atlas");
         int width = atlas.getInt("cellWidth"), height = atlas.getInt("cellHeight");
-        if (width != 192 || height != 208) throw new JSONException("Unexpected Yukino frame dimensions");
+        if (width != 192 || height != 208 || atlas.getInt("columns") != 8 || atlas.getInt("rows") != 11) {
+            throw new JSONException("Unexpected pet frame dimensions");
+        }
         Map<String, List<Frame>> animations = new LinkedHashMap<>();
         JSONObject definitions = root.getJSONObject("animations");
         var keys = definitions.keys();
