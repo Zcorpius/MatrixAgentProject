@@ -88,7 +88,7 @@
 
 ## 系统架构
 
-[![MatrixAgent 系统架构：Launcher 和可信应用经版本化 SDK 接入 System Host，Host 内包含业务域、执行、端侧推理与安全存储](docs/architecture/matrix-agent-architecture-dark-2026-09-28.png)](docs/architecture/matrix-agent-architecture-dark-2026-09-28.png)
+[![MatrixAgent 白底系统架构：Launcher 和可信应用经版本化 SDK 接入 System Host，Host 内包含业务域、执行、端侧推理与安全存储](docs/architecture/matrix-agent-architecture-light-2026-09-29.png)](docs/architecture/matrix-agent-architecture-light-2026-09-29.png)
 
 Launcher 呈现状态，SDK 定义调用契约，Host 持有执行权威。图中 Host 内的业务域与支撑模块按职责分组，具体调用依赖见[架构与 SDK 接入说明](docs/开发与验证.md#architecture)。仓库主要模块为 [Launcher](matrix-agent-launcher)、[Host](matrix-agent-service)、[SDK](matrix-agent-service-lib)、[端侧推理](ondevice)和[设备验证](matrix-agent-test)。
 
