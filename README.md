@@ -6,13 +6,22 @@ MatrixAgent 是集成到定制 Android 系统中的 Agent。**Matrix AI Launcher
 
 ## 界面一览
 
-<p align="center">
-  <a href="docs/images/2026-09-27/launcher-conversation.png"><img src="docs/images/2026-09-27/launcher-conversation.png" width="30%" alt="Launcher 对话交互页面" /></a>
-  <a href="docs/images/2026-09-27/launcher-workflows.png"><img src="docs/images/2026-09-27/launcher-workflows.png" width="30%" alt="任务中心的工作流模板" /></a>
-  <a href="docs/images/2026-09-28/launcher-settings-appearance.png"><img src="docs/images/2026-09-28/launcher-settings-appearance.png" width="30%" alt="设置页面的颜色主题和四个悬浮形象" /></a>
-</p>
+<table>
+  <tr><th>对话交互</th><th>任务中心 · 模板</th><th>语音功能</th></tr>
+  <tr>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/conversation.png"><img src="docs/images/2026-09-28/launcher-refresh/conversation.png" width="260" alt="新版对话页：媒体测试会话、消息气泡、模型胶囊和输入区" /></a></td>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/tasks-templates.png"><img src="docs/images/2026-09-28/launcher-refresh/tasks-templates.png" width="260" alt="新版任务中心：四个页签与两个日程工作流模板" /></a></td>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/voice.png"><img src="docs/images/2026-09-28/launcher-refresh/voice.png" width="260" alt="新版语音页：等待开始、录音控制和云端播报入口" /></a></td>
+  </tr>
+  <tr><th>模型接入</th><th>模型市场</th><th>设置 · 悬浮形象</th></tr>
+  <tr>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/models.png"><img src="docs/images/2026-09-28/launcher-refresh/models.png" width="260" alt="新版模型接入页：运行时、推理来源和安全配置表单" /></a></td>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/market.png"><img src="docs/images/2026-09-28/launcher-refresh/market.png" width="260" alt="新版模型市场：下载状态及已安装的端侧模型" /></a></td>
+    <td><a href="docs/images/2026-09-28/launcher-refresh/settings-pets.png"><img src="docs/images/2026-09-28/launcher-refresh/settings-pets.png" width="260" alt="新版设置页：颜色主题与四个可切换的悬浮形象" /></a></td>
+  </tr>
+</table>
 
-对话和任务截图采集于 2026-09-27；设置截图采集于 2026-09-28 的已连接真机。截图是当时的页面状态，不代表当前模型、计划或会话内容。[查看截图来源与完整图集](docs/images/README.md) · [查看跨应用会话小窗](docs/images/2026-09-27/overlay-conversation.png)
+以上图片均于 **2026-09-28** 从已连接的 Mi 9 SE 原样采集，运行中的 Launcher 与本地 debug APK 哈希一致。图片中的会话、模型和下载状态是采集时的设备状态。[截图来源与完整图集](docs/images/README.md) · [外观模式](docs/images/2026-09-28/launcher-refresh/settings-theme.png) · [导航抽屉](docs/images/2026-09-28/launcher-refresh/navigation.png)
 
 ## 在 Launcher 中可以做什么
 
