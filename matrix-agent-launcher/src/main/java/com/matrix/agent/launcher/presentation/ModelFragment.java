@@ -14,6 +14,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -94,7 +95,16 @@ public final class ModelFragment extends Fragment {
         test.setOnClickListener(v -> viewModel.testActiveConnection());
         refresh.setOnClickListener(v -> viewModel.refresh());
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
-        new ViewModelProvider(requireActivity(), activity().viewModelFactory()).get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> { connected = viewModel.isHostConnected(); renderControls(); if (connected) viewModel.refresh(); });
+        new ViewModelProvider(requireActivity(), activity().viewModelFactory())
+                .get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> {
+                    boolean wasConnected = connected;
+                    connected = viewModel.isHostConnected();
+                    renderControls();
+                    // A retained model snapshot can render before the new view observes Host
+                    // connectivity. The card buttons must follow that change as well.
+                    if (connected != wasConnected && rendered != null) renderModelCards(rendered);
+                    if (connected) viewModel.refresh();
+                });
         return root;
     }
     private List<ProviderOption> providerOptions() {
@@ -138,7 +148,22 @@ public final class ModelFragment extends Fragment {
         viewModel.provision(p.id,model,endpoint.getText().toString().trim(),p.apiKeyRequired,secret);
     }
     private void toggleKeyVisibility() { keyVisible=!keyVisible; int at=key.getSelectionEnd(); key.setInputType(InputType.TYPE_CLASS_TEXT | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD)); key.setTypeface(key.getTypeface()); if(at>=0&&at<=key.length())key.setSelection(at); requireView().<ImageButton>findViewById(R.id.model_key_visibility).setImageResource(keyVisible?R.drawable.ic_eye_visible:R.drawable.ic_eye_hidden); }
-    private void render(@NonNull ModelViewModel.State v) { rendered=v; if(v.savedForm!=null)saveDraft(v.savedForm); restoreActiveModel(v.models); renderStatus(v); models.removeAllViews(); if(v.models.isEmpty()) models.addView(muted(getString(R.string.model_empty_with_download_hint))); else for(ModelInfo m:v.models)addModelCard(m,v.busy); renderControls(); }
+    private void render(@NonNull ModelViewModel.State state) {
+        rendered = state;
+        if (state.savedForm != null) saveDraft(state.savedForm);
+        restoreActiveModel(state.models);
+        renderStatus(state);
+        renderModelCards(state);
+        renderControls();
+    }
+    private void renderModelCards(@NonNull ModelViewModel.State state) {
+        models.removeAllViews();
+        if (state.models.isEmpty()) {
+            models.addView(muted(getString(R.string.model_empty_with_download_hint)));
+            return;
+        }
+        for (ModelInfo model : state.models) addModelCard(model, state);
+    }
     private void renderStatus(ModelViewModel.State v) {
         if (v.notice == ModelViewModel.Notice.RUNTIME && v.runtime != null) {
             ModelRuntimeStatus runtime = v.runtime;
@@ -208,7 +233,45 @@ public final class ModelFragment extends Fragment {
         credentialSavedForProvider = saved;
         key.setHint(saved ? R.string.model_key_saved_hint : R.string.model_key_transient_hint);
     }
-    private void addModelCard(ModelInfo m, boolean busy) { LinearLayout c=new LinearLayout(requireContext());c.setOrientation(LinearLayout.VERTICAL);c.setBackgroundResource(R.drawable.bg_card);c.setPadding(dp(15),dp(13),dp(15),dp(13)); TextView t=new TextView(requireContext());t.setText(getString(R.string.model_card_title,m.active?getString(R.string.model_active_prefix):getString(R.string.model_inactive_prefix),m.displayName));t.setTextSize(16);t.setTypeface(Typeface.DEFAULT_BOLD);t.setTextColor(color(R.color.matrix_text));c.addView(t);c.addView(muted(getString(R.string.model_card_detail,m.modelId,m.providerId,m.available?"":getString(R.string.model_unavailable_suffix))),top(4));Button b=new Button(requireContext());b.setText(m.active?R.string.model_current:R.string.model_select);b.setEnabled(connected&&!busy&&!m.active&&m.available);b.setBackgroundResource(m.active?R.drawable.bg_outline:R.drawable.bg_primary);b.setTextColor(m.active?color(R.color.matrix_primary_dark):LauncherThemePreferences.color(requireContext(),R.attr.matrix_on_accent));b.setOnClickListener(v->viewModel.select(m));c.addView(b,top(9));models.addView(c,space()); }
+    private void addModelCard(ModelInfo model, ModelViewModel.State state) {
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+
+        TextView title = new TextView(requireContext());
+        title.setText(getString(R.string.model_card_title,
+                model.active ? getString(R.string.model_active_prefix)
+                        : getString(R.string.model_inactive_prefix), model.displayName));
+        title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(color(R.color.matrix_text));
+        card.addView(title);
+        card.addView(muted(getString(R.string.model_card_detail, model.modelId,
+                model.providerId, model.available ? "" : getString(R.string.model_unavailable_suffix))), top(4));
+
+        boolean loading = state.busy && state.switchingModelId != null
+                && state.switchingModelId.equals(model.modelId);
+        if (loading) {
+            ProgressBar progress = new ProgressBar(requireContext(), null,
+                    android.R.attr.progressBarStyleHorizontal);
+            progress.setIndeterminate(true);
+            LinearLayout.LayoutParams progressParams = top(8);
+            progressParams.height = dp(3);
+            card.addView(progress, progressParams);
+        }
+
+        Button action = new Button(requireContext());
+        action.setText(loading ? R.string.model_switch_loading
+                : model.active ? R.string.model_current : R.string.model_select);
+        action.setEnabled(connected && !state.busy && !model.active && model.available);
+        action.setBackgroundResource(model.active ? R.drawable.bg_outline : R.drawable.bg_primary);
+        action.setTextColor(model.active ? color(R.color.matrix_primary_dark)
+                : LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent));
+        action.setOnClickListener(v -> viewModel.select(model));
+        card.addView(action, top(9));
+        models.addView(card, space());
+    }
     private void renderControls() {
         boolean busy = rendered != null && rendered.busy;
         save.setEnabled(connected && !busy);

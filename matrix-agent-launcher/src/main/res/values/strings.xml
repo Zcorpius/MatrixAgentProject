@@ -210,7 +210,8 @@
     <string name="model_backend_cloud">云端</string><string name="model_backend_none">未配置</string><string name="none">无</string>
     <string name="model_active_prefix">● </string><string name="model_inactive_prefix">○ </string>
     <string name="model_unavailable_suffix"> · 不可用</string><string name="model_current">当前使用</string><string name="model_select">选用</string>
-    <string name="model_switching">正在请求 Host 切换模型…</string>
+    <string name="model_switching">正在加载并切换模型，请稍候…</string>
+    <string name="model_switch_loading">正在加载模型…</string>
     <string name="model_switch_failed">切换失败，错误码=%1$d</string>
     <string name="model_card_title">%1$s%2$s</string>
     <string name="model_card_detail">%1$s · %2$s%3$s</string>
