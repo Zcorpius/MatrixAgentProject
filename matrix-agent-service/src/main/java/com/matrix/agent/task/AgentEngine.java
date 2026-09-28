@@ -739,7 +739,8 @@ public final class AgentEngine {
      * 按 {@link StopReason} 先判终止性质,再算最终状态:
      * <ul>
      *   <li>{@code DONE} / {@code NO_TOOL_CALL}:正常结束,按 Tool 结果分 SUCCEEDED / PARTIALLY / FAILED。</li>
-     *   <li>{@code CANCELLED} / {@code TIMEOUT} / {@code NETWORK_UNAVAILABLE}:直接对应 TaskState。</li>
+     *   <li>{@code CANCELLED} / {@code TIMEOUT} / {@code NETWORK_UNAVAILABLE} /
+     *       {@code REJECTED}:直接对应 TaskState。</li>
      *   <li>{@code MAX_ITERATIONS} / {@code MAX_TOOL_CALLS} / {@code BUDGET_EXHAUSTED} / {@code POLICY_HALT}:
      *       异常终止——有部分成功结果最多 PARTIALLY_SUCCEEDED,**永远不能 SUCCEEDED**。
      *       否则失控循环(模型一直调成功查询 Tool 直到耗尽预算)会被错判为成功。</li>
@@ -749,6 +750,7 @@ public final class AgentEngine {
         if (stopReason == StopReason.CANCELLED) return TaskState.CANCELLED;
         if (stopReason == StopReason.TIMEOUT) return TaskState.TIMED_OUT;
         if (stopReason == StopReason.NETWORK_UNAVAILABLE) return TaskState.NETWORK_UNAVAILABLE;
+        if (stopReason == StopReason.REJECTED) return TaskState.REJECTED;
         // 用户推迟语义——不是失败,被推迟的任务可被重新调度。
         if (stopReason == StopReason.DEFERRED) return TaskState.DEFERRED;
 

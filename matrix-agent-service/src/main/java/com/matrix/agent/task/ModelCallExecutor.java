@@ -154,11 +154,15 @@ public final class ModelCallExecutor {
                 }
             });
         } catch (RejectedExecutionException rejected) {
-            // ioPool 队列满 / Executor 关闭——直接 POLICY_HALT,
-            // AgentEngine 收到 POLICY_HALT 后立刻退出 Loop,不重试。
+            // Local executor capacity is not a policy decision and no model call was made.
+            streamClosed.set(true);
+            try { call.abort(); }
+            catch (RuntimeException abortFailure) {
+                Log.w(TAG, "[ModelCall] prepared call abort failed after queue rejection", abortFailure);
+            }
             Log.w(TAG, "[ModelCall] submit REJECTED req=" + agentRequest.getRequestId()
                     + " (ioPool 队列满 / executor 关闭)");
-            return Result.terminal(StopReason.POLICY_HALT, "模型调用被拒绝(ioPool 队列满)");
+            return Result.terminal(StopReason.REJECTED, "模型调用队列已满");
         }
 
         // abort hook:cancel 触发时同步执行 future.cancel(true) + call.abort()
@@ -222,31 +226,20 @@ public final class ModelCallExecutor {
                         + elapsedMillis(callStarted));
                 return Result.terminal(StopReason.CANCELLED, "模型调用已取消(端侧)");
             }
-            // 传输层网络异常和真实 deadline / OkHttp 超时必须区分：两者都尚未进入工具执行，
-            // 但前者可立即提示用户恢复网络，后者才是 TIMEOUT。
-            // POLICY_HALT 留给协议/模型不可恢复错误(RateLimit/Server 重试耗尽、4xx、JSON 解析错)。
-            // (注:写操作 EXECUTION_UNKNOWN 是 AgentRuntimeRepository 在整体 future 超时、且工具
-            // 可能已下发时收敛的,与本层模型决策超时无关。)
-            // 沿 cause 链查找——ModelApiException 从 post() 抛出后可能被中间层(LlmModelGateway
-            // 的 catch(Exception)→IllegalStateException、或未来 CancellableModelCall)包装,顶层
-            // instanceof 会漏判被包装的情况。findNetworkOrTimeout 对所有包装层级都健壮。
-            ModelApiException networkOrTimeout = findNetworkOrTimeout(cause);
-            if (networkOrTimeout != null) {
-                Log.w(TAG, "[ModelCall] gateway network/timeout " + networkOrTimeout.getClass().getSimpleName()
+            // The planner can wrap transport failures in IllegalStateException. Recover the
+            // typed cause before choosing a terminal reason; HTTP 429 is not a safety veto.
+            ModelApiException apiFailure = findModelApiException(cause);
+            if (apiFailure != null) {
+                StopReason reason = modelApiStopReason(apiFailure);
+                Log.w(TAG, "[ModelCall] gateway " + apiFailure.getClass().getSimpleName()
                         + " (unwrapped from " + cause.getClass().getSimpleName() + ")"
-                        + " -> terminal="
-                        + (networkOrTimeout instanceof ModelApiException.NetworkException
-                                ? "NETWORK_UNAVAILABLE" : "TIMEOUT")
-                        + " costMs=" + elapsedMillis(callStarted), execution);
-                return Result.terminal(networkOrTimeout instanceof ModelApiException.NetworkException
-                                ? StopReason.NETWORK_UNAVAILABLE : StopReason.TIMEOUT,
-                        "模型调用" + (networkOrTimeout instanceof ModelApiException.NetworkException
-                                ? "网络不可达:" : "超时:") + safeMessage(networkOrTimeout));
+                        + " -> terminal=" + reason + " costMs=" + elapsedMillis(callStarted));
+                return Result.terminal(reason, "模型调用异常:" + safeMessage(apiFailure));
             }
             Log.e(TAG, "[ModelCall] gateway threw " + cause.getClass().getSimpleName()
-                    + ": " + safeMessage(cause) + " -> terminal=POLICY_HALT costMs="
+                    + ": " + safeMessage(cause) + " -> terminal=MODEL_CALL_FAILED costMs="
                     + elapsedMillis(callStarted), execution);
-            return Result.terminal(StopReason.POLICY_HALT,
+            return Result.terminal(StopReason.MODEL_CALL_FAILED,
                     "模型调用异常:" + safeMessage(cause));
         } finally {
             streamClosed.set(true);
@@ -260,24 +253,18 @@ public final class ModelCallExecutor {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
-    /**
-     * 沿 cause 链向下查找 {@link ModelApiException.NetworkException} /
-     * {@link ModelApiException.TimeoutException}。
-     *
-     * <p>网络/超时异常从 {@code ModelApiClient.post()} 抛出后,可能被中间层包装成外层异常
-     * (如 LlmModelGateway 把非 RuntimeException 包成 IllegalStateException)。直接 instanceof
-     * 只匹配顶层 cause,会漏判被包装的情况,导致模型决策阶段的网络/超时(时间类临时故障)误归类
-     * 为 POLICY_HALT(应归 TIMEOUT)。沿链查找让映射对所有包装层级都健壮。深度上限 16 防自引用环。
-     *
-     * @return 链中第一个 NetworkException / TimeoutException;链中无则 null
-     */
-    private static ModelApiException findNetworkOrTimeout(Throwable cause) {
+    private static StopReason modelApiStopReason(ModelApiException error) {
+        if (error instanceof ModelApiException.NetworkException) return StopReason.NETWORK_UNAVAILABLE;
+        if (error instanceof ModelApiException.TimeoutException) return StopReason.TIMEOUT;
+        if (error instanceof ModelApiException.RateLimitException) return StopReason.MODEL_RATE_LIMITED;
+        return StopReason.MODEL_CALL_FAILED;
+    }
+
+    /** The provider's typed failure may be wrapped by the planner or gateway. */
+    private static ModelApiException findModelApiException(Throwable cause) {
         Throwable current = cause;
         for (int depth = 0; current != null && depth < 16; depth++) {
-            if (current instanceof ModelApiException.NetworkException
-                    || current instanceof ModelApiException.TimeoutException) {
-                return (ModelApiException) current;
-            }
+            if (current instanceof ModelApiException failure) return failure;
             current = current.getCause();
         }
         return null;

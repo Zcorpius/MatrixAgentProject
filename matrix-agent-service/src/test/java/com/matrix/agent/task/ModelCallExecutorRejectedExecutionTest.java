@@ -28,13 +28,13 @@ import com.matrix.agent.contract.ToolCall;
  * ModelCallExecutor 在 ioPool 队列满 / Executor 拒绝时的契约测试。
  *
  * <p>评审发现共享池嵌套等待死锁,改为两独立池 + 显式拒绝处理。ModelCallExecutor submit 抛
- * RejectedExecutionException 时,返回 {@code Result.terminal(POLICY_HALT, "...")},让
- * AgentEngine 收到 POLICY_HALT 后立刻退出 Loop,不重试。
+ * RejectedExecutionException 时,返回 {@code Result.terminal(REJECTED, "...")},让
+ * AgentEngine 收到 REJECTED 后立刻退出 Loop,不重试。
  */
 public final class ModelCallExecutorRejectedExecutionTest {
 
     @Test
-    public void rejectedSubmitReturnsPolicyHaltTerminal() {
+    public void rejectedSubmitReturnsRejectedTerminal() {
         // 构造已 shutdown 的 pool——任何 submit 都会抛 RejectedExecutionException
         DynamicThreadPool pool = new DynamicThreadPool(1, 1, 1,
                 new ThreadPoolExecutor.AbortPolicy());
@@ -56,9 +56,9 @@ public final class ModelCallExecutorRejectedExecutionTest {
         ModelCallExecutor.Result result = executor.decide(gateway, request);
 
         assertTrue("REJECTED 应非 success", !result.isSuccess());
-        assertEquals("REJECTED → POLICY_HALT(立即退出 Loop)",
-                StopReason.POLICY_HALT, result.getTerminalReason());
-        assertTrue(result.getMessage().contains("拒绝"));
+        assertEquals("REJECTED 立即退出 Loop",
+                StopReason.REJECTED, result.getTerminalReason());
+        assertTrue(result.getMessage().contains("队列已满"));
     }
 
     /** helper 被某些 ModelTurn 工厂使用,保留作为后续扩展锚点。 */

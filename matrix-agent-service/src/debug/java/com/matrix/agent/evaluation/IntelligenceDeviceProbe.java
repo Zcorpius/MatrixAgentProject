@@ -39,6 +39,7 @@ public final class IntelligenceDeviceProbe {
                 com.matrix.agent.model.StreamingProtocolDeviceCheck.verifyExplicitNull();
                 return new JSONObject().put("androidJsonRuntime",true);
             });
+            check(context,report,checks,"model_rate_limit_projection",ModelFailureDeviceCheck::verify);
             check(context,report,checks,"research_prompt_budget",ResearchPromptDeviceCheck::verify);
             check(context,report,checks,"packaged_embedding_install",()-> packagedEmbedding(context,token));
             check(context,report,checks,"attachment_bm25_max_corpus",IntelligenceDeviceProbe::maxCorpusRetrieval);

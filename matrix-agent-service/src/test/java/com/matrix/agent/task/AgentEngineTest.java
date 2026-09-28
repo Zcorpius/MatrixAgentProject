@@ -1279,6 +1279,24 @@ public final class AgentEngineTest {
                 TaskState.SUCCEEDED, outcome.getFinalState());
     }
 
+    @Test
+    public void providerRateLimitBeforeToolExecutionRemainsDistinctFromPolicyRejection() {
+        ModelGateway gateway = request -> {
+            throw new IllegalStateException("模型规划失败", new com.matrix.agent.contract.ModelApiException.RateLimitException(
+                    "stream", new IllegalStateException("HTTP 429")));
+        };
+
+        AgentOutcome outcome = createEngine(gateway, provider)
+                .execute(new AgentRequest("你好", Actor.DRIVER));
+
+        assertEquals(TaskState.FAILED, outcome.getFinalState());
+        assertEquals(StopReason.MODEL_RATE_LIMITED, outcome.getStopReason());
+        assertEquals(0, outcome.getTrajectory().getTotalToolCalls());
+        assertEquals("模型服务返回限流或额度不足（HTTP 429），请稍后重试并检查模型额度。",
+                com.matrix.agent.task.conversation.ConversationAssistantProjector
+                        .project(outcome, 2_000).text());
+    }
+
     /**
      * 数据边界(修复后的正确方向):
      * - Conversation(喂模型):ModelSanitizer 保留 memory.preference.* 真实 value——

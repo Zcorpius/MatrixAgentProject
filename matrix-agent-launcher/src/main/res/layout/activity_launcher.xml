@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -168,27 +169,27 @@
                 android:textColor="?attr/matrix_chrome_ink"
                 android:textSize="15sp"
                 android:textStyle="bold" />
-            <ImageView android:id="@+id/nav_conversation_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_conversation" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_conversation_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_conversation" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <FrameLayout android:layout_width="match_parent" android:layout_height="54dp" android:layout_marginTop="3dp">
             <Button android:id="@+id/nav_tasks" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="46dp" android:paddingEnd="12dp" android:text="@string/nav_tasks" android:textAllCaps="false" android:textColor="?attr/matrix_chrome_ink" android:textSize="15sp" android:textStyle="bold" />
-            <ImageView android:id="@+id/nav_tasks_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_tasks" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_tasks_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_tasks" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <FrameLayout android:layout_width="match_parent" android:layout_height="54dp" android:layout_marginTop="3dp">
             <Button android:id="@+id/nav_voice" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="46dp" android:paddingEnd="12dp" android:text="@string/nav_voice" android:textAllCaps="false" android:textColor="?attr/matrix_chrome_ink" android:textSize="15sp" android:textStyle="bold" />
-            <ImageView android:id="@+id/nav_voice_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_voice" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_voice_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_voice" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <FrameLayout android:layout_width="match_parent" android:layout_height="54dp" android:layout_marginTop="3dp">
             <Button android:id="@+id/nav_models" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="46dp" android:paddingEnd="12dp" android:text="@string/nav_models" android:textAllCaps="false" android:textColor="?attr/matrix_chrome_ink" android:textSize="15sp" android:textStyle="bold" />
-            <ImageView android:id="@+id/nav_models_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_models" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_models_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_models" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <FrameLayout android:layout_width="match_parent" android:layout_height="54dp" android:layout_marginTop="3dp">
             <Button android:id="@+id/nav_downloads" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="46dp" android:paddingEnd="12dp" android:text="@string/nav_downloads" android:textAllCaps="false" android:textColor="?attr/matrix_chrome_ink" android:textSize="15sp" android:textStyle="bold" />
-            <ImageView android:id="@+id/nav_downloads_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_downloads" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_downloads_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_downloads" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
@@ -197,7 +198,7 @@
 
         <FrameLayout android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="8dp">
             <Button android:id="@+id/nav_settings" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_nav" android:gravity="start|center_vertical" android:paddingStart="52dp" android:text="@string/launcher_nav_settings" android:textAllCaps="false" android:textColor="?attr/matrix_chrome_muted" android:textSize="15sp" />
-            <ImageView android:id="@+id/nav_settings_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_settings" android:tint="?attr/matrix_chrome_muted" />
+            <ImageView android:id="@+id/nav_settings_icon" android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="start|center_vertical" android:layout_marginStart="15dp" android:contentDescription="@null" android:src="@drawable/ic_nav_settings" app:tint="?attr/matrix_chrome_muted" />
         </FrameLayout>
 
         <TextView

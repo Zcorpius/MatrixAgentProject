@@ -47,6 +47,8 @@ public final class ConversationAssistantProjector {
             case NO_TOOL_CALL, DONE -> "任务未能产生有效回复。";
             case TIMEOUT -> "任务超时，未能完成。";
             case NETWORK_UNAVAILABLE -> "无法连接云端模型，请检查网络后重试。";
+            case MODEL_RATE_LIMITED -> "模型服务返回限流或额度不足（HTTP 429），请稍后重试并检查模型额度。";
+            case MODEL_CALL_FAILED -> "模型调用失败，请检查模型配置或稍后重试。";
             case CANCELLED -> "任务已取消。";
             case PREEMPTED -> "任务被更高优先级请求打断。";
             case DEFERRED -> "任务已按你的要求推迟，稍后可继续。";

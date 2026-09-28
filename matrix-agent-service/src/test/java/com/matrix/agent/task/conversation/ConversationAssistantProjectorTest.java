@@ -66,6 +66,19 @@ public final class ConversationAssistantProjectorTest {
         assertEquals("无法连接云端模型，请检查网络后重试。", reply.text());
     }
 
+    @Test public void providerRateLimitDoesNotClaimSafetyRejection() {
+        AssistantReply reply = ConversationAssistantProjector.project(
+                outcome(TaskState.FAILED, StopReason.MODEL_RATE_LIMITED, null), 2000);
+        assertEquals(AssistantReply.Source.SYNTHESIZED_TERMINAL, reply.source());
+        assertEquals("模型服务返回限流或额度不足（HTTP 429），请稍后重试并检查模型额度。", reply.text());
+    }
+
+    @Test public void modelFailureDoesNotClaimSafetyRejection() {
+        AssistantReply reply = ConversationAssistantProjector.project(
+                outcome(TaskState.FAILED, StopReason.MODEL_CALL_FAILED, null), 2000);
+        assertEquals("模型调用失败，请检查模型配置或稍后重试。", reply.text());
+    }
+
     @Test public void executionUnknownDoesNotClaimFailureOrCancel() {
         AssistantReply reply = ConversationAssistantProjector.project(
                 outcome(TaskState.EXECUTION_UNKNOWN, StopReason.EXECUTION_UNKNOWN, null), 2000);

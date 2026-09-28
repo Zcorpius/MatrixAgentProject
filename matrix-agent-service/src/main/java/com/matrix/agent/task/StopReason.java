@@ -20,6 +20,10 @@ public enum StopReason {
     TIMEOUT,
     /** 模型请求未能建立网络连接；与真正达到请求 deadline 的 {@link #TIMEOUT} 不同。 */
     NETWORK_UNAVAILABLE,
+    /** 模型服务返回 HTTP 429；可能是短期限流，也可能是账户额度耗尽。 */
+    MODEL_RATE_LIMITED,
+    /** 模型请求或响应失败；与 Host 的安全策略拒绝无关。 */
+    MODEL_CALL_FAILED,
     /** 用户取消。 */
     CANCELLED,
     /**
