@@ -2,6 +2,8 @@
 
 主 README 的六张页面图及外观模式、导航抽屉链接，均来自 **2026-09-28 23:31–23:34** 同一轮真机采集。此前的 2026-09-27 页面与小窗图保留为历史记录，不再用作 README 的当前界面预览。所有真机图片均保留设备实际内容，未合成角色、替换图标或修改页面文案。
 
+首页矩阵标志复用 Launcher 的[原始品牌素材](../../matrix-agent-launcher/src/main/res/drawable-nodpi/matrix_ai_mark.png)；四位角色预览复用应用打包的待机帧，均不是设备截图。
+
 ## 当前界面：2026-09-28
 
 - 设备：Mi 9 SE（`grus`），LineageOS 22.2 / Android 15；Launcher 显示 `HOST ONLINE`。
