@@ -70,6 +70,18 @@
 
 在「设置 → 外观 → 悬浮形象」中，可选择雪之下雪乃、绫波丽、宁姚或鲸鱼娘；默认是雪乃。选择会保存，并立即更新已显示的悬浮角色，设置页保持原来的滚动位置。
 
+<table>
+  <tr><th align="center">雪之下雪乃</th><th align="center">绫波丽</th><th align="center">宁姚</th><th align="center">鲸鱼娘</th></tr>
+  <tr>
+    <td align="center"><img src="matrix-agent-launcher/src/main/assets/yukino/frames/idle_00.png" width="120" alt="雪之下雪乃待机帧" /></td>
+    <td align="center"><img src="matrix-agent-launcher/src/main/assets/rei-ayanami/frames/idle_00.png" width="120" alt="绫波丽待机帧" /></td>
+    <td align="center"><img src="matrix-agent-launcher/src/main/assets/ning-yao/frames/idle_00.png" width="120" alt="宁姚待机帧" /></td>
+    <td align="center"><img src="matrix-agent-launcher/src/main/assets/deepseek-whale-chan/frames/idle_00.png" width="120" alt="鲸鱼娘待机帧" /></td>
+  </tr>
+</table>
+
+<sub>上图为角色素材的待机帧；悬浮窗会根据任务和手势状态播放对应动画。</sub>
+
 透明角色保留在其他应用上方，点击展开会话，拖动切换左右跑步。触碰屏幕时，角色按 **16 个方向**看向第一根手指，抬手 **800ms** 后恢复任务动作；会话首次可见，或离开至少 **5 分钟**后返回时，在不抢占结果提示的条件下挥手问候。
 
 完成、失败与结果不确定各有对应动作和角标。角色交互不改变任务事实；全屏注视需要 Android 15+ 的平台输入观察能力。 [动作、截图与生命周期 →](docs/功能与交互.md#overlay)
