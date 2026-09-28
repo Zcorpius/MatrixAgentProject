@@ -10,5 +10,5 @@
     android:paddingStart="18dp"
     android:paddingEnd="18dp"
     android:singleLine="true"
-    android:textColor="@color/matrix_text"
+    android:textColor="?attr/matrix_ink"
     android:textSize="16sp" />

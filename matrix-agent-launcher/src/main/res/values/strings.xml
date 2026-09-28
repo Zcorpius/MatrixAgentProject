@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="launcher_nav_settings">设置</string>
+    <string name="launcher_appearance_title">外观</string>
+    <string name="launcher_appearance_intro">让 Matrix 更贴近你的使用习惯。更改会立即应用到整个 Launcher。</string>
+    <string name="launcher_appearance_mode">外观模式</string>
+    <string name="launcher_appearance_color">颜色主题</string>
+    <string name="launcher_appearance_preview">预览</string>
+    <string name="theme_mode_system">跟随系统</string>
+    <string name="theme_mode_light">浅色</string>
+    <string name="theme_mode_dark">深色</string>
+    <string name="theme_classic">经典橙红</string>
+    <string name="theme_ocean">海洋蓝</string>
+    <string name="theme_forest">森林绿</string>
+    <string name="theme_sakura">樱花粉</string>
+    <string name="theme_violet">紫罗兰</string>
+    <string name="theme_sunset">日落金</string>
+    <string name="theme_celadon">青瓷</string>
+    <string name="theme_ink">墨黑</string>
+    <string name="launcher_appearance_mode_summary">可选择浅色、深色，或跟随 Android 系统设置。</string>
+    <string name="launcher_appearance_color_summary">颜色主题会同时调整页面纸色、强调色和消息卡片。</string>
     <string name="app_name">Matrix AI</string>
     <string name="nav_tasks">任务中心</string>
     <string name="nav_voice">语音功能</string>
@@ -10,13 +29,12 @@
     <string name="launcher_monogram">M</string>
     <string name="launcher_brand">MATRIX</string>
     <string name="launcher_product">Agent</string>
-    <string name="launcher_close">×</string>
     <string name="launcher_drawer_intro">一个用于探索、连接与运行的\n本地智能工作区。</string>
     <string name="launcher_workspace">WORKSPACE</string>
-    <string name="launcher_nav_index_tasks">01</string>
-    <string name="launcher_nav_index_voice">02</string>
-    <string name="launcher_nav_index_models">03</string>
-    <string name="launcher_nav_index_market">04</string>
+
+
+
+
     <string name="launcher_boundary">SYSTEM-OWNED HOST · SDK BOUNDARY</string>
     <string name="launcher_version">MATRIX AGENT · v%1$s</string>
     <string name="launcher_host_online">● HOST ONLINE</string>
@@ -236,7 +254,7 @@
     <string name="download_progress_label">下载进度：%1$d%%</string>
     <string name="download_model_id">模型 ID：%1$s</string>
     <string name="nav_conversation">对话交互</string>
-    <string name="launcher_nav_index_conversation">01</string>
+
     <string name="conversation_eyebrow">CONVERSATION</string>
     <string name="conversation_title">对话交互</string>
     <string name="conversation_intro">文字、按键与唤醒后的语音，会汇入同一条可追溯的对话与执行链路。</string>

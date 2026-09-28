@@ -1,18 +1,20 @@
 package com.matrix.agent.launcher;
 
-import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -26,9 +28,12 @@ import com.matrix.agent.launcher.presentation.LauncherViewModel;
 import com.matrix.agent.launcher.presentation.LauncherViewModelFactory;
 import com.matrix.agent.launcher.presentation.ModelFragment;
 import com.matrix.agent.launcher.presentation.VoiceFragment;
+import com.matrix.agent.launcher.presentation.SettingsFragment;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 /** Shell navigation only; feature pages keep their own MVVM state and SDK boundary. */
 public final class LauncherActivity extends AppCompatActivity {
+    private static final String STATE_SELECTED_NAVIGATION = "selected_navigation";
     @Override
     public void dump(String prefix, java.io.FileDescriptor fd, java.io.PrintWriter writer, String[] args) {
         if (args != null && java.util.Arrays.asList(args).contains("--handoff")) {
@@ -48,14 +53,15 @@ public final class LauncherActivity extends AppCompatActivity {
     private Button voice;
     private Button models;
     private Button downloads;
-    private View conversationIndicator;
-    private View tasksIndicator;
-    private View voiceIndicator;
-    private View modelsIndicator;
-    private View downloadsIndicator;
+    private Button settings;
+    private ImageView[] navigationIcons;
     private LauncherViewModelFactory viewModelFactory;
+    private int selectedNavigationId = R.id.nav_conversation;
 
     @Override public void onCreate(@Nullable Bundle savedInstanceState) {
+        boolean dark = LauncherThemePreferences.isDark(this);
+        setTheme(dark ? R.style.Theme_MatrixLauncher_Dark : R.style.Theme_MatrixLauncher_Light);
+        getTheme().applyStyle(LauncherThemePreferences.paletteStyle(this), true);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_launcher);
         drawer = findViewById(R.id.drawer_layout);
@@ -69,13 +75,12 @@ public final class LauncherActivity extends AppCompatActivity {
         voice = findViewById(R.id.nav_voice);
         models = findViewById(R.id.nav_models);
         downloads = findViewById(R.id.nav_downloads);
-        conversationIndicator = findViewById(R.id.nav_conversation_indicator);
-        tasksIndicator = findViewById(R.id.nav_tasks_indicator);
-        voiceIndicator = findViewById(R.id.nav_voice_indicator);
-        modelsIndicator = findViewById(R.id.nav_models_indicator);
-        downloadsIndicator = findViewById(R.id.nav_downloads_indicator);
+        settings = findViewById(R.id.nav_settings);
+        navigationIcons = new ImageView[]{findViewById(R.id.nav_conversation_icon),
+                findViewById(R.id.nav_tasks_icon), findViewById(R.id.nav_voice_icon),
+                findViewById(R.id.nav_models_icon), findViewById(R.id.nav_downloads_icon),
+                findViewById(R.id.nav_settings_icon)};
         findViewById(R.id.menu_button).setOnClickListener(ignored -> drawer.openDrawer(GravityCompat.START));
-        findViewById(R.id.drawer_close).setOnClickListener(ignored -> drawer.closeDrawer(GravityCompat.START));
         ((TextView) findViewById(R.id.drawer_version)).setText(
                 getString(R.string.launcher_version, versionName()));
         conversation.setOnClickListener(v -> show(new ConversationFragment(), conversation,
@@ -84,6 +89,7 @@ public final class LauncherActivity extends AppCompatActivity {
         voice.setOnClickListener(v -> show(new VoiceFragment(), voice, R.string.nav_voice));
         models.setOnClickListener(v -> show(new ModelFragment(), models, R.string.nav_models));
         downloads.setOnClickListener(v -> show(new DownloadFragment(), downloads, R.string.nav_downloads));
+        settings.setOnClickListener(v -> show(new SettingsFragment(), settings, R.string.launcher_nav_settings));
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
                 if (drawer.isDrawerOpen(GravityCompat.START)) drawer.closeDrawer(GravityCompat.START);
@@ -96,21 +102,16 @@ public final class LauncherActivity extends AppCompatActivity {
                 ((LauncherApplication) getApplication()).draftLane());
         new ViewModelProvider(this, viewModelFactory).get(LauncherViewModel.class)
                 .connectionState().observe(this, this::updateConnection);
-        if (savedInstanceState == null) showInitialPage(getIntent());
-        Button overlaySettings = new Button(this);
-        overlaySettings.setText("跨应用悬浮窗");
-        overlaySettings.setTextColor(Color.rgb(147, 206, 185));
-        overlaySettings.setBackgroundColor(Color.TRANSPARENT);
-        overlaySettings.setOnClickListener(view -> new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("跨应用悬浮窗")
-                .setMessage("Agent 操作其他应用时，以雪乃形象保留任务入口。点按可查看进度、补充输入或取消任务，拖动可移动位置。可随时关闭，不影响任务继续执行。")
-                .setPositiveButton(android.provider.Settings.canDrawOverlays(this) ? "管理权限" : "开启悬浮窗",
-                        (dialog, which) -> startActivity(new android.content.Intent(
-                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                android.net.Uri.parse("package:" + getPackageName()))))
-                .setNegativeButton("返回", null).show());
-        ((android.widget.LinearLayout) drawerContent).addView(overlaySettings,
-                ((android.widget.LinearLayout) drawerContent).getChildCount() - 1);
+        if (savedInstanceState == null) {
+            showInitialPage(getIntent());
+        } else {
+            selectedNavigationId = savedInstanceState.getInt(STATE_SELECTED_NAVIGATION, R.id.nav_conversation);
+            View selected = findViewById(selectedNavigationId);
+            if (selected == null) selected = conversation;
+            pageTitle.setText(titleForNavigation(selected.getId()));
+            selectNavigation(selected);
+        }
+        applySystemBarColors();
     }
 
     @Override
@@ -118,6 +119,12 @@ public final class LauncherActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         showInitialPage(intent);
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        outState.putInt(STATE_SELECTED_NAVIGATION, selectedNavigationId);
+        super.onSaveInstanceState(outState);
     }
 
     private void showInitialPage(android.content.Intent intent) {
@@ -139,8 +146,9 @@ public final class LauncherActivity extends AppCompatActivity {
         }
     }
 
-    private void show(Fragment fragment, Button selected, int title) {
+    private void show(Fragment fragment, View selected, int title) {
         pageTitle.setText(title);
+        selectedNavigationId = selected.getId();
         getSupportFragmentManager().beginTransaction().replace(R.id.page_container, fragment).commit();
         selectNavigation(selected);
         drawer.closeDrawer(GravityCompat.START);
@@ -149,6 +157,7 @@ public final class LauncherActivity extends AppCompatActivity {
     /** Opens the model page with a downloaded model preselected; it still switches through the SDK. */
     public void showOnDeviceModel(String modelId) {
         pageTitle.setText(R.string.nav_models);
+        selectedNavigationId = R.id.nav_models;
         getSupportFragmentManager().beginTransaction()
                 .replace(R.id.page_container, ModelFragment.forOnDevice(modelId)).commit();
         selectNavigation(models);
@@ -161,16 +170,31 @@ public final class LauncherActivity extends AppCompatActivity {
     }
 
     private void selectNavigation(Button selected) {
-        Button[] buttons = {conversation, tasks, voice, models, downloads};
-        View[] indicators = {conversationIndicator, tasksIndicator, voiceIndicator,
-                modelsIndicator, downloadsIndicator};
+        selectNavigation((View) selected);
+    }
+
+    private void selectNavigation(View selected) {
+        Button[] buttons = {conversation, tasks, voice, models, downloads, settings};
         for (int index = 0; index < buttons.length; index++) {
             Button button = buttons[index];
             boolean active = button == selected;
-            button.setBackgroundResource(active ? R.drawable.bg_nav_selected : R.drawable.bg_nav);
-            button.setTextColor(active ? Color.WHITE : Color.rgb(126, 163, 158));
-            indicators[index].setVisibility(active ? View.VISIBLE : View.GONE);
+            button.setBackgroundResource(R.drawable.bg_nav);
+            button.setTextColor(LauncherThemePreferences.color(this,
+                    active ? R.attr.matrix_accent_deep : R.attr.matrix_chrome_muted));
+            button.setTypeface(null, active ? android.graphics.Typeface.BOLD
+                    : android.graphics.Typeface.NORMAL);
+            navigationIcons[index].setColorFilter(LauncherThemePreferences.color(this,
+                    active ? R.attr.matrix_accent_deep : R.attr.matrix_chrome_muted));
         }
+    }
+
+    private int titleForNavigation(int id) {
+        if (id == R.id.nav_tasks) return R.string.nav_tasks;
+        if (id == R.id.nav_voice) return R.string.nav_voice;
+        if (id == R.id.nav_models) return R.string.nav_models;
+        if (id == R.id.nav_downloads) return R.string.nav_downloads;
+        if (id == R.id.nav_settings) return R.string.launcher_nav_settings;
+        return R.string.nav_conversation;
     }
 
     private void updateConnection(int state) {
@@ -192,6 +216,19 @@ public final class LauncherActivity extends AppCompatActivity {
                 status.setText(R.string.launcher_host_disconnected);
                 break;
         }
+        int color = state == ConnectionState.CONNECTED ? R.attr.matrix_success
+                : state == ConnectionState.CONNECTING ? R.attr.matrix_warning : R.attr.matrix_ink_muted;
+        status.setTextColor(LauncherThemePreferences.color(this, color));
+    }
+
+    private void applySystemBarColors() {
+        boolean dark = LauncherThemePreferences.isDark(this);
+        getWindow().setStatusBarColor(LauncherThemePreferences.color(this, R.attr.matrix_chrome));
+        getWindow().setNavigationBarColor(LauncherThemePreferences.color(this, R.attr.matrix_paper));
+        WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(
+                getWindow(), getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(!dark);
+        controller.setAppearanceLightNavigationBars(!dark);
     }
 
     public LauncherViewModelFactory viewModelFactory() { return viewModelFactory; }
@@ -232,7 +269,7 @@ public final class LauncherActivity extends AppCompatActivity {
             // here.  This keeps the conversation composer actionable on every IME.
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
             workspace.setPadding(0, bars.top, 0, Math.max(bars.bottom, ime.bottom));
-            drawerContent.setPadding(dp(24), dp(28) + bars.top, dp(20), dp(24) + bars.bottom);
+            drawerContent.setPadding(dp(20), dp(24) + bars.top, dp(20), dp(16) + bars.bottom);
             return insets;
         });
         ViewCompat.requestApplyInsets(drawer);

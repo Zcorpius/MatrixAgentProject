@@ -15,6 +15,7 @@ import android.widget.Button;
 import androidx.annotation.MainThread;
 
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.launcher.overlay.pet.PetPresentation.Indicator;
 import com.matrix.agent.launcher.overlay.pet.PetPresentation.Motion;
 import com.matrix.agent.launcher.overlay.pet.PetPresentation.Repeat;
@@ -51,11 +52,11 @@ public class YukinoPetView extends View implements AutoCloseable {
     public YukinoPetView(Context context, PetSpriteRepository sprites) {
         super(context);
         this.sprites = sprites;
-        successColor = context.getColor(R.color.overlay_success);
-        errorColor = context.getColor(R.color.overlay_danger);
-        warningColor = context.getColor(R.color.overlay_warning);
-        mutedColor = context.getColor(R.color.overlay_muted);
-        outlineColor = context.getColor(R.color.overlay_surface);
+        successColor = LauncherThemePreferences.colorResource(context, R.color.overlay_success);
+        errorColor = LauncherThemePreferences.colorResource(context, R.color.overlay_danger);
+        warningColor = LauncherThemePreferences.colorResource(context, R.color.overlay_warning);
+        mutedColor = LauncherThemePreferences.colorResource(context, R.color.overlay_muted);
+        outlineColor = LauncherThemePreferences.colorResource(context, R.color.overlay_surface);
         setClickable(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         var neutral = sprites.cached(Motion.NEUTRAL);

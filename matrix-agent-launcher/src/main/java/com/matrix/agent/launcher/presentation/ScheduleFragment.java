@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.matrix.agent.api.schedule.*;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 /** Task center: persistent plans and runs, with the existing instant-task surface kept intact. */
 public final class ScheduleFragment extends Fragment {
@@ -227,8 +228,8 @@ public final class ScheduleFragment extends Fragment {
     private void confirm(String message, Runnable action) { new AlertDialog.Builder(requireContext()).setMessage(message).setNegativeButton("返回", null).setPositiveButton("确认", (d, w) -> action.run()).show(); }
     private LinearLayout column() { LinearLayout view = new LinearLayout(requireContext()); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private LinearLayout card() { LinearLayout card = column(); card.setBackgroundResource(R.drawable.bg_card); card.setPadding(dp(16), dp(16), dp(16), dp(16)); card.setMinimumHeight(dp(76)); return card; }
-    private TextView text(String text, int size) { TextView view = new TextView(requireContext()); view.setText(text); view.setTextSize(size); view.setTextColor(requireContext().getColor(R.color.matrix_text)); view.setLineSpacing(dp(3), 1f); return view; }
-    private Button button(String title, Runnable action) { Button button = new Button(requireContext()); button.setText(title); button.setTextSize(13); button.setAllCaps(false); button.setBackgroundResource(R.drawable.bg_outline); button.setTextColor(requireContext().getColor(R.color.matrix_primary_dark)); button.setEnabled(model.connected() && !model.busy()); button.setOnClickListener(v -> action.run()); return button; }
+    private TextView text(String text, int size) { TextView view = new TextView(requireContext()); view.setText(text); view.setTextSize(size); view.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_text)); view.setLineSpacing(dp(3), 1f); return view; }
+    private Button button(String title, Runnable action) { Button button = new Button(requireContext()); button.setText(title); button.setTextSize(13); button.setAllCaps(false); button.setBackgroundResource(R.drawable.bg_outline); button.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_primary_dark)); button.setEnabled(model.connected() && !model.busy()); button.setOnClickListener(v -> action.run()); return button; }
     private LinearLayout.LayoutParams space() { var params = new LinearLayout.LayoutParams(-1, -2); params.topMargin = dp(10); return params; }
     private int dp(int value) { return activity().dp(value); }
     private LauncherActivity activity() { return (LauncherActivity) requireActivity(); }

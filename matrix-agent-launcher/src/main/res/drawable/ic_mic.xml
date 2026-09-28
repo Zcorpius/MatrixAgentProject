@@ -4,6 +4,6 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF"
+    <path android:fillColor="?attr/matrix_on_accent"
         android:pathData="M12,3a3,3 0,0 0,-3 3v6a3,3 0,0 0,6 0L15,6a3,3 0,0 0,-3 -3zM6,11v1a6,6 0,0 0,12 0v-1h-2v1a4,4 0,0 1,-8 0v-1zM11,20h2v-3h-2z" />
 </vector>

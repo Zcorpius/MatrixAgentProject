@@ -10,13 +10,14 @@ import android.widget.TextView;
 import androidx.core.content.ContextCompat;
 import com.matrix.agent.api.debug.DebugTraceWireEvent;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import java.util.List;
 
 /** Shared, opt-in process projection; its host supplies the available conversation width. */
 public final class ConversationTraceRenderer {
     private final Context context;
     public ConversationTraceRenderer(Context context) { this.context = context; }
-    private int color(int resource) { return ContextCompat.getColor(context, resource); }
+    private int color(int resource) { return LauncherThemePreferences.colorResource(context, resource); }
     public View create(ConversationViewModel.UiMessage userMessage, int availableWidth) {
         float density = context.getResources().getDisplayMetrics().density;
         int screenWidth = availableWidth;
@@ -155,7 +156,7 @@ public final class ConversationTraceRenderer {
         dot.setTextSize(12);
         dot.setGravity(android.view.Gravity.CENTER);
         dot.setTextColor(node.kind == DebugTraceTimeline.Kind.TOOL
-                ? ContextCompat.getColor(context, node.statusColorRes())
+                ? LauncherThemePreferences.colorResource(context, node.statusColorRes())
                 : color(R.color.matrix_trace_thinking_dot));
         rail.addView(dot, new LinearLayout.LayoutParams((int) (18 * density + .5f),
                 (int) (18 * density + .5f)));
@@ -220,7 +221,6 @@ public final class ConversationTraceRenderer {
         GradientDrawable background = new GradientDrawable();
         background.setColor(color);
         background.setCornerRadius(radius);
-        if (strokeColor != 0x00000000) background.setStroke(1, strokeColor);
         return background;
     }
 

@@ -1,18 +1,81 @@
 <resources>
-    <style name="Theme.MatrixLauncher" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.MatrixLauncher" parent="Theme.MatrixLauncher.Light" />
+
+    <style name="Theme.MatrixLauncher.Light" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">@color/matrix_accent</item>
-        <item name="android:navigationBarColor">@color/matrix_primary_dark</item>
-        <item name="android:statusBarColor">@color/matrix_chrome</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">@color/matrix_surface</item>
+        <item name="android:colorAccent">?attr/matrix_accent</item>
+        <item name="android:navigationBarColor">?attr/matrix_paper</item>
+        <item name="android:statusBarColor">?attr/matrix_chrome</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">?attr/matrix_paper</item>
+        <item name="matrix_paper">#F2E9DA</item>
+        <item name="matrix_paper_high">#FFFAF0</item>
+        <item name="matrix_ink">#292621</item>
+        <item name="matrix_ink_muted">#887E70</item>
+        <item name="matrix_ink_faint">#8D7F70</item>
+        <item name="matrix_accent">#C85A3B</item>
+        <item name="matrix_accent_deep">#7E3427</item>
+        <item name="matrix_on_accent">#FFFAF0</item>
+        <item name="matrix_moss">#52665A</item>
+        <item name="matrix_selected">#F1D8CC</item>
+        <item name="matrix_divider">#E7E4DE</item>
+        <item name="matrix_chrome">#F2E9DA</item>
+        <item name="matrix_chrome_ink">#292621</item>
+        <item name="matrix_chrome_muted">#887E70</item>
+        <item name="matrix_scrim">#292621</item>
+        <item name="matrix_gradient_start">#F5EDDF</item>
+        <item name="matrix_gradient_end">#E9DDCB</item>
+        <item name="matrix_user_bubble">#F4E6DC</item>
+        <item name="matrix_assistant_bubble">#F9F2E5</item>
+        <item name="matrix_system_bubble">#FFFAF0</item>
+        <item name="matrix_trace_guide">#E0D6C6</item>
+        <item name="matrix_success">#3F8F5C</item>
+        <item name="matrix_warning">#B5813E</item>
+        <item name="matrix_danger">#B65B5B</item>
     </style>
+
+    <style name="Theme.MatrixLauncher.Dark" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">?attr/matrix_accent</item>
+        <item name="android:navigationBarColor">?attr/matrix_paper</item>
+        <item name="android:statusBarColor">?attr/matrix_chrome</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">?attr/matrix_paper</item>
+        <item name="matrix_paper">#1B1917</item>
+        <item name="matrix_paper_high">#27231F</item>
+        <item name="matrix_ink">#F8F1E6</item>
+        <item name="matrix_ink_muted">#C4B9A7</item>
+        <item name="matrix_ink_faint">#9C9182</item>
+        <item name="matrix_accent">#E68A6F</item>
+        <item name="matrix_accent_deep">#D16B50</item>
+        <item name="matrix_on_accent">#1B1917</item>
+        <item name="matrix_moss">#91A998</item>
+        <item name="matrix_selected">#57382F</item>
+        <item name="matrix_divider">#302F2E</item>
+        <item name="matrix_chrome">#1B1917</item>
+        <item name="matrix_chrome_ink">#F8F1E6</item>
+        <item name="matrix_chrome_muted">#C4B9A7</item>
+        <item name="matrix_scrim">#000000</item>
+        <item name="matrix_gradient_start">#211E1A</item>
+        <item name="matrix_gradient_end">#171513</item>
+        <item name="matrix_user_bubble">#49342E</item>
+        <item name="matrix_assistant_bubble">#211E1B</item>
+        <item name="matrix_system_bubble">#27231F</item>
+        <item name="matrix_trace_guide">#453D34</item>
+        <item name="matrix_success">#77C99B</item>
+        <item name="matrix_warning">#E8BB74</item>
+        <item name="matrix_danger">#E58F8F</item>
+    </style>
+
+    <style name="MatrixPaletteBase" />
 
     <style name="MatrixOutlineButton" parent="Widget.AppCompat.Button">
         <item name="android:layout_height">48dp</item>
         <item name="android:background">@drawable/bg_outline</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textColor">@color/matrix_primary_dark</item>
+        <item name="android:textColor">?attr/matrix_ink</item>
         <item name="android:textStyle">bold</item>
     </style>
 
@@ -20,7 +83,7 @@
         <item name="android:layout_height">48dp</item>
         <item name="android:background">@drawable/bg_primary</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textColor">?attr/matrix_on_accent</item>
         <item name="android:textStyle">bold</item>
     </style>
 
@@ -28,7 +91,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">14dp</item>
-        <item name="android:textColor">@color/matrix_muted</item>
+        <item name="android:textColor">?attr/matrix_ink_muted</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -40,7 +103,7 @@
         <item name="android:background">@drawable/bg_card</item>
         <item name="android:minHeight">48dp</item>
         <item name="android:padding">12dp</item>
-        <item name="android:textColor">@color/matrix_text</item>
+        <item name="android:textColor">?attr/matrix_ink</item>
         <item name="android:textSize">15sp</item>
     </style>
 </resources>

@@ -18,6 +18,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import com.matrix.agent.api.handoff.HandoffProtocol;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.launcher.overlay.pet.PetSpriteRepository;
 import com.matrix.agent.launcher.overlay.pet.YukinoPetView;
 import com.matrix.agent.api.interaction.OverlayPointerSample;
@@ -71,7 +72,11 @@ public final class OverlayWindow implements AutoCloseable {
         Context windowContext = Build.VERSION.SDK_INT >= 30
                 ? displayContext.createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
                 : displayContext;
-        context = new ContextThemeWrapper(windowContext, R.style.Theme_MatrixLauncher);
+        boolean darkTheme = LauncherThemePreferences.isDark(appContext);
+        ContextThemeWrapper themedContext = new ContextThemeWrapper(windowContext,
+                darkTheme ? R.style.Theme_MatrixLauncher_Dark : R.style.Theme_MatrixLauncher_Light);
+        themedContext.getTheme().applyStyle(LauncherThemePreferences.paletteStyle(appContext), true);
+        context = themedContext;
         windows = context.getSystemService(WindowManager.class);
         foreground = color(R.color.overlay_text); muted = color(R.color.overlay_muted);
         root = new FrameLayout(context) {
@@ -507,10 +512,9 @@ public final class OverlayWindow implements AutoCloseable {
     }
     private GradientDrawable background(int fill, int radius, int stroke) {
         GradientDrawable value = new GradientDrawable(); value.setColor(fill); value.setCornerRadius(dp(radius));
-        if (stroke != Color.TRANSPARENT) value.setStroke(dp(1), stroke);
         return value;
     }
-    private int color(int resource) { return context.getColor(resource); }
+    private int color(int resource) { return LauncherThemePreferences.colorResource(context, resource); }
     private int petWidth() { return context.getResources().getDimensionPixelSize(R.dimen.overlay_pet_width); }
     private int petHeight() { return context.getResources().getDimensionPixelSize(R.dimen.overlay_pet_height); }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }

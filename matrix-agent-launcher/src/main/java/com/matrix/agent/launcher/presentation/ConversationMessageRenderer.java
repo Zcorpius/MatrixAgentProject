@@ -10,12 +10,13 @@ import android.widget.TextView;
 import androidx.core.content.ContextCompat;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 /** Shared role, message text, status and steer rendering. Hosts own scrolling and commands. */
 public final class ConversationMessageRenderer {
     private final Context context;
     public ConversationMessageRenderer(Context context) { this.context = context; }
-    private int color(int resource) { return ContextCompat.getColor(context, resource); }
+    private int color(int resource) { return LauncherThemePreferences.colorResource(context, resource); }
     public View create(ConversationViewModel.UiMessage message, int availableWidth,
             java.util.function.Consumer<ConversationViewModel.UiMessage> longPress) {
         float density = context.getResources().getDisplayMetrics().density;
@@ -50,12 +51,12 @@ public final class ConversationMessageRenderer {
         bubble.setCornerRadius(15 * density);
         if (isUser) {
             bubble.setColor(color(R.color.matrix_chat_user_bubble));
-            bubble.setStroke(1, color(R.color.matrix_chat_user_bubble_stroke));
         } else if (isSystem) {
             bubble.setColor(color(R.color.matrix_chat_system_bubble));
         } else {
             bubble.setColor(color(R.color.matrix_chat_assistant_bubble));
-            bubble.setStroke(1, color(R.color.matrix_chat_assistant_bubble_stroke));
+            bubble.setStroke(Math.max(1, Math.round(.75f * density)),
+                    LauncherThemePreferences.color(context, R.attr.matrix_divider));
         }
         bubbleContent.setBackground(bubble);
         LinearLayout.LayoutParams bubbleParams = new LinearLayout.LayoutParams(
@@ -63,7 +64,7 @@ public final class ConversationMessageRenderer {
 
         TextView body = new TextView(context);
         body.setTextSize(14);
-        body.setTextColor(ContextCompat.getColor(context,
+        body.setTextColor(LauncherThemePreferences.colorResource(context,
                 isSystem ? R.color.matrix_muted : R.color.matrix_text));
         body.setText(message.text());
         body.setMaxWidth(maxBubbleWidth);
@@ -86,7 +87,7 @@ public final class ConversationMessageRenderer {
         if (isUser && !isTerminalStatus(message.status())) {
             TextView status = new TextView(context);
             status.setTextSize(10);
-            status.setTextColor(ContextCompat.getColor(context, R.color.matrix_muted));
+            status.setTextColor(LauncherThemePreferences.colorResource(context, R.color.matrix_muted));
             status.setText(statusText(message.status()));
             status.setMaxWidth(maxBubbleWidth);
             bubbleContent.addView(status, new LinearLayout.LayoutParams(
@@ -97,7 +98,7 @@ public final class ConversationMessageRenderer {
             TextView steerNote = new TextView(context);
             steerNote.setTextSize(10);
             steerNote.setTypeface(Typeface.DEFAULT_BOLD);
-            steerNote.setTextColor(ContextCompat.getColor(context, R.color.matrix_primary));
+            steerNote.setTextColor(LauncherThemePreferences.colorResource(context, R.color.matrix_primary));
             steerNote.setText(steerNoteText(message.steerDeliveryState(), message.status()));
             steerNote.setMaxWidth(maxBubbleWidth);
             bubbleContent.addView(steerNote, new LinearLayout.LayoutParams(

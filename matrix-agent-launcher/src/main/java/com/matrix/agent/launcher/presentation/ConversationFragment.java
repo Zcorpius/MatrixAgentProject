@@ -27,6 +27,7 @@ import com.matrix.agent.api.debug.DebugTraceWireEvent;
 import com.matrix.agent.launcher.BuildConfig;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 import java.util.List;
 import java.util.Locale;
@@ -225,16 +226,17 @@ public final class ConversationFragment extends Fragment {
         super.onStop();
     }
 
-    /** 输入面贴底延续到手势导航区；离开会话页后恢复应用的深色全局 chrome。 */
+    /** 输入面贴底延续到手势导航区；离开会话页后恢复当前主题的页面底色。 */
     private void setConversationNavigationSurface(boolean active) {
         android.view.Window window = requireActivity().getWindow();
-        int color = ContextCompat.getColor(requireContext(), active
-                ? R.color.composer_surface : R.color.matrix_primary_dark);
+        int color = LauncherThemePreferences.color(requireContext(), active
+                ? R.attr.matrix_paper_high : R.attr.matrix_paper);
         window.setNavigationBarColor(color);
         int visibility = window.getDecorView().getSystemUiVisibility();
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             int flag = View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            window.getDecorView().setSystemUiVisibility(active
+            boolean lightIcons = !LauncherThemePreferences.isDark(requireContext());
+            window.getDecorView().setSystemUiVisibility(lightIcons
                     ? visibility | flag : visibility & ~flag);
         }
     }
@@ -356,7 +358,7 @@ public final class ConversationFragment extends Fragment {
         editor.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
         editor.setTextSize(16);
         editor.setMinLines(8);
-        editor.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+        editor.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_text));
         android.widget.CheckBox enterToSend = new android.widget.CheckBox(requireContext());
         enterToSend.setText(R.string.conversation_enter_to_send);
         enterToSend.setChecked(isEnterToSendEnabled());
@@ -374,7 +376,7 @@ public final class ConversationFragment extends Fragment {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         TextView attachmentContext = new TextView(requireContext());
         attachmentContext.setText(fullscreenAttachmentSummary());
-        attachmentContext.setTextColor(ContextCompat.getColor(requireContext(),
+        attachmentContext.setTextColor(LauncherThemePreferences.colorResource(requireContext(),
                 R.color.matrix_muted));
         attachmentContext.setTextSize(12);
         attachmentContext.setPadding(0, dp(12), 0, dp(4));
@@ -459,7 +461,7 @@ public final class ConversationFragment extends Fragment {
         if (assistantStreamView == null) {
             assistantStreamView = new TextView(requireContext());
             assistantStreamView.setTextSize(15);
-            assistantStreamView.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+            assistantStreamView.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_text));
             assistantStreamView.setPadding(dp(16), dp(12), dp(16), dp(12));
         }
         if (assistantStreamView.getParent() == null) messageRows.addView(assistantStreamView);
@@ -509,7 +511,7 @@ public final class ConversationFragment extends Fragment {
         if (runtime == null || !runtime.ready) {
             modelCapsule.setText(R.string.conversation_model_unconfigured);
             modelCapsule.setTextColor(
-                    ContextCompat.getColor(requireContext(), R.color.matrix_muted));
+                    LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_muted));
         } else {
             String backend = runtime.backend
                     == com.matrix.agent.api.model.ModelRuntimeStatus.BACKEND_ON_DEVICE
@@ -518,7 +520,7 @@ public final class ConversationFragment extends Fragment {
             modelCapsule.setText(getString(R.string.conversation_model_format,
                     runtime.activeModelId == null ? "—" : runtime.activeModelId, backend));
             modelCapsule.setTextColor(
-                    ContextCompat.getColor(requireContext(), R.color.matrix_primary_dark));
+                    LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_primary_dark));
         }
     }
 
@@ -581,7 +583,7 @@ public final class ConversationFragment extends Fragment {
                                 attachment.safeDisplayName);
         TextView name = new TextView(requireContext());
         name.setText(label);
-        name.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+        name.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_text));
         name.setTextSize(12);
         name.setMaxWidth(dp(180));
         name.setSingleLine(true);
@@ -963,7 +965,7 @@ public final class ConversationFragment extends Fragment {
     }
 
     private int color(int resource) {
-        return ContextCompat.getColor(requireContext(), resource);
+        return LauncherThemePreferences.colorResource(requireContext(), resource);
     }
 
     private void showActions(ConversationViewModel.UiMessage message) {

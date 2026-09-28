@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/composer_surface" />
+    <solid android:color="?attr/matrix_paper_high" />
     <!-- 只有上沿圆角：它属于贴底输入面，绝不是四周悬浮的卡片。 -->
     <corners
         android:topLeftRadius="28dp"

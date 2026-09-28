@@ -31,7 +31,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="@string/conversation_title"
-                android:textColor="@color/matrix_primary_dark"
+                android:textColor="?attr/matrix_ink"
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
@@ -46,7 +46,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="7dp"
                 android:text="@string/conversation_eyebrow"
-                android:textColor="@color/matrix_accent"
+                android:textColor="?attr/matrix_accent"
                 android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -57,7 +57,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="@string/conversation_summary_active"
-            android:textColor="@color/matrix_accent"
+            android:textColor="?attr/matrix_accent"
             android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -67,14 +67,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="@string/conversation_intro"
-            android:textColor="@color/matrix_muted"
+            android:textColor="?attr/matrix_ink_muted"
             android:textSize="11sp" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/matrix_border" />
+        android:background="?attr/matrix_divider" />
 
     <TextView
         android:id="@+id/conversation_notice"
@@ -86,7 +86,7 @@
         android:background="@drawable/bg_notice"
         android:minHeight="44dp"
         android:padding="12dp"
-        android:textColor="@color/matrix_text"
+        android:textColor="?attr/matrix_ink"
         android:textSize="13sp"
         android:visibility="gone" />
 
@@ -94,7 +94,7 @@
         android:id="@+id/conversation_scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/matrix_card"
+        android:background="?attr/matrix_paper_high"
         android:layout_weight="1"
         android:fillViewport="true">
 
@@ -112,13 +112,13 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#18B9A98E" />
+        android:background="?attr/matrix_divider" />
 
     <!-- 贴底输入面：它是页面的一部分，不作为悬浮卡片呈现。 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/matrix_card"
+        android:background="?attr/matrix_paper_high"
         android:orientation="vertical"
         android:padding="0dp">
 
@@ -154,8 +154,8 @@
                     android:paddingTop="8dp"
                     android:paddingEnd="12dp"
                     android:paddingBottom="8dp"
-                    android:textColor="@color/matrix_text"
-                    android:textColorHint="@color/matrix_muted"
+                    android:textColor="?attr/matrix_ink"
+                    android:textColorHint="?attr/matrix_ink_muted"
                     android:textSize="16sp"
                     android:contentDescription="@string/conversation_input_hint" />
 
@@ -207,7 +207,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:textColor="@color/matrix_primary"
+                    android:textColor="?attr/matrix_accent"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
@@ -219,7 +219,7 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/matrix_muted"
+                    android:textColor="?attr/matrix_ink_muted"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -238,7 +238,7 @@
                     android:contentDescription="@string/conversation_stage"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/matrix_primary"
+                    android:textColor="?attr/matrix_accent"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
@@ -253,7 +253,7 @@
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
                     android:text="@string/conversation_cancel"
-                    android:textColor="@color/matrix_accent"
+                    android:textColor="?attr/matrix_accent"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
@@ -275,7 +275,7 @@
                     android:maxWidth="152dp"
                     android:maxLines="1"
                     android:text="@string/conversation_model_unconfigured"
-                    android:textColor="@color/matrix_primary_dark"
+                    android:textColor="?attr/matrix_ink"
                     android:textSize="12sp" />
 
                 <ImageButton
