@@ -170,7 +170,7 @@
     <string name="model_key_transient_hint">仅用于本次安全写入</string>
     <string name="model_key_saved_hint">已安全保存；输入新 Key 以覆盖</string>
     <string name="model_save_activate">保存并启用</string>
-    <string name="model_test_current">测试当前配置</string>
+    <string name="model_test_current">测试已启用云端模型</string>
     <string name="model_available_runtime_title">可用运行时</string>
     <string name="model_empty_with_download_hint">尚无可用模型。端侧模型请先在下载页安装。</string>
     <string name="model_provider_glm">智谱 GLM</string>
@@ -200,9 +200,10 @@
     <string name="model_invalid_model_id">模型标识仅可包含字母、数字、点、下划线、连字符或冒号</string>
     <string name="model_provisioning">正在将凭据交给 Host 的一次性安全管道…</string>
     <string name="model_save_failed">保存失败，错误码=%1$d</string>
-    <string name="model_testing">正在验证 Host 已保存的模型连接…</string>
-    <string name="model_test_success">连接验证成功 · %1$d ms</string>
+    <string name="model_testing">正在验证已启用云端模型的简短问答…</string>
+    <string name="model_test_success">已启用模型返回有效答复 · %1$d ms</string>
     <string name="model_test_failed_code">连接验证失败，错误码=%1$d</string>
+    <string name="model_no_active_cloud_model">请先保存并启用一个云端模型</string>
     <string name="model_runtime">运行时：%1$s\n当前模型：%2$s\n就绪：%3$b%4$s</string>
     <string name="model_runtime_error">\n错误码：%1$d</string>
     <string name="model_backend_device">端侧</string>

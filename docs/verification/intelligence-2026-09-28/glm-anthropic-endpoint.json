@@ -23,6 +23,8 @@
     "protocol": "ANTHROPIC_MESSAGES",
     "credentialLengthVerified": true,
     "connectionTestHttpStatus": 200,
+    "connectionTestReplyCharactersBeforeParserFix": 0,
+    "connectionTestResultBeforeParserFix": "false positive success",
     "agentRequestFinalState": "SUCCEEDED",
     "agentRequestStopReason": "NO_TOOL_CALL",
     "agentRequestToolCalls": 0,
@@ -30,6 +32,7 @@
     "userDataCleared": false
   },
   "limits": [
+    "The initial device connection test accepted an empty parsed response because the Anthropic thinking block preceded the text block; the later parser fix is verified by focused regression tests.",
     "The previous device HTTP 429 response body was deliberately redacted; matching the 54-character response length does not prove its provider business code.",
     "A successful request to this endpoint does not establish Coding Plan entitlement for MatrixAgent."
   ]

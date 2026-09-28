@@ -519,7 +519,18 @@ public final class ModelApiClient implements LlmClient {
                 .put("messages", new JSONArray().put(message("user", user)));
         JSONObject response = post(config.endpoint, body, "x-api-key", config.apiKey,
                 "anthropic-version", "2023-06-01", token, deadlineAtMillis);
-        return response.getJSONArray("content").getJSONObject(0).optString("text", "");
+        return parseAnthropicTextResponse(response);
+    }
+
+    static String parseAnthropicTextResponse(JSONObject response) throws Exception {
+        // Reasoning models can return a thinking block before the user-visible text. Keep the
+        // non-streaming path consistent with the native tool and streaming Anthropic parsers.
+        String text = AnthropicToolProtocol.parseResponse(response, java.util.List.of())
+                .getAssistantMessage().getContent();
+        if (text == null || text.isBlank()) {
+            throw new IllegalStateException("Anthropic 响应未包含可用文本");
+        }
+        return text;
     }
 
     private String callGemini(ModelConfig config, String system, String user,

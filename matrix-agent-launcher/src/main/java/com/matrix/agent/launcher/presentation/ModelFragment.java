@@ -90,7 +90,9 @@ public final class ModelFragment extends Fragment {
             @Override public void afterTextChanged(Editable s) { }
         });
         root.<ImageButton>findViewById(R.id.model_key_visibility).setOnClickListener(v -> toggleKeyVisibility());
-        save.setOnClickListener(v -> provision()); test.setOnClickListener(v -> viewModel.testConnection(currentProvider().id)); refresh.setOnClickListener(v -> viewModel.refresh());
+        save.setOnClickListener(v -> provision());
+        test.setOnClickListener(v -> viewModel.testActiveConnection());
+        refresh.setOnClickListener(v -> viewModel.refresh());
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
         new ViewModelProvider(requireActivity(), activity().viewModelFactory()).get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> { connected = viewModel.isHostConnected(); renderControls(); if (connected) viewModel.refresh(); });
         return root;
@@ -138,8 +140,35 @@ public final class ModelFragment extends Fragment {
     private void toggleKeyVisibility() { keyVisible=!keyVisible; int at=key.getSelectionEnd(); key.setInputType(InputType.TYPE_CLASS_TEXT | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD)); key.setTypeface(key.getTypeface()); if(at>=0&&at<=key.length())key.setSelection(at); requireView().<ImageButton>findViewById(R.id.model_key_visibility).setImageResource(keyVisible?R.drawable.ic_eye_visible:R.drawable.ic_eye_hidden); }
     private void render(@NonNull ModelViewModel.State v) { rendered=v; if(v.savedForm!=null)saveDraft(v.savedForm); restoreActiveModel(v.models); renderStatus(v); models.removeAllViews(); if(v.models.isEmpty()) models.addView(muted(getString(R.string.model_empty_with_download_hint))); else for(ModelInfo m:v.models)addModelCard(m,v.busy); renderControls(); }
     private void renderStatus(ModelViewModel.State v) {
-        if(v.notice==ModelViewModel.Notice.RUNTIME&&v.runtime!=null){ ModelRuntimeStatus r=v.runtime; int backend=r.backend==ModelRuntimeStatus.BACKEND_ON_DEVICE?R.string.model_backend_device:r.backend==ModelRuntimeStatus.BACKEND_CLOUD?R.string.model_backend_cloud:R.string.model_backend_none; String error=r.lastErrorCode==0?"":getString(R.string.model_runtime_error,r.lastErrorCode); status.setText(getString(R.string.model_runtime,getString(backend),r.activeModelId==null?getString(R.string.none):r.activeModelId,r.ready,error)); return; }
-        switch(v.notice){case MISSING_KEY:status.setText(R.string.model_missing_key);break;case MISSING_MODEL_ID:status.setText(R.string.model_missing_model_id);break;case INVALID_MODEL_ID:status.setText(R.string.model_invalid_model_id);break;case PROVISIONING:status.setText(R.string.model_provisioning);break;case SAVED:status.setText(R.string.model_saved_active);break;case SAVE_FAILED:status.setText(getString(R.string.model_save_failed,v.code));break;case TESTING:status.setText(R.string.model_testing);break;case TEST_SUCCEEDED:status.setText(getString(R.string.model_test_success,v.code));break;case TEST_FAILED:status.setText(getString(R.string.model_test_failed_code,v.code));break;case SWITCHING:status.setText(R.string.model_switching);break;case SWITCH_FAILED:status.setText(getString(R.string.model_switch_failed,v.code));break;case HOST_UNAVAILABLE:status.setText(R.string.host_not_connected);break;default:if(v.runtime==null)status.setText(R.string.model_waiting);}
+        if (v.notice == ModelViewModel.Notice.RUNTIME && v.runtime != null) {
+            ModelRuntimeStatus runtime = v.runtime;
+            int backend = runtime.backend == ModelRuntimeStatus.BACKEND_ON_DEVICE
+                    ? R.string.model_backend_device
+                    : runtime.backend == ModelRuntimeStatus.BACKEND_CLOUD
+                            ? R.string.model_backend_cloud : R.string.model_backend_none;
+            String error = runtime.lastErrorCode == 0 ? ""
+                    : getString(R.string.model_runtime_error, runtime.lastErrorCode);
+            status.setText(getString(R.string.model_runtime, getString(backend),
+                    runtime.activeModelId == null ? getString(R.string.none)
+                            : runtime.activeModelId, runtime.ready, error));
+            return;
+        }
+        switch (v.notice) {
+            case MISSING_KEY -> status.setText(R.string.model_missing_key);
+            case MISSING_MODEL_ID -> status.setText(R.string.model_missing_model_id);
+            case INVALID_MODEL_ID -> status.setText(R.string.model_invalid_model_id);
+            case PROVISIONING -> status.setText(R.string.model_provisioning);
+            case SAVED -> status.setText(R.string.model_saved_active);
+            case SAVE_FAILED -> status.setText(getString(R.string.model_save_failed, v.code));
+            case TESTING -> status.setText(R.string.model_testing);
+            case TEST_SUCCEEDED -> status.setText(getString(R.string.model_test_success, v.code));
+            case TEST_FAILED -> status.setText(getString(R.string.model_test_failed_code, v.code));
+            case SWITCHING -> status.setText(R.string.model_switching);
+            case SWITCH_FAILED -> status.setText(getString(R.string.model_switch_failed, v.code));
+            case HOST_UNAVAILABLE -> status.setText(R.string.host_not_connected);
+            case NO_ACTIVE_CLOUD_MODEL -> status.setText(R.string.model_no_active_cloud_model);
+            default -> { if (v.runtime == null) status.setText(R.string.model_waiting); }
+        }
     }
     private void restoreDraft() {
         ModelFormDraftStore.Draft draft = draftStore.load();
@@ -180,7 +209,13 @@ public final class ModelFragment extends Fragment {
         key.setHint(saved ? R.string.model_key_saved_hint : R.string.model_key_transient_hint);
     }
     private void addModelCard(ModelInfo m, boolean busy) { LinearLayout c=new LinearLayout(requireContext());c.setOrientation(LinearLayout.VERTICAL);c.setBackgroundResource(R.drawable.bg_card);c.setPadding(dp(15),dp(13),dp(15),dp(13)); TextView t=new TextView(requireContext());t.setText(getString(R.string.model_card_title,m.active?getString(R.string.model_active_prefix):getString(R.string.model_inactive_prefix),m.displayName));t.setTextSize(16);t.setTypeface(Typeface.DEFAULT_BOLD);t.setTextColor(color(R.color.matrix_text));c.addView(t);c.addView(muted(getString(R.string.model_card_detail,m.modelId,m.providerId,m.available?"":getString(R.string.model_unavailable_suffix))),top(4));Button b=new Button(requireContext());b.setText(m.active?R.string.model_current:R.string.model_select);b.setEnabled(connected&&!busy&&!m.active&&m.available);b.setBackgroundResource(m.active?R.drawable.bg_outline:R.drawable.bg_primary);b.setTextColor(m.active?color(R.color.matrix_primary_dark):LauncherThemePreferences.color(requireContext(),R.attr.matrix_on_accent));b.setOnClickListener(v->viewModel.select(m));c.addView(b,top(9));models.addView(c,space()); }
-    private void renderControls() { boolean busy=rendered!=null&&rendered.busy; save.setEnabled(connected&&!busy); test.setEnabled(connected&&!busy&&!currentProvider().onDevice); refresh.setEnabled(connected&&!busy); }
+    private void renderControls() {
+        boolean busy = rendered != null && rendered.busy;
+        save.setEnabled(connected && !busy);
+        test.setEnabled(connected && !busy
+                && ModelViewModel.activeCloudModel(rendered) != null);
+        refresh.setEnabled(connected && !busy);
+    }
     private TextView muted(String s){TextView v=new TextView(requireContext());v.setText(s);v.setTextColor(color(R.color.matrix_muted));v.setTextSize(13);return v;} private LinearLayout.LayoutParams top(int n){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);p.topMargin=dp(n);return p;} private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=top(0);p.bottomMargin=dp(9);return p;} private int color(int r){return LauncherThemePreferences.colorResource(requireContext(),r);} private int dp(int v){return activity().dp(v);} private LauncherActivity activity(){return (LauncherActivity)requireActivity();}
     private static final class ProviderOption { final String id,label,defaultModel,defaultEndpoint; final boolean apiKeyRequired,endpointEditable,onDevice; ProviderOption(String i,String l,String m,String e,boolean key,boolean endpoint,boolean device){id=i;label=l;defaultModel=m;defaultEndpoint=e;apiKeyRequired=key;endpointEditable=endpoint;onDevice=device;} }
 }

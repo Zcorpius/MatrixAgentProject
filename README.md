@@ -177,6 +177,8 @@ SDK 面向符合签名权限要求的可信客户端。连接可异步开始，�
 
 **GLM 入口对照验证**：同一电脑凭据和 `glm-5.3` 对 `/api/anthropic/v1/messages` 返回 HTTP 200，对原 `/api/paas/v4/chat/completions` 返回 HTTP 429、业务码 `1113`（[智谱错误码](https://docs.bigmodel.cn/cn/api/api-code)：“账户已欠费”）；后者响应恰为 54 字符，与真机此前日志的 54 字符一致。现新增可选的「智谱 GLM（Anthropic 接口）」配置，保留原入口不变。Mi 9 SE 上新入口连接测试 HTTP 200，真实 Agent 问候请求 `SUCCEEDED / NO_TOOL_CALL`。[脱敏验证记录](docs/verification/intelligence-2026-09-28/glm-anthropic-endpoint.json)。智谱将该地址列为 [Coding Plan 的 Anthropic 入口](https://docs.bigmodel.cn/cn/coding-plan/quick-start)，但[套餐仅限指定工具与环境](https://docs.bigmodel.cn/cn/coding-plan/tool/others)；选择入口本身不保证 MatrixAgent 可使用套餐额度。
 
+**模型连接测试与端侧下载复验**：GLM 的 Anthropic 响应可先返回 `thinking` 块，旧连接测试因此把 HTTP 200 的空文本误判为成功；现按协议提取正文，并拒绝空答复。测试按钮只验证 Host 已启用的云端模型。Mi 9 SE 上还复现了模型市场按钮因连接状态重绘遗漏而置灰，以及系统把可用 Wi-Fi 标为部分连通、阻止 WorkManager 下载启动。修复后 `Qwen3.5-2B-MNN` 在真机完成下载并进入本地模型库；未切换当前推理模型。[真机验证记录](docs/verification/intelligence-2026-09-28/model-download-2b.json)。
+
 此前 **2026-09-27 · v0.7.1** 基线的 1,516 项 JVM 测试与 47 项真机联合套件结果仍单独保留，不能与本轮采样混算。[原基线报告与 APK 摘要](docs/verification/yukino-interaction-2026-09-27/README.md) · [复验方法](docs/开发与验证.md#verification)
 
 <a id="boundaries"></a>

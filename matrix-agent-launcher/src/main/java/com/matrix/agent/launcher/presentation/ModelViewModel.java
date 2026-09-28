@@ -50,7 +50,7 @@ public final class ModelViewModel extends ViewModel {
             if (!operations.isCurrent(operation)) return;
             SavedForm saved = code == 0
                     ? new SavedForm(providerId, modelId, endpoint, credentialProvided) : null;
-            update(current.withBusy(false, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code)
+            update(current.withBusy(code == 0, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code)
                     .withSavedForm(saved));
             if (code == 0) refresh(operation);
         }, result -> {
@@ -63,7 +63,13 @@ public final class ModelViewModel extends ViewModel {
         });
     }
 
-    public void testConnection(@NonNull String providerId) {
+    public void testActiveConnection() {
+        ModelInfo active = activeCloudModel(current);
+        if (active == null) {
+            update(current.withNotice(Notice.NO_ACTIVE_CLOUD_MODEL, 0));
+            return;
+        }
+        String providerId = active.providerId;
         final long operation = operations.begin();
         update(current.withBusy(true, Notice.TESTING, 0));
         repository.test(providerId, result -> {
@@ -73,6 +79,13 @@ public final class ModelViewModel extends ViewModel {
             else update(current.withBusy(false, value.success ? Notice.TEST_SUCCEEDED : Notice.TEST_FAILED,
                     value.success ? (int) Math.min(Integer.MAX_VALUE, value.latencyMs) : value.errorCode));
         });
+    }
+
+    @Nullable static ModelInfo activeCloudModel(@Nullable State state) {
+        if (state == null || state.runtime == null
+                || state.runtime.backend != ModelRuntimeStatus.BACKEND_CLOUD) return null;
+        for (ModelInfo model : state.models) if (model.active) return model;
+        return null;
     }
 
     public void refresh() {
@@ -112,7 +125,8 @@ public final class ModelViewModel extends ViewModel {
     public enum Notice {
         IDLE, MISSING_KEY, MISSING_MODEL_ID, INVALID_MODEL_ID, PROVISIONING, SAVED, SAVE_FAILED,
         TESTING, TEST_SUCCEEDED, TEST_FAILED,
-        RUNTIME, SWITCHING, SWITCHED, SWITCH_FAILED, HOST_UNAVAILABLE
+        RUNTIME, SWITCHING, SWITCHED, SWITCH_FAILED, HOST_UNAVAILABLE,
+        NO_ACTIVE_CLOUD_MODEL
     }
 
     public static final class State {

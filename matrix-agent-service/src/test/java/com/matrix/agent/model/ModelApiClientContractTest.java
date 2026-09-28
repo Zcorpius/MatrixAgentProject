@@ -162,6 +162,26 @@ public final class ModelApiClientContractTest {
     }
 
     @Test
+    public void anthropicTextCompletionSkipsThinkingAndJoinsTextBlocks() throws Exception {
+        JSONObject response = new JSONObject().put("stop_reason", "end_turn")
+                .put("content", new JSONArray()
+                        .put(new JSONObject().put("type", "thinking").put("thinking", "private"))
+                        .put(new JSONObject().put("type", "text").put("text", "O"))
+                        .put(new JSONObject().put("type", "text").put("text", "K")));
+
+        assertEquals("OK", ModelApiClient.parseAnthropicTextResponse(response));
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void anthropicTextCompletionRejectsThinkingOnlyResponse() throws Exception {
+        JSONObject response = new JSONObject().put("stop_reason", "end_turn")
+                .put("content", new JSONArray().put(
+                        new JSONObject().put("type", "thinking").put("thinking", "private")));
+
+        ModelApiClient.parseAnthropicTextResponse(response);
+    }
+
+    @Test
     public void anthropicNativeResponsePreservesToolUseIdAndMapsCapability() throws Exception {
         JSONObject response = new JSONObject();
         JSONArray content = new JSONArray();

@@ -95,6 +95,9 @@ public final class ModelGatewayRepository {
                 + " model=" + config.model + " protocol=" + config.protocol);
         String reply = modelClient.complete(config, "你是连接测试助手。", "只回复 OK",
                 cancellationToken, Long.MAX_VALUE);
+        if (reply == null || reply.isBlank()) {
+            throw new IllegalStateException("模型连接测试返回空答复");
+        }
         Log.i(TAG, "[ModelRepo] testConnection OK replyChars=" + reply.length());
         return reply;
     }

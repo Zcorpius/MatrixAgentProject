@@ -49,7 +49,15 @@ public final class DownloadFragment extends Fragment {
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
         new ViewModelProvider(requireActivity(), activity.viewModelFactory()).get(LauncherViewModel.class)
                 .connectionState().observe(getViewLifecycleOwner(), value -> {
+                    boolean wasConnected = connected;
                     connected = viewModel.isHostConnected();
+                    // The activity-scoped ViewModel can already hold an unchanged catalog when
+                    // this view is recreated. Polling then skips emission, so action buttons
+                    // must be repainted when Host connectivity changes independently of data.
+                    if (connected != wasConnected) {
+                        DownloadViewModel.State snapshot = viewModel.state().getValue();
+                        if (snapshot != null) render(snapshot);
+                    }
                     if (connected) viewModel.refresh();
                 });
         return root;

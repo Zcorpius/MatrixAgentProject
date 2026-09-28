@@ -210,16 +210,20 @@ public final class DownloadServiceStub extends IDownloadService.Stub {
         CatalogEntry entry = requireModel(modelId);
         int availability = downloadAvailabilityError();
         if (availability != MatrixErrorCode.SUCCESS) {
+            android.util.Log.w("MatrixAgent", "[ModelDownload] start unavailable: " + entry.id
+                    + " code=" + availability);
             return failed(operationId, entry.id, availability, callback);
         }
         try {
             workScheduler.enqueue(new ModelMarketClient.ModelEntry(entry.id, entry.name,
                     entry.sizeGb, entry.repo));
+            android.util.Log.i("MatrixAgent", "[ModelDownload] queued: " + entry.id);
             ModelOperationHandle pending = new ModelOperationHandle(operationId, entry.id,
                     ModelOperationHandle.STATE_PENDING);
             watchCompletion(entry.id, pending, callback);
             return pending;
         } catch (Exception error) {
+            android.util.Log.w("MatrixAgent", "[ModelDownload] queue failed: " + entry.id, error);
             return failed(operationId, entry.id, MatrixErrorCode.TASK_FAILED, callback);
         }
     }
