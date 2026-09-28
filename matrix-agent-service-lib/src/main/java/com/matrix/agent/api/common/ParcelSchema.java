@@ -32,7 +32,8 @@ public final class ParcelSchema {
     // v11 appends per-channel delivery facts to ScheduleRunInfo.
     // v12 appends frozen workflow identity and safe step input/timing summaries.
     // v13 adds Launcher-only ephemeral pointer observation for the visible overlay.
-    public static final int CURRENT = 13;
+    // v14 adds ephemeral assistant body snapshots with turn/sequence identity.
+    public static final int CURRENT = 15;
 
     private ParcelSchema() {
     }

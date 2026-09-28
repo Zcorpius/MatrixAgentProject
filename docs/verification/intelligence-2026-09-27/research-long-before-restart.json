@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "scheduleId": "459d01bb-62bf-439d-b59e-180c05e0ff71",
+  "startedAt": "2026-09-27T17:16:24.227317Z",
+  "model": "glm-5.3",
+  "profile": "RESEARCH",
+  "query": "large language model reasoning evaluation",
+  "lastObservedAt": "2026-09-27T17:16:32.278108Z",
+  "runId": "0f4df13b-e79f-4269-ae24-fe917dd552f9",
+  "state": 2,
+  "reason": "",
+  "result": "",
+  "activeMillis": 1870,
+  "modelCalls": 1,
+  "toolCalls": 3,
+  "scheduledAt": 1790529389174,
+  "startedAtMillis": 1790529389427,
+  "expiresAt": 1790531789174,
+  "deliveryStatus": 1,
+  "deliveryFacts": {},
+  "steps": [
+    {
+      "id": "arxiv",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 1464,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "0f4df13b-e79f-4269-ae24-fe917dd552f9",
+        "stepId": "arxiv",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "3a7a9775491c2684b633ebc421daf100fc62fc7eac74eecbd2ec540dbc1c8847",
+        "createdAt": 1790529390987,
+        "expiresAt": 1790531789174,
+        "payloadDigest": "8e6220c91506046d1d1084823f166784c46e4fa385665ee22a0f1b47b96ca1c7",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"b1bd06f086e45be9adbed9ea9d4bd5cfb98245ccce47def71817ee930b7c2a63\",\"sources\":[{\"snippet\":\"Reinforcement learning (RL) has become a key technique for enhancing the reasoning abilities of large language models (LLMs), with policy-gradient algorithms dominating the post-training stage because of their efficiency and effectiveness. However, most existing benchmarks evaluate large-language-model reasoning under idealized settings, overlooking performance in realistic, non-ideal scenarios. We identify three representative non-ideal scenarios with practical relevance: summary inference, fine-grained noise suppression, and contextual filtering. We introduce a new research direction guided by brain-science findings that human reasoning remains reliable under imperfect[truncated 861 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_42896446c47525e8\",\"title\":\"Large Language Models Reasoning Abilities Under Non-Ideal Conditions After RL-Fine-Tuning\",\"fullTextRead\":false,\"url\":\"https:\\/\\/arxiv.org\\/abs\\/2508.04848v1\"},{\"snippet\":\"Large Language Models utilizing reasoning techniques improve task performance but incur significant latency and token costs due to verbose generation. Existing automatic prompt optimization(APO) frameworks target task accuracy exclusively at the expense of generating long reasoning traces. We propose Cost-Regularized Optimization of Prompts (CROP), an APO method that introduces regularization on response length by generating textual feedback in addition to standard accuracy feedback. This forces the optimization process to produce prompts that elicit concise responses containing only critical information and reasoning. We evaluate our approach on complex reasoning datase[truncated 317 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_dbf3f977e43fed60\",\"title\":\"CROP: Token-Efficient Reasoning in Large Language Models via Regularized Prompt Optimization\",\"fullTextRead\":false,\"url\":\"https:\\/\\/arxiv.org\\/abs\\/2604.14214v1\"},{\"snippet\":\"Large Reasoning Language Models (LRLMs or LRMs) demonstrate remarkable capabilities in complex reasoning tasks, but suffer from significant computational inefficiencies due to overthinking phenomena. Existing efficient reasoning methods face the challenge of balancing reasoning quality with inference cost reduction. We propose \\\\textbf{Adaptive Reasoning Suppression (ARS)}, a novel training-free approach that dynamically suppresses redundant reasoning steps while preserving accuracy through adaptive certainty monitoring. ARS introduces a multi-checkpoint certainty estimation mechanism with progressive suppression thresholds, achieving superior efficiency compared to stati[truncated 263 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_dd437600bd999ae8\",\"title\":\"ARS: Adaptive Reasoning Suppression for Efficient Large Reasoning Language Models\",\"fullTextRead\":false,\"url\":\"https:\\/\\/arxiv.org\\/abs\\/2510.00071v2\"},{\"snippet\":\"Recent incidents in certain online games and communities, where anonymity is guaranteed, show that unchecked inappropriate remarks frequently escalate into verbal abuse and even criminal behavior, raising significant social concerns. Consequently, there is a growing need for research on techniques that can detect inappropriate utterances within conversational texts to help build a safer communication environment. Although large-scale language models trained on Korean corpora and chain-of-thought reasoning have recently gained attention, research applying these approaches to inappropriate utterance detection remains limited. In this study, we propose a soft inductive bias[truncated 821 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_763379f8bad137c9\",\"title\":\"Soft Inductive Bias Approach via Explicit Reasoning Perspectives in Inappropriate Utterance Detection Using Large Language Models\",\"fullTextRead\":false,\"url\":\"https:\\/\\/arxiv.org\\/abs\\/2512.08480v1\"},{\"snippet\":\"Large Vision-Language Models (LVLMs) have recently played a dominant role in multimodal vision-language learning. Despite the great success, it lacks a holistic evaluation of their efficacy. This paper presents a comprehensive evaluation of publicly available large multimodal models by building a LVLM evaluation Hub (LVLM-eHub). Our LVLM-eHub consists of $8$ representative LVLMs such as InstructBLIP and MiniGPT-4, which are thoroughly evaluated by a quantitative capability evaluation and an online arena platform. The former evaluates $6$ categories of multimodal capabilities of LVLMs such as visual question answering and embodied artificial intelligence on $47$ standard[truncated 1096 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_634613a36356cc47\",\"title\":\"LVLM-eHub: A Comprehensive Evaluation Benchmark for Large Vision-Language Models\",\"fullTextRead\":false,\"url\":\"https:\\/\\/arxiv.org\\/abs\\/2306.09265v1\"}],\"retrievedAt\":1790529390979,\"count\":5,\"source\":\"arxiv\",\"version\":1}"
+      },
+      "startedAt": 1790529389523,
+      "completedAt": 1790529390987
+    },
+    {
+      "id": "crossref",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 1793,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "0f4df13b-e79f-4269-ae24-fe917dd552f9",
+        "stepId": "crossref",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "238a54f62920dd431510e34e3ff37e41621938c4243cdf8afa5c7eaaed54dd1a",
+        "createdAt": 1790529391334,
+        "expiresAt": 1790531789174,
+        "payloadDigest": "4cda3e4cd7ee4346f173ae894c9d299ba3910ec442faae6618309eaccbc112e1",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"b1bd06f086e45be9adbed9ea9d4bd5cfb98245ccce47def71817ee930b7c2a63\",\"sources\":[{\"snippet\":\"Large language models (LLMs) optimized through reinforcement learning from human feedback (RLHF) exhibit systematic tendencies toward sycophancy-agreeing with users, omitting contradictory evidence, and producing outputs that prioritize plausibility over accuracy. Current evaluation approaches focus on model-level benchmarks and adversarial testing, leaving individual practitioners without structured methods to assess the integrity of LLM outputs before acting on them. This paper introduces the Epporul Plumbline Protocol, an open-source, model-agnostic, four-step post-generation audit framework designed for human-executed evaluation of LLM reasoning. The protocol targets[truncated 620 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_102396db1665b19e\",\"title\":\"Epporul-Plumbline: A Structured Evaluation Protocol for Detecting Sycophancy, Hallucination, and Reasoning Failures in Large Language Model Outputs -A 5-Day Field Test\",\"fullTextRead\":false,\"url\":\"https:\\/\\/doi.org\\/10.2139\\/ssrn.6609578\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_d360b67f91f327bd\",\"title\":\"Use large language model to enhance reasoning of another large language model through reward updated GRPO\",\"fullTextRead\":false,\"url\":\"https:\\/\\/doi.org\\/10.1038\\/s41598-026-39296-8\"},{\"snippet\":\"Abstract Recent advancements in large language models (LLMs) have demonstrated that explicitly prompting for intermediate reasoning steps significantly improves performance in complex tasks. Traditional chain of thought (CoT) prompting, however, can result in verbose outputs that increase both latency and computational cost. Condensed Reasoning Prompting (CRP) addresses this trade-off by encouraging more concise reasoning traces while maintaining high accuracy. In this paper, we systematically evaluate three prompting strategies: Chain Of Thought (CoT), Chain of Draft (CoD) and Condensed Reasoning across multiple datasets, including MMLU, Big Bench, arithmetic, and symbo[truncated 627 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_693be7d89ed0786a\",\"title\":\"Condensed Reasoning Prompting: Efficient Strategies, Evaluations, and Trade Offs in Large Language Model Reasoning\",\"fullTextRead\":false,\"url\":\"https:\\/\\/doi.org\\/10.21203\\/rs.3.rs-6170708\\/v1\"},{\"snippet\":\"&lt;p&gt;Existing benchmarks for evaluating large language model (LLM) performance on economics and finance tasks suffer from a fundamental measurement problem: they conflate surface fluency with structural economic reasoning, rewarding models that retrieve and recombine memorized content over those that genuinely reason about scarcity, incentives, and equilibrium. As LLMs increasingly saturate these benchmarks—with frontier models exceeding 85% on FLARE, FinQA, and related datasets—the field lacks tools to distinguish genuine economic understanding from sophisticated pattern matching. We introduce EconBench, a hierarchically structured evaluation framework comprising 4[truncated 1292 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_25c8f8d971fc44fe\",\"title\":\"EconBench: Rethinking Evaluation for Economic Reasoning in Large Language Models beyond Benchmark Saturation\",\"fullTextRead\":false,\"url\":\"https:\\/\\/doi.org\\/10.2139\\/ssrn.6803400\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_8392aa87d5b71c18\",\"title\":\"Survey on Hallucination in Reasoning Large Language Model: Evaluation, Taxonomy, Intervention, and Open Issues\",\"fullTextRead\":false,\"url\":\"https:\\/\\/doi.org\\/10.3724\\/2096-7004.di.2025.0131\"}],\"retrievedAt\":1790529391327,\"count\":5,\"source\":\"crossref\",\"version\":1}"
+      },
+      "startedAt": 1790529389540,
+      "completedAt": 1790529391334
+    },
+    {
+      "id": "deliver",
+      "state": 13,
+      "attempt": 0,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {}
+    },
+    {
+      "id": "review_arxiv",
+      "state": 2,
+      "attempt": 1,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {},
+      "startedAt": 1790529391393
+    },
+    {
+      "id": "review_crossref",
+      "state": 1,
+      "attempt": 0,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {}
+    },
+    {
+      "id": "review_wikipedia",
+      "state": 13,
+      "attempt": 0,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {}
+    },
+    {
+      "id": "summary",
+      "state": 13,
+      "attempt": 0,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {}
+    },
+    {
+      "id": "wikipedia",
+      "state": 2,
+      "attempt": 1,
+      "activeMillis": 0,
+      "reason": "",
+      "result": "",
+      "checkpoint": {},
+      "startedAt": 1790529391046
+    }
+  ],
+  "complete": false
+}

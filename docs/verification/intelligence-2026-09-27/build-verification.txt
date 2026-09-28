@@ -1,0 +1,19 @@
+Environment: JDK 21, Gradle 9.3.1, AGP 9, Java source/target 17; min SDK 28, compile SDK 36.
+
+Final non-device gate:
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home ./gradlew verifyArchitecture :matrix-agent-service:assembleRelease :matrix-agent-launcher:assembleRelease -Pmatrix.embeddingArtifactDir=.model-evaluation/embedding/bge-mnn
+BUILD SUCCESSFUL in 40s; 376 actionable tasks (28 executed, 348 up-to-date).
+
+verifyArchitecture includes all module check tasks, runEvaluations and verifyPublishedPom. Detailed denominators: test-counts.json. Ordinary unit tests: 1596 total, 0 failures, 0 errors, 2 explicit eval entrypoints skipped; deterministicCorpus runs separately under runEvaluations. Do not add the eval task's duplicate test names to the ordinary-unit total.
+
+Final debug APK was built with the same optional artifact property and installed using adb install -r. Native stream boundary command:
+python3 tools/evaluation/check_native_stream.py
+PASS: Unicode scalar validation, UTF-16 round trip, all UTF-8 and stop-marker split boundaries.
+
+Bundled-to-unbundled build transition:
+./gradlew :matrix-agent-service:prepareEmbeddingAssets
+Verified generated/embeddingAssets contains no files when property is absent. Then rebuilt with the property; all six expected pinned model files are included. Runtime cold install + native encode verified on a fresh isolated device directory in intelligence-device.json.
+
+Release DEX checked: neither MediaProbeReceiver nor ReflectionDeviceProbe is present. APK checksums and assets: apk-verification.json. Public parcel schema 15, contract hash ea0fa13158fcc7b7b998e876ee4e1f25d996f94a8c2a15a20f45e12126a3ba4d. Room schema 20, isolated migration from schema 16 passed.
+
+Python validation: py_compile on device_smoke.py, embedding_device_probe.py, research_device_probe.py and check_native_stream.py; research probe CLI --help passed. Documentation local links and git diff --check passed. No instrumentation APK, uninstall, data clear or user settings reset was used. Temporary IME and stay-awake changes restored.

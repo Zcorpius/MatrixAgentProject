@@ -51,7 +51,12 @@ final class MemoryRuntimeGraph {
     }
 
     MemoryRuntimeGraph(PersistenceRuntimeGraph.Admission admission, SessionManager sessions) {
-        this(admission.database(), sessions, new StoreInitialization(admission.memory(), !admission.available()));
+        this(admission, sessions, com.matrix.agent.embedding.SemanticVectorRecall.NONE);
+    }
+
+    MemoryRuntimeGraph(PersistenceRuntimeGraph.Admission admission, SessionManager sessions,
+            com.matrix.agent.embedding.SemanticVectorRecall vectors) {
+        this(admission.database(), sessions, new StoreInitialization(admission.memory(), !admission.available()), vectors);
     }
 
     private static StoreInitialization initializeStore(Context context, MatrixDatabase database,
@@ -64,6 +69,11 @@ final class MemoryRuntimeGraph {
     private record StoreInitialization(MemoryStore store, boolean degraded) { }
 
     private MemoryRuntimeGraph(MatrixDatabase database, SessionManager sessions, StoreInitialization result) {
+        this(database, sessions, result, com.matrix.agent.embedding.SemanticVectorRecall.NONE);
+    }
+
+    private MemoryRuntimeGraph(MatrixDatabase database, SessionManager sessions, StoreInitialization result,
+            com.matrix.agent.embedding.SemanticVectorRecall vectors) {
         store = result.store();
         degraded = result.degraded();
 
@@ -73,7 +83,7 @@ final class MemoryRuntimeGraph {
                 ? new EmptyEpisodicMemorySource() : episodicImpl;
         SemanticMemorySource semantic = degraded
                 ? new EmptySemanticMemorySource()
-                : new SemanticMemorySourceImpl(database.memoryRecordDao());
+                : new SemanticMemorySourceImpl(database.memoryRecordDao(), 5, vectors, SemanticMemorySourceImpl.Mode.HYBRID);
         writer = degraded ? MemoryWriter.NOOP : new RoomMemoryWriter(
                 database.sessionHistoryDao(), database.memoryRecordDao(), episodicImpl,
                 database::runInTransaction);

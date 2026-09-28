@@ -45,6 +45,8 @@ public final class ScheduleRunEntity {
     @Nullable public Long startedElapsed;
     public long activeMillis;
     @Nullable public Long budgetAnchorElapsed;
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    public int modelCalls;
     public int toolCalls;
     public long updatedAt;
 }

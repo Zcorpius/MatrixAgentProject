@@ -36,6 +36,16 @@ public final class SkillSelectorTest {
         assertEquals(1, hintReads.get());
     }
 
+    @Test public void searchPreparationUsesTargetContentGuidanceWhilePlaybackSwitchKeepsItsSkill() {
+        SkillSelector selector = selector(new AtomicInteger(), noBilibiliPending());
+        assertTrue(selector.promptFor(request("改用B站搜索星际穿越"))
+                .contains("id=\"bilibili-open-video\""));
+        assertTrue(selector.promptFor(request("从B站改用QQ音乐搜索林舟的晨光"))
+                .contains("id=\"qqmusic-control\""));
+        assertTrue(selector.promptFor(request("切换到QQ音乐，不用搜索"))
+                .contains("id=\"media-source-switch\""));
+    }
+
     @Test public void namelessSwitchGetsGuardedSkillButNegatedSwitchGetsQqControl() {
         SkillSelector selector = selector(new AtomicInteger(), noBilibiliPending());
         assertTrue(selector.promptFor(request("切换音乐来源"))

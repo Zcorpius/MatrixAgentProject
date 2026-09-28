@@ -102,6 +102,12 @@ public final class AgentBudget {
         this.maxAssistantTokens = maxAssistantTokens;
     }
 
+    /** Keep context bounded; long execution uses transaction compaction, not proportional history growth. */
+    public static AgentBudget forProfile(com.matrix.agent.identity.ExecutionProfile profile) {
+        return new AgentBudget(profile.maxIterations(), profile.maxToolCalls(), profile.maxTaskMillis(),
+                DEFAULT_MAX_MESSAGE_CHARS, DEFAULT_TOTAL_INPUT_CHARS, DEFAULT_MAX_MESSAGE_COUNT);
+    }
+
     public int getMaxIterations() { return maxIterations; }
     public int getMaxToolCalls() { return maxToolCalls; }
     public long getTotalDeadlineMillis() { return totalDeadlineMillis; }

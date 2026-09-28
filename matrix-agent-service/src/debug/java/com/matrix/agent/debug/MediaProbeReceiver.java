@@ -40,19 +40,38 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
     private static volatile MediaCapabilityProvider provider;
 
     @Override public void onReceive(Context context, Intent intent) {
-        PendingResult pending = goAsync();
-        new Thread(() -> {
-            try {
-                run(context.getApplicationContext(), intent);
-            } catch (RuntimeException error) {
-                Log.e(TAG, "probe failed cause=" + error.getClass().getSimpleName());
-            } finally {
-                pending.finish();
-            }
-        }, "matrix-media-probe").start();
+        // Model calls plus UI interaction can exceed a broadcast's lifetime. Transfer ownership
+        // immediately; the non-exported debug service keeps the bounded operation cancellable.
+        context.startForegroundService(new Intent(intent).setClass(context, MediaProbeService.class));
     }
 
-    private static void run(Context context, Intent intent) {
+    static void run(Context context, Intent intent, CancellationToken token) {
+        if (intent.getBooleanExtra("reflection_probe", false)) {
+            com.matrix.agent.evaluation.ReflectionDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("memory_feature_probe", false)) {
+            com.matrix.agent.evaluation.ModelFeatureDeviceProbe.runMemoryComparison(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("model_feature_probe", false)) {
+            com.matrix.agent.evaluation.ModelFeatureDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.hasExtra("research_probe")) {
+            com.matrix.agent.evaluation.ResearchDeviceProbe.run(context, intent.getStringExtra("research_probe"));
+            return;
+        }
+        if (intent.getBooleanExtra("intelligence_probe", false)) {
+            com.matrix.agent.evaluation.IntelligenceDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("model_evaluation", false)
+                || intent.getBooleanExtra("model_evaluation_resume", false)) {
+            com.matrix.agent.evaluation.DeviceEvaluationRunner.run(context, token,
+                    intent.getBooleanExtra("model_evaluation_resume", false));
+            return;
+        }
         if (intent.hasExtra("switch_guard_text")) {
             String command = intent.getStringExtra("switch_guard_text");
             if (command == null || command.isBlank()) return;
@@ -64,11 +83,11 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
             return;
         }
         if (intent.hasExtra("engine_reject_text")) {
-            runEngineReject(context, intent.getStringExtra("engine_reject_text"));
+            runEngineReject(context, intent.getStringExtra("engine_reject_text"), token);
             return;
         }
         if (intent.hasExtra("engine_search_text")) {
-            runEngineSearch(context, intent.getStringExtra("engine_search_text"));
+            runEngineSearch(context, intent.getStringExtra("engine_search_text"), token);
             return;
         }
         String capability = intent.getStringExtra("capability");
@@ -96,6 +115,7 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
                 .runtimeProfile(new RuntimeProfileResolver(context).snapshot())
                 .vehicleState(VehicleState.unavailable())
                 .timeoutMillis(15_000L)
+                .cancellationToken(token)
                 .build();
         PolicyDecision decision = new PolicyEngine(registry).evaluate(request, call);
         if (!decision.isAllowed()) {
@@ -136,15 +156,18 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
     }
 
     /** Runs the caller's authorized request through the configured model and production engine. */
-    private static void runEngineSearch(Context context, String text) {
+    private static void runEngineSearch(Context context, String text, CancellationToken token) {
         if (text == null || text.isBlank() || text.length() > 128) {
             Log.w(TAG, "engine search probe rejected input shape");
             return;
         }
         long started = android.os.SystemClock.elapsedRealtime();
         MatrixAgentApplication application = (MatrixAgentApplication) context;
+        var config = application.getContainer().getModelConfigStore().load();
+        Log.i(TAG, "engineConfig model=" + config.model + " protocol=" + config.protocol
+                + " plannerMode=" + config.plannerMode);
         AgentOutcome outcome = application.getContainer().getAgentRuntimeRepository()
-                .executeForSession(text, Actor.DRIVER, "probe-qq-search", new CancellationToken());
+                .executeForSession(text, Actor.DRIVER, "probe-qq-search", token);
         Log.i(TAG, "engineSearch state=" + outcome.getFinalState()
                 + " stop=" + outcome.getStopReason()
                 + " toolCalls=" + outcome.getInternalResults().size()
@@ -160,7 +183,7 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
         }
     }
 
-    private static void runEngineReject(Context context, String text) {
+    private static void runEngineReject(Context context, String text, CancellationToken token) {
         if (!MediaSelectionUtterance.isNegative(text)) {
             Log.w(TAG, "engine reject probe accepted only negative replies");
             return;
@@ -168,7 +191,7 @@ public final class MediaProbeReceiver extends BroadcastReceiver {
         long started = android.os.SystemClock.elapsedRealtime();
         MatrixAgentApplication application = (MatrixAgentApplication) context;
         AgentOutcome outcome = application.getContainer().getAgentRuntimeRepository()
-                .executeForSession(text, Actor.DRIVER, "probe-qq-search", new CancellationToken());
+                .executeForSession(text, Actor.DRIVER, "probe-qq-search", token);
         Log.i(TAG, "engineReject state=" + outcome.getFinalState()
                 + " stop=" + outcome.getStopReason()
                 + " toolCalls=" + outcome.getInternalResults().size()

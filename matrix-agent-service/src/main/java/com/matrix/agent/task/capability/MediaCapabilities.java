@@ -56,10 +56,10 @@ public final class MediaCapabilities {
                                 .minLength(1).maxLength(64).sensitive(true).build())
                         .property("artist", CanonicalSchema.string()
                                 .description("用户指定的歌手，未指定时省略或填空字符串")
-                                .maxLength(64).sensitive(true).build())
+                                .minLength(0).maxLength(64).sensitive(true).build())
                         .property("title", CanonicalSchema.string()
                                 .description("用户指定的完整歌名，保留歌名中的的字和版本后缀；未指定时省略或填空字符串")
-                                .maxLength(64).sensitive(true).build())
+                                .minLength(0).maxLength(64).sensitive(true).build())
                         .required("query").additionalProperties(false).build()));
         registry.register(write(QQ_PLAY_RESULT, "仅在用户新一轮明确指定歌曲/序号，或对唯一匹配项回复肯定确认后播放；参数 index 为先前搜索结果编号", 15_000,
                 VerifyMethod.READBACK_FIELD, false,

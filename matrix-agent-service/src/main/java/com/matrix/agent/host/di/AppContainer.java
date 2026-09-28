@@ -83,6 +83,8 @@ public final class AppContainer implements DownloadRuntime {
      * /AAOS Service 重建场景下残留 worker 不可控。改为 final field + {@link #shutdown()} 统一关闭。
      */
     private final MatrixExecutorRegistry executorRegistry;
+    private final FailureReflectionGraph failureReflectionGraph;
+    private final EmbeddingRuntimeGraph embeddingGraph;
     /** SQLCipher/database/download subgraph; separates persistence ownership from runtime wiring. */
     private final PersistenceRuntimeGraph persistenceGraph;
     private final MatrixDatabase activeDatabase;
@@ -139,7 +141,8 @@ public final class AppContainer implements DownloadRuntime {
         MatrixDatabase encryptedDatabase = storage.database();
         // Memory graph owns the legacy migration plus the encrypted/volatile fallback boundary.
         // It is assembled before models because prompt construction needs the recaller.
-        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(storage, sessionManager);
+        this.embeddingGraph = new EmbeddingRuntimeGraph(appContext, storage.available() ? encryptedDatabase : null, executorRegistry);
+        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(storage, sessionManager, embeddingGraph.recaller());
         MatrixDatabase database = memoryGraph.isDegraded() ? null : encryptedDatabase;
         this.activeDatabase = database;
         this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
@@ -173,6 +176,9 @@ public final class AppContainer implements DownloadRuntime {
         for (String capability : com.matrix.agent.task.capability.ScheduleCapabilities.ALL) platformRoutes.put(capability, scheduleProvider);
         var calendarClock = new com.matrix.agent.platform.calendar.CalendarClockProvider(appContext);
         for (String capability : com.matrix.agent.task.capability.CalendarClockCapabilities.ALL) platformRoutes.put(capability, calendarClock);
+        platformRoutes.put(com.matrix.agent.task.capability.WebCapabilities.SEARCH,
+                new com.matrix.agent.platform.web.WebSearchProvider(
+                        new com.matrix.agent.platform.web.PinnedWebSearchTransport(httpClient.metadata())));
         platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
         platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
         for (String capability : MediaCapabilityProvider.capabilities()) {
@@ -192,6 +198,8 @@ public final class AppContainer implements DownloadRuntime {
         modelGatewayRepository = modelGraph.repository();
         ModelApiClient modelClient = modelGraph.client();
         SecureModelConfigStore configStore = modelGraph.configStore();
+        failureReflectionGraph = new FailureReflectionGraph(database, memoryStore, modelClient,
+                configStore::load, executorRegistry);
         this.modelConfigStore = configStore;
         IntentClassifier appClassifier = modelGraph.intentClassifier();
         AuditRuntimeGraph auditGraph = new AuditRuntimeGraph(appContext, database,
@@ -255,6 +263,8 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.auditEventRecorder = auditEventRecorder;
         taskDependencies.memoryRecaller = memoryRecaller;
         taskDependencies.memoryWriter = memoryWriter;
+        taskDependencies.failureObserver = failureReflectionGraph.terminalObserver();
+        taskDependencies.failureLessons = failureReflectionGraph.recaller();
         taskDependencies.scheduler = scheduler;
         taskDependencies.vehicleStateSource = vehicleStateSource;
         taskDependencies.runtimeProfileSource = new RuntimeProfileResolver(appContext);
@@ -420,7 +430,11 @@ public final class AppContainer implements DownloadRuntime {
     /** Process-owned network client family; only Host graphs may consume this dependency. */
     public MatrixHttpClient getHttpClient() { return httpClient; }
 
+    public EmbeddingRuntimeGraph getEmbeddingGraph() { return embeddingGraph; }
+
     public void shutdown() {
+        embeddingGraph.close();
+        failureReflectionGraph.close();
         calendarChanges.close();
         Log.i(TAG, "[App] shutdown begin");
         mediaAvailability.close();

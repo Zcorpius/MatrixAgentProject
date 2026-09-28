@@ -36,15 +36,20 @@ public final class ScheduleCapabilityProvider implements CapabilityProvider {
             String message;
             switch (capability) {
                 case "schedule.preview" -> {
-                    var clock = backend.clock(); var normalized = new ScheduleNormalizer().normalize(spec(call, user, clock), clock);
+                    var clock = backend.clock();
+                    var candidate = spec(call, user, clock);
+                    ExplicitScheduleIntent.verify(user, candidate, clock, false);
+                    var normalized = new ScheduleNormalizer().normalize(candidate, clock);
                     backend.execute(store -> { store.validateAction(normalized.spec().action); return null; });
                     var next = OccurrenceCalculator.next(normalized.rule(), clock.wall(), 1, "preview", clock).orElseThrow();
                     output = Map.of("nextDueAt", next.scheduledAt().toEpochMilli(), "timeZone", normalized.spec().timing.zoneId, "previewOnly", true);
                     message = "计划预览；尚未启用";
                 }
                 case "schedule.create" -> {
-                    var spec = spec(call, user, backend.clock());
-                    var result = backend.execute(store -> store.create(identity, spec, operationId, backend.clock()));
+                    var clock = backend.clock();
+                    var spec = spec(call, user, clock);
+                    ExplicitScheduleIntent.verify(user, spec, clock, true);
+                    var result = backend.execute(store -> store.create(identity, spec, operationId, clock));
                     backend.changed(); var plan = backend.execute(store -> store.owned(identity.uid(), result.scheduleId));
                     output = Map.of("scheduleId", result.scheduleId, "revision", result.revision, "nextDueAt", plan.nextDueAt == null ? 0 : plan.nextDueAt,
                             "state", plan.state, "health", plan.health, "code", result.code);
@@ -81,14 +86,16 @@ public final class ScheduleCapabilityProvider implements CapabilityProvider {
         if (calendar && !user.contains("日历") && !user.contains("日程") && !user.contains("行程")) throw new IllegalArgumentException("尚未获得读取日历的明确授权");
         if (network && !user.matches("(?s).*(联网|在线|网络|云端).*")) throw new IllegalArgumentException("在线执行需要用户明确授权，请确认后重试或使用任务中心");
         if (speak && !user.matches("(?s).*(播报|读出来|念出来).*")) throw new IllegalArgumentException("播报需要用户明确选择");
-        if (action != NOTIFICATION && !user.matches("(?s).*(执行|生成|整理|摘要|简报|查询).*")) throw new IllegalArgumentException("当前只获得提醒授权，不能扩大成自动执行");
+        if (action != NOTIFICATION && !user.matches("(?s).*(执行|生成|整理|摘要|简报|查询|研究).*")) throw new IllegalArgumentException("当前只获得提醒授权，不能扩大成自动执行");
         String template = string(call, "templateId", ""); int version = (int) number(call, "templateVersion", 1);
         List<String> caps = action == WORKFLOW ? List.copyOf(WorkflowCatalog.require(template, version).capabilities()) : calendar ? List.of("calendar.query") : List.of();
-        if (action == WORKFLOW && !calendar) throw new IllegalArgumentException("日程模板需要明确的日历授权");
+        boolean research = action == WORKFLOW && com.matrix.agent.schedule.workflow.ResearchWorkflow.ID.equals(template);
+        if (action == WORKFLOW && !research && !calendar) throw new IllegalArgumentException("日程模板需要明确的日历授权");
+        String parameters = research ? new org.json.JSONObject(Map.of("query", string(call, "researchQuery", ""))).toString() : "{}";
         return new ScheduleSpec(string(call, "title", ""), new ScheduleTiming(kind, string(call, "timeZone", clock.deviceZone().getId()),
                 number(call, "atMillis", 0), Math.multiplyExact(number(call, "afterMinutes", 0), 60_000), string(call, "localTime", ""),
                 (int) number(call, "weekdaysMask", 0), "", "", Boolean.TRUE.equals(call.argument("followDeviceZone")), "", 0),
-                new ScheduleAction(action, string(call, "text", ""), template, version, "{}", caps, network, speak), 600_000, WITHIN_GRACE);
+                new ScheduleAction(action, string(call, "text", ""), template, version, parameters, caps, network, speak), research ? com.matrix.agent.schedule.workflow.ResearchWorkflow.DEFAULT_WINDOW_MILLIS : ScheduleNormalizer.DEFAULT_GRACE_MILLIS, WITHIN_GRACE);
     }
     private static String string(ToolCall call, String key, String fallback) { Object value = call.argument(key); return value instanceof String text ? text : fallback; }
     private static long number(ToolCall call, String key, long fallback) { Object value = call.argument(key); if (value == null) return fallback; if (!(value instanceof Number n) || n.doubleValue() != n.longValue() || n.longValue() < 0) throw new IllegalArgumentException("无效参数：" + key); return n.longValue(); }

@@ -12,15 +12,14 @@ import java.util.Set;
  * 附件文本提取器（输入交互增强 I6 §9.2，2A）。
  *
  * <p>三道防线全部在 Host 进程内完成：大小上限（读流式计数，不信任 Content-Length）、
- * MIME 白名单（text/* + JSON/XML；嗅探兜底拒绝二进制）、字符上限（16k Unicode 字符，
- * 按剩余字节截断到合法 UTF-8 边界）。图片在 OCR 端口选型前 fail-closed——
+ * MIME 白名单（text/* + JSON/XML；嗅探兜底拒绝二进制）、严格 UTF-8 解码。图片在 OCR 端口选型前 fail-closed——
  * UNSUPPORTED_MEDIA，绝不以文件名或模糊描述伪装为“图片已理解”。</p>
  */
 public final class AttachmentTextExtractor {
 
     /** 摄取字节上限（2 MiB）：超过即拒绝，不部分提取。 */
     public static final int MAX_BYTES = 2 * 1024 * 1024;
-    /** 提取字符上限（16k Unicode 字符）：模型投影预算的安全上界。 */
+    /** 旧摄取格式的字符上限；仅用于兼容测试，新摄取保留字节上限内的全文。 */
     public static final int MAX_CHARS = 16_000;
     /** 二进制嗅探窗口：前 4KB 中不可打印字符占比超过阈值视为二进制。 */
     private static final int SNIFF_WINDOW = 4096;
@@ -59,7 +58,9 @@ public final class AttachmentTextExtractor {
         long total = 0;
         byte[] chunk = new byte[8192];
         int read;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
         while ((read = input.read(chunk)) > 0) {
+            if (Thread.currentThread().isInterrupted() || System.nanoTime() > deadline) throw new java.io.InterruptedIOException("attachment ingestion deadline");
             total += read;
             if (total > MAX_BYTES) {
                 throw new RejectedException(
@@ -81,13 +82,16 @@ public final class AttachmentTextExtractor {
                             .ERROR_UNSUPPORTED_MEDIA,
                     "仅支持文本类附件，嗅探为 " + sniffed);
         }
-        String decoded = new String(bytes, utf8WithBomSkip(bytes));
+        String decoded = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                .decode(java.nio.ByteBuffer.wrap(bytes)).toString();
         if (decoded.isBlank()) {
             throw new RejectedException(
                     com.matrix.agent.api.conversation.ConversationAttachment.ERROR_EMPTY_TEXT,
                     "附件无有效文本");
         }
-        return new Extraction(capChars(decoded), sniffed, bytes.length);
+        return new Extraction(decoded, sniffed, bytes.length);
     }
 
     /** 截断到 code point 上限，绝不把代理对从中间切开。 */

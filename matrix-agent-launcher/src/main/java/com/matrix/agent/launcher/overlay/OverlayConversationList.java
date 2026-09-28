@@ -25,6 +25,7 @@ final class OverlayConversationList extends FrameLayout {
     private final ListView list;
     private final TextView empty;
     private final Button older;
+    private final TextView assistantStream;
     private final Rows adapter;
     private List<UiMessage> messages = List.of();
     private long renderVersion;
@@ -45,6 +46,12 @@ final class OverlayConversationList extends FrameLayout {
         FrameLayout header = new FrameLayout(context);
         header.addView(older, new FrameLayout.LayoutParams(-1, -2));
         list.addHeaderView(header, null, false);
+        assistantStream = new TextView(context);
+        assistantStream.setTextSize(14);
+        assistantStream.setTextColor(context.getColor(R.color.overlay_muted));
+        assistantStream.setPadding(dp(12), dp(10), dp(12), dp(10));
+        assistantStream.setVisibility(View.GONE);
+        list.addFooterView(assistantStream, null, false);
         adapter = new Rows(context); list.setAdapter(adapter);
         addView(list, new FrameLayout.LayoutParams(-1, -1));
         empty = new TextView(context);
@@ -69,6 +76,17 @@ final class OverlayConversationList extends FrameLayout {
     }
 
     void render(OverlayConversationPresenter.State state) {
+        View previousLast = list.getChildAt(list.getChildCount() - 1);
+        boolean streamFollow = list.getLastVisiblePosition() >= messages.size()
+                && (previousLast == null || previousLast.getBottom() <= list.getHeight() + dp(24));
+        String streamText = state.assistantStream().isEmpty() ? "" : "正在生成…\n" + state.assistantStream();
+        boolean streamChanged = !streamText.contentEquals(assistantStream.getText());
+        if (streamChanged) assistantStream.setText(streamText);
+        assistantStream.setVisibility(state.assistantStream().isEmpty() ? View.GONE : View.VISIBLE);
+        if (streamChanged && streamFollow) {
+            long version = renderVersion;
+            list.post(() -> { if (version == renderVersion) scrollToLatest(); });
+        }
         List<UiMessage> next = state.messages();
         if (messages.equals(next) && more == state.hasMoreHistory()
                 && loading == state.loadingHistory() && connected == state.connected()
@@ -97,7 +115,7 @@ final class OverlayConversationList extends FrameLayout {
         long version = ++renderVersion;
         list.post(() -> {
             if (version != renderVersion) return;
-            if (follow) list.setSelection(messages.size()); // header occupies position 0
+            if (follow) scrollToLatest();
             else if (anchor != null) {
                 for (int i = 0; i < messages.size(); i++) {
                     if (anchor.equals(messages.get(i).messageId())) {
@@ -106,6 +124,11 @@ final class OverlayConversationList extends FrameLayout {
                 }
             } else list.setSelectionFromTop(0, offset);
         });
+    }
+    private void scrollToLatest() {
+        if (assistantStream.getVisibility() == VISIBLE) {
+            list.setSelectionFromTop(list.getCount() - 1, list.getHeight() - assistantStream.getHeight());
+        } else list.setSelection(messages.size()); // header occupies position 0
     }
     private final class Rows extends BaseAdapter {
         private final ConversationMessageRenderer renderer;

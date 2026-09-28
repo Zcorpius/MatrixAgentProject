@@ -169,7 +169,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             SearchContext pendingSong = searchContexts.get(request.getSessionId());
             if (MediaCapabilities.QQ_PLAY.equals(capability) && pendingSong != null
                     && (request.getRequestId().equals(pendingSong.requestId())
-                    || MediaSelectionUtterance.isAffirmative(request.getText()))) {
+                    || MediaSelectionUtterance.isAffirmative(request.getUserInstructionText()))) {
                 return result(call, ToolResult.Status.EXECUTION_FAILED,
                         "SELECTION_REQUIRES_RESULT", app, "NOT_SENT", false, started);
             }
@@ -289,7 +289,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         }
         BilibiliUiPort.Candidate candidate = context.page().candidates().get(index - 1);
         if (context.requestId().equals(request.getRequestId())
-                || !explicitlySelectedBilibili(request.getText(), candidate,
+                || !explicitlySelectedBilibili(request.getUserInstructionText(), candidate,
                         context.page().candidates().size() == 1)) {
             throw new MediaPlatformException("SELECTION_NOT_CONFIRMED");
         }
@@ -327,7 +327,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             if (oldest != null) bilibiliSearchContexts.remove(oldest);
         }
         bilibiliSearchContexts.put(request.getSessionId(), new BilibiliSearchContext(page,
-                request.getRequestId(), request.getText(), now));
+                request.getRequestId(), request.getUserInstructionText(), now));
     }
 
     private ToolResult playSearchResult(AgentRequest request, ToolCall call, long started, LaunchContext ctx)
@@ -355,7 +355,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
         boolean uniqueTitle = context.page().candidates().stream()
                 .filter(candidate -> candidate.title().equals(selected.title())).count() == 1L;
         if (context.requestId().equals(request.getRequestId())
-                || !explicitlySelected(request.getText(), selected,
+                || !explicitlySelected(request.getUserInstructionText(), selected,
                         index == context.confirmableIndex(), uniqueTitle)) {
             throw new MediaPlatformException("SELECTION_NOT_CONFIRMED");
         }
@@ -420,7 +420,7 @@ public final class MediaCapabilityProvider implements CapabilityProvider, Pendin
             if (oldest != null) searchContexts.remove(oldest);
         }
         searchContexts.put(request.getSessionId(), new SearchContext(page,
-                request.getRequestId(), request.getText(),
+                request.getRequestId(), request.getUserInstructionText(),
                 confirmableIndex, now));
     }
 

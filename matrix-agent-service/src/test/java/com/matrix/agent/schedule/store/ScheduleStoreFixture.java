@@ -5,7 +5,11 @@ import java.util.*;
 import java.util.concurrent.Callable;
 
 /** In-memory transactional fixture. Device tests separately verify Room, SQLCipher and Android effects. */
-final class ScheduleStoreFixture extends MatrixDatabase {
+public final class ScheduleStoreFixture extends MatrixDatabase {
+    /** Detached rows for effect-based evaluators; never exposes mutable fixture storage. */
+    public List<ScheduleDefinitionEntity> definitions() {
+        return rows("plans", ScheduleDefinitionEntity.class, row -> true);
+    }
     final Map<String, LinkedHashMap<String, Object>> tables = new HashMap<>();
     long sequence;
     String failNext = "";
@@ -26,6 +30,9 @@ final class ScheduleStoreFixture extends MatrixDatabase {
     @Override public TrajectoryDao trajectoryDao() { return null; }
     @Override public SessionHistoryDao sessionHistoryDao() { return null; }
     @Override public MemoryRecordDao memoryRecordDao() { return null; }
+    @Override public com.matrix.agent.data.failure.FailureLessonDao failureLessonDao() { return null; }
+    @Override public com.matrix.agent.data.embedding.MemoryVectorDao memoryVectorDao() { return null; }
+    @Override public com.matrix.agent.data.conversation.AttachmentChunkDao attachmentChunkDao() { return null; }
     @Override public AuditEventDao auditEventDao() { return null; }
     @Override public ModelDownloadDao modelDownloadDao() { return null; }
     @Override public AgentTaskDao agentTaskDao() { return null; }
@@ -58,6 +65,12 @@ final class ScheduleStoreFixture extends MatrixDatabase {
         switch (name) {
             case "insertDefinition", "updateDefinition" -> { var row = (ScheduleDefinitionEntity) a[0]; put("plans", row.scheduleId, row, name.startsWith("insert")); return 1; }
             case "definition" -> { return get("plans", a[0]); }
+            case "definitions" -> {
+                return rows("plans", ScheduleDefinitionEntity.class,
+                        row -> row.ownerUid == (Integer) a[0] && row.state != 5 && row.scheduleId.compareTo((String) a[1]) > 0)
+                        .stream().sorted(Comparator.comparing(row -> row.scheduleId))
+                        .limit((Integer) a[2]).toList();
+            }
             case "activeCount" -> { return rows("plans", ScheduleDefinitionEntity.class, row -> row.state == 2).size(); }
             case "activeDefinitions" -> { return rows("plans", ScheduleDefinitionEntity.class, row -> row.state == 2); }
             case "insertRun", "updateRun" -> { var row = (ScheduleRunEntity) a[0];

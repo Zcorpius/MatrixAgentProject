@@ -7,8 +7,16 @@ public final class MediaSwitchIntent {
     private static final Pattern NEGATED_CUE = Pattern.compile(
             "(?:别|不要|不用|无需|不是要|不|取消|停止)"
                     + "(?:再|想|需要|要)?\\s*(?:切换|换到|改用)");
+    private static final Pattern SEARCH_CUE = Pattern.compile("搜索|查找|搜一下|找一下");
+    private static final Pattern NEGATED_SEARCH = Pattern.compile(
+            "(?:别|不要|不用|无需|不必|不是要|不)\\s*(?:再|先)?\\s*(?:搜索|查找|搜一下|找一下)");
 
     private MediaSwitchIntent() {}
+
+    /** Search guidance may prepare a new source; it never grants playback authorization. */
+    public static boolean requestsCandidateSearch(String text) {
+        return text != null && SEARCH_CUE.matcher(NEGATED_SEARCH.matcher(text).replaceAll("")).find();
+    }
 
     public static boolean isRequested(String text) {
         if (text == null || NEGATED_CUE.matcher(text).find()) return false;

@@ -41,7 +41,9 @@ final class JsonHttpTransport {
     }
 
     JSONObject post(String endpoint, JSONObject body, String header1, String value1,
-            String header2, String value2, CancellationToken token) throws Exception {
+            String header2, String value2, CancellationToken token, long deadlineAtMillis) throws Exception {
+        long remaining = deadlineAtMillis - System.currentTimeMillis();
+        if (remaining <= 0) throw new ModelApiException.TimeoutException(maskEndpoint(endpoint), new java.util.concurrent.TimeoutException());
         long started = System.nanoTime();
         byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
         boolean hasAuth = (header1 != null && value1 != null && !value1.isEmpty())
@@ -55,6 +57,7 @@ final class JsonHttpTransport {
         if (header1 != null && value1 != null && !value1.isEmpty()) request.header(header1, value1);
         if (header2 != null && value2 != null && !value2.isEmpty()) request.header(header2, value2);
         Call call = client.newCall(request.build());
+        if (deadlineAtMillis != Long.MAX_VALUE) call.timeout().timeout(remaining, java.util.concurrent.TimeUnit.MILLISECONDS);
         Runnable abortHook = token == null ? null : call::cancel;
         if (abortHook != null) token.registerAbortHook(abortHook);
         try {
@@ -71,7 +74,7 @@ final class JsonHttpTransport {
             if (code < 200 || code >= 300) throwForHttpStatus(code, endpoint, response);
             return new JSONObject(response);
             }
-        } catch (java.net.SocketTimeoutException timeout) {
+        } catch (java.io.InterruptedIOException timeout) {
             throw new ModelApiException.TimeoutException(maskEndpoint(endpoint), timeout);
         } catch (java.io.IOException io) {
             throw new ModelApiException.NetworkException(maskEndpoint(endpoint), io);

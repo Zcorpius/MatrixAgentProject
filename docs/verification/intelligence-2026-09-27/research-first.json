@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "scheduleId": "29cea27a-1739-48e2-be8a-8abe6986cae1",
+  "startedAt": "2026-09-27T16:46:24.702625Z",
+  "model": "glm-5.3",
+  "profile": "RESEARCH",
+  "lastObservedAt": "2026-09-27T16:50:05.859466Z",
+  "runId": "a5f904e4-8b1a-44fd-8519-e7c83de60f76",
+  "state": 4,
+  "reason": "OPTIONAL_OR_DELIVERY_PARTIAL",
+  "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：研究问题：retrieval augmented generation（检索增强生成）。仅基于本轮给定片段整理，未阅读全文，不声称全文验证。\n\n【摘要陈述】\n1. 存在题为《Retrieval-Augmented Generation》的论文，但片段仅含书目信息，无摘要 [src_f5f78068983cff4f]。\n2. 存在题为《Graph-based Retrieval-augmented Generation》的论文，同样仅含书目信息 [src_d1bb9472ef7a5a7a]。\n3. AR-RAG（Autoregressive Retrieval Augmentation，自回归检索增强）被作者称为一种新范式，用于增强图像生成；摘要文本被截断，细节不完整 [src_b463c1f48eba7d5e]。\n4. 另有研究提出并比较了多种自动化生成文献综述的方法；摘要同样被截断 [src_3ac989324aa1eefd]。\n\n【推断】\n- 检索增强生成已衍生多个研究方向：图结构化检索增强（据标题推断）[src_d1bb9472ef7a5a7a]、面向图像生成的自回归检索增强 [src_b463c1f48eba7d5e]，以及检索\/自然语言处理在文献综述自动化中的应用 [src_3ac989324aa1eefd]。\n- 检索增强思想同时出现在生成式图像与文本任务中 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。此为跨片段推断，非任一摘要明示。\n\n【未知】\n- 原始 RAG 论文的方法、实验与结论：仅有书目元数据，无法验证 [src_f5f78068983cff4f]。\n- 图结构 RAG 的具体技术内容：仅书目信息 [src_d1bb9472ef7a5a7a]。\n- AR-RAG 的技术细节、实验数据，以及文献综述自动化各方法的效果对比：因摘要截断无法确认 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。\n\n综上，本轮证据不足以支撑关于 RAG 技术有效性的任何结论，仅可确认相关文献的存在与大致研究方向。\n[src_f5f78068983cff4f] https:\/\/doi.org\/10.1002\/9781394374717.ch03\n[src_d1bb9472ef7a5a7a] https:\/\/doi.org\/10.1002\/9781394374717.ch07\n[src_b463c1f48eba7d5e] https:\/\/arxiv.org\/abs\/2506.06962v3\n[src_3ac989324aa1eefd] https:\/\/arxiv.org\/abs\/2411.18583v1",
+  "activeMillis": 87216,
+  "modelCalls": 3,
+  "toolCalls": 5,
+  "scheduledAt": 1790527589618,
+  "startedAtMillis": 1790527589833,
+  "completedAtMillis": 1790527677635,
+  "expiresAt": 1790529989618,
+  "deliveryStatus": 2,
+  "deliveryFacts": {
+    "notification": {
+      "status": "DELIVERED",
+      "observedAt": 1790527677538,
+      "deliveredAt": 1790527677538,
+      "soundStatus": "UNKNOWN",
+      "policy": {
+        "channel": "schedule_execution_status",
+        "importance": 2,
+        "interruptionFilter": 1,
+        "observedAt": 1790527677538
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "arxiv",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 7309,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "a5f904e4-8b1a-44fd-8519-e7c83de60f76",
+        "stepId": "arxiv",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "352dfa84dad9109151983f173d408215241d933564aea049690bcc17e4f71d2d",
+        "createdAt": 1790527597207,
+        "expiresAt": 1790529989618,
+        "payloadDigest": "5c4fe99536a83b7661fd18af1bcbb103bd5dc027abe1631fa1dc035367a00e5d",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"dee6ccfeec5348bed5285c531e325f824e56e28b779af2c54f3a6e3ba76086d3\",\"sources\":[{\"snippet\":\"We introduce Autoregressive Retrieval Augmentation (AR-RAG), a novel paradigm that enhances image generation by autoregressively incorporating knearest neighbor retrievals at the patch level. Unlike prior methods that perform a single, static retrieval before generation and condition the entire generation on fixed reference images, AR-RAG performs context-aware retrievals at each generation step, using prior-generated patches as queries to retrieve and incorporate the most relevant patch-level visual references, enabling the model to respond to evolving generation needs while avoiding limitations (e.g., over-copying, stylistic bias, etc.) prevalent in existing methods. T[truncated 719 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_b463c1f48eba7d5e\",\"title\":\"AR-RAG: Autoregressive Retrieval Augmentation for Image Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2506.06962v3\"},{\"snippet\":\"This research presents and compares multiple approaches to automate the generation of literature reviews using several Natural Language Processing (NLP) techniques and retrieval-augmented generation (RAG) with a Large Language Model (LLM). The ever-increasing number of research articles provides a huge challenge for manual literature review. It has resulted in an increased demand for automation. Developing a system capable of automatically generating the literature reviews from only the PDF files as input is the primary objective of this research work. The effectiveness of several Natural Language Processing (NLP) strategies, such as the frequency-based method (spaCy), t[truncated 699 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_3ac989324aa1eefd\",\"title\":\"Automated Literature Review Using NLP Techniques and LLM-Based Retrieval-Augmented Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2411.18583v1\"},{\"snippet\":\"Recently the retrieval-augmented generation (RAG) has been successfully applied in code generation. However, existing pipelines for retrieval-augmented code generation (RACG) employ static knowledge bases with a single source, limiting the adaptation capabilities of Large Language Models (LLMs) to domains they have insufficient knowledge of. In this work, we develop a novel pipeline, EVOR, that employs the synchronous evolution of both queries and diverse knowledge bases. On two realistic settings where the external knowledge is required to solve code generation tasks, we compile four new datasets associated with frequently updated libraries and long-tail programming lan[truncated 678 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_c079a66f09a931c6\",\"title\":\"EVOR: Evolving Retrieval for Code Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2402.12317v2\"},{\"snippet\":\"Retrieval-Augmented Generation (RAG) enables Large Language Models (LLMs) to generate grounded responses by leveraging external knowledge databases without altering model parameters. Although the absence of weight tuning prevents leakage via model parameters, it introduces the risk of inference adversaries exploiting retrieved documents in the model's context. Existing methods for membership inference and data extraction often rely on jailbreaking or carefully crafted unnatural queries, which can be easily detected or thwarted with query rewriting techniques common in RAG systems. In this work, we present Interrogation Attack (IA), a membership inference technique target[truncated 527 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_fe4ec6086269180f\",\"title\":\"Riddle Me This! Stealthy Membership Inference for Retrieval-Augmented Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2502.00306v2\"},{\"snippet\":\"We introduce Ragas (Retrieval Augmented Generation Assessment), a framework for reference-free evaluation of Retrieval Augmented Generation (RAG) pipelines. RAG systems are composed of a retrieval and an LLM based generation module, and provide LLMs with knowledge from a reference textual database, which enables them to act as a natural language layer between a user and textual databases, reducing the risk of hallucinations. Evaluating RAG architectures is, however, challenging because there are several dimensions to consider: the ability of the retrieval system to identify relevant and focused context passages, the ability of the LLM to exploit such passages in a faithf[truncated 387 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_3855a61f0fb1be9b\",\"title\":\"Ragas: Automated Evaluation of Retrieval Augmented Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2309.15217v2\"}],\"retrievedAt\":1790527597197,\"count\":5,\"source\":\"arxiv\",\"version\":1}"
+      },
+      "startedAt": 1790527589897,
+      "completedAt": 1790527597207
+    },
+    {
+      "id": "crossref",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 2304,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "a5f904e4-8b1a-44fd-8519-e7c83de60f76",
+        "stepId": "crossref",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "0255c75c2bdeefad762c4c8adb9d14874421628e4e4c6d2fdadc56d6d1ad1afd",
+        "createdAt": 1790527592192,
+        "expiresAt": 1790529989618,
+        "payloadDigest": "cf4bebce671dd562564255748724183db8a214428485a0ae5a7772647afd5aca",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"dee6ccfeec5348bed5285c531e325f824e56e28b779af2c54f3a6e3ba76086d3\",\"sources\":[{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_f5f78068983cff4f\",\"title\":\"Retrieval‐Augmented Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.1002\\\/9781394374717.ch03\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_d1bb9472ef7a5a7a\",\"title\":\"Graph‐based Retrieval‐augmented Generation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.1002\\\/9781394374717.ch07\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_d7ca01746aea742e\",\"title\":\"Why Retrieval Augmented Generation?\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.5040\\\/bci-0kgd.ch-1\"},{\"snippet\":\"&lt;strong&gt; How to efficiently retrieve information for different applications &lt;\\\/strong&gt; Author Wenyi Pi (ORCID: 0009-0002-2884-2771) This article aims to explore various ways in which Retrieval-Augmented Generation (RAG) can be utilised to retrieve information and generate responses effectively within the dialogue system. The rationale behind utilising RAG as well as potential ways in which it can be employed effectively will be covered.\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_c132ebc88174206f\",\"title\":\"Efficient Information Retrieval and Response Generation with Retrieval-Augmented Generation (RAG)\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.59350\\\/q2pq3-0fv85\"},{\"snippet\":\"&lt;strong&gt; How to efficiently retrieve information for different applications &lt;\\\/strong&gt; Author Wenyi Pi (ORCID: 0009-0002-2884-2771) This article aims to explore various ways in which Retrieval-Augmented Generation (RAG) can be utilised to retrieve information and generate responses effectively within the dialogue system. The rationale behind utilising RAG as well as potential ways in which it can be employed effectively will be covered.\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_556300b445c7831b\",\"title\":\"Efficient Information Retrieval and Response Generation with Retrieval-Augmented Generation (RAG)\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.59350\\\/r9dj1-zkx52\"}],\"retrievedAt\":1790527592175,\"count\":5,\"source\":\"crossref\",\"version\":1}"
+      },
+      "startedAt": 1790527589887,
+      "completedAt": 1790527592192
+    },
+    {
+      "id": "deliver",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 113,
+      "reason": "",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：研究问题：retrieval augmented generation（检索增强生成）。仅基于本轮给定片段整理，未阅读全文，不声称全文验证。\n\n【摘要陈述】\n1. 存在题为《Retrieval-Augmented Generation》的论文，但片段仅含书目信息，无摘要 [src_f5f78068983cff4f]。\n2. 存在题为《Graph-based Retrieval-augmented Generation》的论文，同样仅含书目信息 [src_d1bb9472ef7a5a7a]。\n3. AR-RAG（Autoregressive Retrieval Augmentation，自回归检索增强）被作者称为一种新范式，用于增强图像生成；摘要文本被截断，细节不完整 [src_b463c1f48eba7d5e]。\n4. 另有研究提出并比较了多种自动化生成文献综述的方法；摘要同样被截断 [src_3ac989324aa1eefd]。\n\n【推断】\n- 检索增强生成已衍生多个研究方向：图结构化检索增强（据标题推断）[src_d1bb9472ef7a5a7a]、面向图像生成的自回归检索增强 [src_b463c1f48eba7d5e]，以及检索\/自然语言处理在文献综述自动化中的应用 [src_3ac989324aa1eefd]。\n- 检索增强思想同时出现在生成式图像与文本任务中 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。此为跨片段推断，非任一摘要明示。\n\n【未知】\n- 原始 RAG 论文的方法、实验与结论：仅有书目元数据，无法验证 [src_f5f78068983cff4f]。\n- 图结构 RAG 的具体技术内容：仅书目信息 [src_d1bb9472ef7a5a7a]。\n- AR-RAG 的技术细节、实验数据，以及文献综述自动化各方法的效果对比：因摘要截断无法确认 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。\n\n综上，本轮证据不足以支撑关于 RAG 技术有效性的任何结论，仅可确认相关文献的存在与大致研究方向。\n[src_f5f78068983cff4f] https:\/\/doi.org\/10.1002\/9781394374717.ch03\n[src_d1bb9472ef7a5a7a] https:\/\/doi.org\/10.1002\/9781394374717.ch07\n[src_b463c1f48eba7d5e] https:\/\/arxiv.org\/abs\/2506.06962v3\n[src_3ac989324aa1eefd] https:\/\/arxiv.org\/abs\/2411.18583v1",
+      "checkpoint": {},
+      "startedAt": 1790527677437,
+      "completedAt": 1790527677550
+    },
+    {
+      "id": "review_arxiv",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 47184,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：研究问题：retrieval augmented generation。仅基于所给摘要片段核对，未读全文，不声称全文验证。\n【摘要陈述】\n1. AR-RAG 为新范式：在 patch（图像块）级自回归融入 k 近邻检索以增强图像生成 [src_b463c1f48eba7d5e]。\n2. 以往方法在生成前做单次静态检索、整体以固定参考图为条件；AR-RAG 每步生成时做上下文感知检索，以已生成 patch 为查询检索并融入（摘要此处截断）[src_b463c1f48eba7d5e]。\n3. 另一研究提出并比较多种自动生成文献综述的方法，结合多种 NLP 技术与基于 LLM 的检索增强生成（RAG）[src_3ac989324aa1eefd]。\n4. 研究文章激增使人工综述面临巨大挑战，自动化需求上升 [src_3ac989324aa1eefd]。\n【推断】\n5. 两项工作分别将检索增强用于图像生成与文献综述生成，场景不同（据标题与摘要推断）[src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。\n【未知】\n6. 两文方法细节、实验与性能因摘要截断无法确认 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]；第二篇完整标题未知 [src_3ac989324aa1eefd]。\n7. RAG 的通用定义与更广研究现状不在片段内，未知。\n[src_b463c1f48eba7d5e] https:\/\/arxiv.org\/abs\/2506.06962v3\n[src_3ac989324aa1eefd] https:\/\/arxiv.org\/abs\/2411.18583v1",
+      "checkpoint": {},
+      "startedAt": 1790527605336,
+      "completedAt": 1790527652520
+    },
+    {
+      "id": "review_crossref",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 7956,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：核对结论：本轮仅获得两条 Crossref 书目元数据，无法据此验证检索增强生成（RAG）的技术内容或研究结论。\n\n摘要陈述（仅基于片段）：1）存在题为《Retrieval‐Augmented Generation》的文献记录 [src_f5f78068983cff4f]。2）存在题为《Graph‐based Retrieval‐augmented Generation》的文献记录 [src_d1bb9472ef7a5a7a]。3）两条记录均仅有书目信息、未提供摘要 [src_f5f78068983cff4f][src_d1bb9472ef7a5a7a]。\n\n推断（标注为推断，非片段直接陈述）：由第二篇标题中的\"Graph‐based\"可推断该领域存在基于图结构的检索增强生成这一细分方向 [src_d1bb9472ef7a5a7a]，但这仅是标题层面的推断。\n\n未知\/无法确认：RAG 的具体定义、方法细节、实验结果与结论均无法从本轮片段确认 [src_f5f78068983cff4f][src_d1bb9472ef7a5a7a]。我未阅读全文，不声称已验证全文内容。如需实质核对，请提供含摘要或正文的片段。\n[src_f5f78068983cff4f] https:\/\/doi.org\/10.1002\/9781394374717.ch03\n[src_d1bb9472ef7a5a7a] https:\/\/doi.org\/10.1002\/9781394374717.ch07",
+      "checkpoint": {},
+      "startedAt": 1790527597274,
+      "completedAt": 1790527605230
+    },
+    {
+      "id": "review_wikipedia",
+      "state": 5,
+      "attempt": 1,
+      "activeMillis": 53,
+      "reason": "INSUFFICIENT_SOURCE_EVIDENCE",
+      "result": "可用来源不足，未生成研究结论。",
+      "checkpoint": {},
+      "startedAt": 1790527662937,
+      "completedAt": 1790527662990
+    },
+    {
+      "id": "summary",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 14277,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：研究问题：retrieval augmented generation（检索增强生成）。仅基于本轮给定片段整理，未阅读全文，不声称全文验证。\n\n【摘要陈述】\n1. 存在题为《Retrieval-Augmented Generation》的论文，但片段仅含书目信息，无摘要 [src_f5f78068983cff4f]。\n2. 存在题为《Graph-based Retrieval-augmented Generation》的论文，同样仅含书目信息 [src_d1bb9472ef7a5a7a]。\n3. AR-RAG（Autoregressive Retrieval Augmentation，自回归检索增强）被作者称为一种新范式，用于增强图像生成；摘要文本被截断，细节不完整 [src_b463c1f48eba7d5e]。\n4. 另有研究提出并比较了多种自动化生成文献综述的方法；摘要同样被截断 [src_3ac989324aa1eefd]。\n\n【推断】\n- 检索增强生成已衍生多个研究方向：图结构化检索增强（据标题推断）[src_d1bb9472ef7a5a7a]、面向图像生成的自回归检索增强 [src_b463c1f48eba7d5e]，以及检索\/自然语言处理在文献综述自动化中的应用 [src_3ac989324aa1eefd]。\n- 检索增强思想同时出现在生成式图像与文本任务中 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。此为跨片段推断，非任一摘要明示。\n\n【未知】\n- 原始 RAG 论文的方法、实验与结论：仅有书目元数据，无法验证 [src_f5f78068983cff4f]。\n- 图结构 RAG 的具体技术内容：仅书目信息 [src_d1bb9472ef7a5a7a]。\n- AR-RAG 的技术细节、实验数据，以及文献综述自动化各方法的效果对比：因摘要截断无法确认 [src_b463c1f48eba7d5e][src_3ac989324aa1eefd]。\n\n综上，本轮证据不足以支撑关于 RAG 技术有效性的任何结论，仅可确认相关文献的存在与大致研究方向。\n[src_f5f78068983cff4f] https:\/\/doi.org\/10.1002\/9781394374717.ch03\n[src_d1bb9472ef7a5a7a] https:\/\/doi.org\/10.1002\/9781394374717.ch07\n[src_b463c1f48eba7d5e] https:\/\/arxiv.org\/abs\/2506.06962v3\n[src_3ac989324aa1eefd] https:\/\/arxiv.org\/abs\/2411.18583v1",
+      "checkpoint": {},
+      "startedAt": 1790527663081,
+      "completedAt": 1790527677358
+    },
+    {
+      "id": "wikipedia",
+      "state": 5,
+      "attempt": 3,
+      "activeMillis": 30903,
+      "reason": "TIMED_OUT",
+      "result": "只读查询未完成",
+      "checkpoint": {},
+      "startedAt": 1790527652624,
+      "completedAt": 1790527662854
+    }
+  ],
+  "complete": true
+}

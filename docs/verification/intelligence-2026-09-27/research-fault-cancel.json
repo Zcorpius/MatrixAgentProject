@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "fault": "cancel",
+  "observationLatencyUpperBoundMillis": 1993,
+  "before": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "7abc2ca0-4cd9-491d-990a-fed2a74d20dc",
+    "startedAt": "2026-09-27T17:10:30.750225Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:10:36.490193Z",
+    "runId": "107128ac-d2a1-4b0a-984e-59f15c6b7ed5",
+    "state": 2,
+    "reason": "",
+    "result": "",
+    "activeMillis": 17,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529035686,
+    "startedAtMillis": 1790529035981,
+    "expiresAt": 1790531435686,
+    "deliveryStatus": 1,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529036057
+      },
+      {
+        "id": "crossref",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529036073
+      },
+      {
+        "id": "deliver",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_arxiv",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_crossref",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "summary",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "wikipedia",
+        "state": 1,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      }
+    ],
+    "complete": false
+  },
+  "injection": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "7abc2ca0-4cd9-491d-990a-fed2a74d20dc",
+    "startedAt": "2026-09-27T17:10:30.750225Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:10:36.843924Z",
+    "runId": "107128ac-d2a1-4b0a-984e-59f15c6b7ed5",
+    "state": 12,
+    "reason": "USER_CANCELLED",
+    "result": "",
+    "activeMillis": 17,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529035686,
+    "startedAtMillis": 1790529035981,
+    "expiresAt": 1790531435686,
+    "deliveryStatus": 1,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529036057
+      },
+      {
+        "id": "crossref",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529036073
+      },
+      {
+        "id": "deliver",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_arxiv",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_crossref",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "summary",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "wikipedia",
+        "state": 1,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      }
+    ],
+    "complete": false
+  },
+  "terminal": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "7abc2ca0-4cd9-491d-990a-fed2a74d20dc",
+    "startedAt": "2026-09-27T17:10:30.750225Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:10:38.454214Z",
+    "runId": "107128ac-d2a1-4b0a-984e-59f15c6b7ed5",
+    "state": 6,
+    "reason": "CANCELLED",
+    "result": "",
+    "activeMillis": 946,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529035686,
+    "startedAtMillis": 1790529035981,
+    "expiresAt": 1790531435686,
+    "deliveryStatus": 6,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 5,
+        "attempt": 1,
+        "activeMillis": 913,
+        "reason": "EXECUTION_FAILED",
+        "result": "只读查询未完成",
+        "checkpoint": {},
+        "startedAt": 1790529036057,
+        "completedAt": 1790529036969
+      },
+      {
+        "id": "crossref",
+        "state": 5,
+        "attempt": 1,
+        "activeMillis": 929,
+        "reason": "EXECUTION_FAILED",
+        "result": "只读查询未完成",
+        "checkpoint": {},
+        "startedAt": 1790529036073,
+        "completedAt": 1790529037002
+      },
+      {
+        "id": "deliver",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      },
+      {
+        "id": "review_arxiv",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      },
+      {
+        "id": "review_crossref",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      },
+      {
+        "id": "summary",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      },
+      {
+        "id": "wikipedia",
+        "state": 6,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "CANCELLED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529037064
+      }
+    ],
+    "complete": true,
+    "completedAtMillis": 1790529037203
+  }
+}

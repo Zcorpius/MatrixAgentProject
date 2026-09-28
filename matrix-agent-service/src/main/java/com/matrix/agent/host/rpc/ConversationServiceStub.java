@@ -701,6 +701,12 @@ public final class ConversationServiceStub extends IConversationService.Stub
                 window.anchorExists());
     }
 
+    @Override public void onAssistantStream(com.matrix.agent.conversation.AssistantStreamEvent event) {
+        var dto = new com.matrix.agent.api.conversation.ConversationAssistantStream(event.conversationId(),
+                event.taskId(), event.requestId(), event.turn(), event.sequence(), event.text(), event.cleared());
+        registryOf(event.conversationId(), registry -> registry.dispatch(callback -> callback.onAssistantStream(dto)));
+    }
+
     private static ConversationRuntimeStage toStageDto(
             ConversationRuntimeStageRegistry.StageEvent event) {
         return new ConversationRuntimeStage(event.conversationId(),

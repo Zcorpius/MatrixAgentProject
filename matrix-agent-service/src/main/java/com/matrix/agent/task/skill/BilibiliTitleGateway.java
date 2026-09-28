@@ -31,7 +31,7 @@ public final class BilibiliTitleGateway implements ModelGateway {
     @Override public ExecutionLane executionLane() { return delegate.executionLane(); }
 
     @Override public CancellableModelCall prepare(ModelTurnRequest request) {
-        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getText())
+        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getUserInstructionText())
                 == MediaApp.QQMUSIC) {
             pending.discardBilibili(request.getAgentRequest().getSessionId());
         }
@@ -44,7 +44,7 @@ public final class BilibiliTitleGateway implements ModelGateway {
             if (MediaCapabilities.BILI_SEARCH.equals(last.getToolName())) return afterSearch(request, last);
             if (MediaCapabilities.BILI_OPEN_RESULT.equals(last.getToolName())) return afterOpen(last);
         }
-        String text = request.getAgentRequest().getText();
+        String text = request.getAgentRequest().getUserInstructionText();
         String sessionId = request.getAgentRequest().getSessionId();
         Optional<PendingBilibiliSelection.Snapshot> snapshot = pending.bilibiliSnapshot(sessionId);
         if (snapshot.isPresent()) {
@@ -73,12 +73,17 @@ public final class BilibiliTitleGateway implements ModelGateway {
         return delegate.decide(request);
     }
 
+    @Override public CancellableModelCall prepareStreaming(ModelTurnRequest request,
+            com.matrix.agent.contract.ModelStreamSink sink) {
+        return handles(request) ? ModelGateway.super.prepare(request) : delegate.prepareStreaming(request, sink);
+    }
+
     private boolean handles(ModelTurnRequest request) {
         AgentMessage last = lastMessage(request.getConversation());
         if (last != null && last.getRole() == AgentMessage.Role.TOOL
                 && (MediaCapabilities.BILI_SEARCH.equals(last.getToolName())
                 || MediaCapabilities.BILI_OPEN_RESULT.equals(last.getToolName()))) return true;
-        String text = request.getAgentRequest().getText();
+        String text = request.getAgentRequest().getUserInstructionText();
         Optional<PendingBilibiliSelection.Snapshot> snapshot = pending.bilibiliSnapshot(
                 request.getAgentRequest().getSessionId());
         return snapshot.isPresent() && (MediaSelectionUtterance.isConfirmationReply(text)

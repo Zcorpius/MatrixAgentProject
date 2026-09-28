@@ -8,6 +8,13 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public final class MediaSwitchIntentTest {
+    @Test public void searchPreparationDoesNotIncludeNegatedSearchInstructions() {
+        assertTrue(MediaSwitchIntent.requestsCandidateSearch("改用B站搜索星际穿越"));
+        assertTrue(MediaSwitchIntent.requestsCandidateSearch("改用QQ音乐查找晨光"));
+        assertFalse(MediaSwitchIntent.requestsCandidateSearch("切换到B站，不要搜索"));
+        assertFalse(MediaSwitchIntent.requestsCandidateSearch("切换到QQ音乐，不用查找"));
+        assertFalse(MediaSwitchIntent.requestsCandidateSearch("继续播放QQ音乐"));
+    }
     @Test public void recognizesImplicitMediaTargetAndExplicitTwoAppHandoff() {
         assertTrue(MediaSwitchIntent.isRequested("切换音乐来源"));
         assertTrue(MediaSwitchIntent.isRequested("切换到QQ音乐"));

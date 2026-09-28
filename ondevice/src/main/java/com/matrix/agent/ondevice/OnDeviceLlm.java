@@ -24,6 +24,12 @@ public interface OnDeviceLlm {
     GenerationResult generate(String messagesJson, String toolsJson, int maxNewTokens,
             java.util.function.BooleanSupplier cancelChecker);
 
+    /** Token callback runs on the generation lane; tool parsing remains the caller's responsibility. */
+    default GenerationResult generateStreaming(String messagesJson, String toolsJson, int maxNewTokens,
+            java.util.function.BooleanSupplier cancelChecker, java.util.function.Consumer<String> tokenSink) {
+        return generate(messagesJson, toolsJson, maxNewTokens, cancelChecker);
+    }
+
     /**
      * 用模型自带 tokenizer 计数（含 chat template + tools 开销）。
      * 返回 0 视为模板/配置错误（不当"可激进裁剪"），由调用方报错处理。

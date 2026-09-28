@@ -1,0 +1,21 @@
+{
+  "repetitions": 2,
+  "profiles": [
+    {
+      "id": "model_native",
+      "protocol": "OPENAI_CHAT",
+      "endpoint": "https://your-provider.example/v1/chat/completions",
+      "model": "your-model",
+      "apiKeyEnv": "MATRIX_EVAL_API_KEY",
+      "plannerMode": "NATIVE_TOOL_CALLING"
+    },
+    {
+      "id": "model_structured",
+      "protocol": "OPENAI_CHAT",
+      "endpoint": "https://your-provider.example/v1/chat/completions",
+      "model": "your-model",
+      "apiKeyEnv": "MATRIX_EVAL_API_KEY",
+      "plannerMode": "STRUCTURED_JSON_COMPATIBILITY"
+    }
+  ]
+}

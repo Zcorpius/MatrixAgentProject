@@ -74,6 +74,13 @@ public final class ScheduledExecutionGraph implements ScheduleExecutionRuntime {
                 return;
             }
             var spec = ScheduleCodec.spec(run.specJson);
+            if (spec.action.kind == WORKFLOW) {
+                var profile = com.matrix.agent.schedule.workflow.WorkflowCatalog.require(spec.action.templateId, spec.action.templateVersion).profile();
+                if (profile == ExecutionProfile.RESEARCH) {
+                    execution.cpu.close();
+                    execution.cpu = schedules.holdExecutionCpu(Math.min(profile.maxActiveMillis(), Math.max(1, run.expiresAt - System.currentTimeMillis())), profile);
+                }
+            }
             if (spec.timing.kind == CALENDAR_OFFSET && !calendars.verifyRun(run)) {
                 schedules.call(store -> { new ScheduleAdmissionStore(store).finish(run.runId, CANCELLED, DELIVERY_NOT_REQUIRED,
                         "", "CALENDAR_SOURCE_CHANGED", schedules.clock().sample(), false); return null; });
@@ -259,7 +266,8 @@ public final class ScheduledExecutionGraph implements ScheduleExecutionRuntime {
             schedules.call(store -> {
                 for (var entry : active.entrySet()) {
                     var row = store.dao().run(entry.getKey());
-                    if (row == null || row.dataEpoch != store.currentEpoch() || row.state == CANCEL_REQUESTED || row.reason.equals("USER_CANCELLED_DELIVERY") || !schedules.userReady()) entry.getValue().token.cancel();
+                    if (row == null || row.dataEpoch != store.currentEpoch() || row.state == CANCEL_REQUESTED || row.reason.equals("USER_CANCELLED_DELIVERY") || System.currentTimeMillis() >= row.expiresAt
+                            || !schedules.authorized(row)) entry.getValue().token.cancel();
                 }
                 return null;
             });

@@ -35,7 +35,7 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
     @Override public ExecutionLane executionLane() { return delegate.executionLane(); }
 
     @Override public CancellableModelCall prepare(ModelTurnRequest request) {
-        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getText())
+        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getUserInstructionText())
                 == MediaApp.BILIBILI) {
             pending.discard(request.getAgentRequest().getSessionId());
             return delegate.prepare(request);
@@ -44,7 +44,7 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
     }
 
     @Override public ModelTurn decide(ModelTurnRequest request) {
-        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getText())
+        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getUserInstructionText())
                 == MediaApp.BILIBILI) {
             pending.discard(request.getAgentRequest().getSessionId());
             return delegate.decide(request);
@@ -59,7 +59,7 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
             }
         }
 
-        String text = request.getAgentRequest().getText();
+        String text = request.getAgentRequest().getUserInstructionText();
         String sessionId = request.getAgentRequest().getSessionId();
         Optional<PendingMediaConfirmation.Snapshot> snapshot = pending.snapshot(sessionId);
         if (snapshot.isPresent()) {
@@ -94,14 +94,23 @@ public final class QQMusicWorkflowGateway implements ModelGateway {
         return delegate.decide(request);
     }
 
+    @Override public CancellableModelCall prepareStreaming(ModelTurnRequest request,
+            com.matrix.agent.contract.ModelStreamSink sink) {
+        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getUserInstructionText()) == MediaApp.BILIBILI) {
+            pending.discard(request.getAgentRequest().getSessionId());
+            return delegate.prepareStreaming(request, sink);
+        }
+        return handles(request) ? ModelGateway.super.prepare(request) : delegate.prepareStreaming(request, sink);
+    }
+
     private boolean handles(ModelTurnRequest request) {
-        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getText())
+        if (ExplicitMediaTarget.singleTarget(request.getAgentRequest().getUserInstructionText())
                 == MediaApp.BILIBILI) return false;
         AgentMessage last = lastMessage(request.getConversation());
         if (last != null && last.getRole() == AgentMessage.Role.TOOL
                 && (MediaCapabilities.QQ_SEARCH.equals(last.getToolName())
                 || MediaCapabilities.QQ_PLAY_RESULT.equals(last.getToolName()))) return true;
-        String text = request.getAgentRequest().getText();
+        String text = request.getAgentRequest().getUserInstructionText();
         Optional<PendingMediaConfirmation.Snapshot> snapshot = pending.snapshot(
                 request.getAgentRequest().getSessionId());
         if (snapshot.isEmpty() && MediaSelectionUtterance.isConfirmationReply(text)

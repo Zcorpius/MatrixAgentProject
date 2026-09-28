@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "purpose": "Frozen retrieval-only synonym and hard-negative baseline; no claim of end-to-end answer quality",
+  "documents": [
+    {
+      "key": "fact.drink",
+      "value": "我每天早上喝一杯不加糖的豆浆。"
+    },
+    {
+      "key": "fact.commute",
+      "value": "我平时乘坐地下轨道交通去单位上班。"
+    },
+    {
+      "key": "fact.weekend",
+      "value": "我周末喜欢背着装备爬山看日出。"
+    },
+    {
+      "key": "fact.pet",
+      "value": "我家养了一只叫糯米的橘色猫咪。"
+    },
+    {
+      "key": "fact.exercise",
+      "value": "我习惯晚饭后沿着河岸慢跑五公里。"
+    },
+    {
+      "key": "fact.reading",
+      "value": "我最喜欢阅读星际旅行和外星文明题材的小说。"
+    },
+    {
+      "key": "fact.clothes",
+      "value": "我冬天出门总穿一件深蓝色的羽绒服。"
+    },
+    {
+      "key": "fact.sleep",
+      "value": "我每晚十点半关灯睡觉，早晨六点起床。"
+    },
+    {
+      "key": "fact.instrument",
+      "value": "我从小学习弹奏钢琴，最常练习肖邦的作品。"
+    },
+    {
+      "key": "fact.hobby",
+      "value": "我收藏来自不同国家的邮票，已经攒了三百多枚。"
+    },
+    {
+      "key": "fact.cooking",
+      "value": "我拿手的家常菜是清蒸鲈鱼，烹饪时少放油盐。"
+    },
+    {
+      "key": "fact.travel",
+      "value": "我下一次假期计划去冰岛看极光。"
+    }
+  ],
+  "queries": [
+    {
+      "text": "早餐饮品通常选啥？",
+      "expected": [
+        "fact.drink"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "清晨会喝哪种饮料？",
+      "expected": [
+        "fact.drink"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "通勤是怎么走的？",
+      "expected": [
+        "fact.commute"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "每天用什么交通方式到公司？",
+      "expected": [
+        "fact.commute"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "休息日爱进行哪些户外活动？",
+      "expected": [
+        "fact.weekend"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "放假喜欢去哪儿运动？",
+      "expected": [
+        "fact.weekend"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "家中的小动物叫什么名字？",
+      "expected": [
+        "fact.pet"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "我养的宠物是啥？",
+      "expected": [
+        "fact.pet"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "每天的锻炼安排是什么？",
+      "expected": [
+        "fact.exercise"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "我一般何时进行有氧运动？",
+      "expected": [
+        "fact.exercise"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "爱看哪类文学作品？",
+      "expected": [
+        "fact.reading"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "书架上通常是哪种故事？",
+      "expected": [
+        "fact.reading"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "天冷时我的保暖外套是什么颜色？",
+      "expected": [
+        "fact.clothes"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "寒季通常穿哪种衣服？",
+      "expected": [
+        "fact.clothes"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "作息时间一般是怎样的？",
+      "expected": [
+        "fact.sleep"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "通常几点上床休息？",
+      "expected": [
+        "fact.sleep"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "我会演奏什么乐器？",
+      "expected": [
+        "fact.instrument"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "平时练的是哪位作曲家的曲子？",
+      "expected": [
+        "fact.instrument"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "我在收集哪种纪念品？",
+      "expected": [
+        "fact.hobby"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "有什么长期收藏爱好？",
+      "expected": [
+        "fact.hobby"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "擅长做什么菜肴？",
+      "expected": [
+        "fact.cooking"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "我的做饭风格偏清淡吗？",
+      "expected": [
+        "fact.cooking"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "下趟旅行目的地是哪儿？",
+      "expected": [
+        "fact.travel"
+      ],
+      "split": "calibration"
+    },
+    {
+      "text": "放年假准备去哪国游玩？",
+      "expected": [
+        "fact.travel"
+      ],
+      "split": "holdout"
+    },
+    {
+      "text": "明天南京会下雨吗？",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "火星表面的重力有多大？",
+      "expected": [],
+      "split": "holdout"
+    },
+    {
+      "text": "请解释矩阵求逆的步骤。",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "北京到广州的机票价格是多少？",
+      "expected": [],
+      "split": "holdout"
+    },
+    {
+      "text": "铂金催化剂的熔点是多少？",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "帮我打开空调。",
+      "expected": [],
+      "split": "holdout"
+    },
+    {
+      "text": "播放周杰伦的音乐。",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "今年世界杯的赛程是什么？",
+      "expected": [],
+      "split": "holdout"
+    },
+    {
+      "text": "请查询此时的电池电量。",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "世界上最深的海沟在哪里？",
+      "expected": [],
+      "split": "holdout"
+    },
+    {
+      "text": "写一个快速排序算法。",
+      "expected": [],
+      "split": "calibration"
+    },
+    {
+      "text": "介绍光合作用的基本原理。",
+      "expected": [],
+      "split": "holdout"
+    }
+  ]
+}

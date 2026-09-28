@@ -3,19 +3,24 @@ package com.matrix.agent.schedule.workflow;
 import java.util.*;
 
 /** Versioned, Host-authored graph. Neither model output nor calendar text can add edges or capabilities. */
-public record WorkflowTemplate(String id, int version, String title, String description, List<Step> steps) {
+public record WorkflowTemplate(String id, int version, String title, String description, List<Step> steps,
+        com.matrix.agent.identity.ExecutionProfile profile) {
+    public WorkflowTemplate(String id, int version, String title, String description, List<Step> steps) {
+        this(id, version, title, description, steps, com.matrix.agent.identity.ExecutionProfile.INTERACTIVE);
+    }
     public enum Kind { TOOL, AGENT, TRANSFORM, DELIVER }
     public record Step(String id, String title, Kind kind, List<String> dependencies, boolean required,
             boolean readOnly, String capability, long timeoutMillis, int maxRetries, String resourceKey) {
         public Step { dependencies = List.copyOf(dependencies); }
     }
     public WorkflowTemplate {
+        java.util.Objects.requireNonNull(profile);
         steps = List.copyOf(steps);
-        if (id == null || version < 1 || steps.isEmpty() || steps.size() > 8) throw new IllegalArgumentException("invalid template");
+        if (id == null || version < 1 || steps.isEmpty() || steps.size() > profile.maxWorkflowSteps()) throw new IllegalArgumentException("invalid template");
         Map<String, Step> nodes = new LinkedHashMap<>();
         for (Step step : steps) {
             if (!step.id().matches("[a-z][a-z0-9_-]{0,31}") || nodes.put(step.id(), step) != null
-                    || step.timeoutMillis() < 1 || step.timeoutMillis() > 60_000 || step.maxRetries() < 0 || step.maxRetries() > 2
+                    || step.timeoutMillis() < 1 || step.timeoutMillis() > profile.maxStepMillis() || step.maxRetries() < 0 || step.maxRetries() > 2
                     || (!step.readOnly() && step.maxRetries() != 0)) throw new IllegalArgumentException("invalid step");
         }
         Set<String> done = new HashSet<>();

@@ -95,6 +95,11 @@ public final class ModelCallExecutor {
     }
 
     public Result decide(ModelGateway gateway, ModelTurnRequest request) {
+        return decide(gateway, request, com.matrix.agent.contract.ModelStreamSink.NONE);
+    }
+
+    public Result decide(ModelGateway gateway, ModelTurnRequest request,
+            com.matrix.agent.contract.ModelStreamSink sink) {
         AgentRequest agentRequest = request.getAgentRequest();
         if (!agentRequest.getExecutionScope().rejection().isEmpty()) {
             return Result.terminal(StopReason.POLICY_HALT, "计划授权已失效");
@@ -109,13 +114,22 @@ public final class ModelCallExecutor {
             return Result.terminal(StopReason.TIMEOUT, "调用模型前已超过截止时间");
         }
 
+        if (!agentRequest.getExecutionScope().reserveModelCall()) {
+            return Result.terminal(StopReason.POLICY_HALT, "模型调用预算已耗尽或授权失效");
+        }
         long callStarted = System.nanoTime();
         Log.d(TAG, "[ModelCall] submit gateway=" + gateway.getClass().getSimpleName()
                 + " budgetMs=" + budgetMillis
                 + " req=" + agentRequest.getRequestId()
                 + " mode=prepare+abort-hook");
 
-        CancellableModelCall call = gateway.prepare(request);
+        java.util.concurrent.atomic.AtomicBoolean streamClosed = new java.util.concurrent.atomic.AtomicBoolean();
+        com.matrix.agent.contract.ModelStreamSink guarded = event -> {
+            if (streamClosed.get() || agentRequest.isCancelled() || agentRequest.remainingMillis() <= 0) return;
+            try { sink.accept(event); } catch (RuntimeException ignored) { }
+        };
+        CancellableModelCall call = sink == com.matrix.agent.contract.ModelStreamSink.NONE
+                ? gateway.prepare(request) : gateway.prepareStreaming(request, guarded);
         CancellationToken token = agentRequest.getCancellationToken();
 
         Future<ModelTurn> future;
@@ -129,7 +143,14 @@ public final class ModelCallExecutor {
                             || agentRequest.remainingMillis() <= 0 || agentRequest.isCancelled()) {
                         throw new CancellationException("automatic authority no longer valid");
                     }
-                    return call.call();
+                    try {
+                        ModelTurn turn = call.call();
+                        guarded.accept(new com.matrix.agent.contract.ModelStreamEvent.Completed(turn.getFinishReason()));
+                        return turn;
+                    } catch (RuntimeException failure) {
+                        guarded.accept(new com.matrix.agent.contract.ModelStreamEvent.Failed());
+                        throw failure;
+                    } finally { streamClosed.set(true); }
                 }
             });
         } catch (RejectedExecutionException rejected) {
@@ -228,6 +249,7 @@ public final class ModelCallExecutor {
             return Result.terminal(StopReason.POLICY_HALT,
                     "模型调用异常:" + safeMessage(cause));
         } finally {
+            streamClosed.set(true);
             if (token != null) {
                 token.removeAbortHook(abortHook);
             }

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "rubricVersion": "memory-answer-evidence-v2",
+  "scope": "24 actual Engine tasks, 6 frozen queries repeated twice, no selected Skill. Small sample; no general accuracy or latency claim.",
+  "complete": true,
+  "metrics": {
+    "LEXICAL": {
+      "correct": 11,
+      "total": 12,
+      "positiveCorrect": 7,
+      "positiveTotal": 8,
+      "negativeCorrect": 4,
+      "negativeTotal": 4,
+      "expectedFactRead": 7,
+      "eligibleSemanticKeys": 4,
+      "retainedSemanticKeys": 4,
+      "medianEngineMillis": 6175.0,
+      "maxEngineMillis": 16731
+    },
+    "HYBRID": {
+      "correct": 12,
+      "total": 12,
+      "positiveCorrect": 8,
+      "positiveTotal": 8,
+      "negativeCorrect": 4,
+      "negativeTotal": 4,
+      "expectedFactRead": 8,
+      "eligibleSemanticKeys": 10,
+      "retainedSemanticKeys": 10,
+      "medianEngineMillis": 4195.5,
+      "maxEngineMillis": 6760
+    }
+  },
+  "skillProjectionRetention": null,
+  "qualityMisses": [
+    "memory_LEXICAL_q1_repeat1"
+  ]
+}

@@ -26,12 +26,14 @@ final class AnthropicToolProtocol {
 
     static JSONObject buildRequest(ModelConfig config, String system, List<AgentMessage> conversation,
             List<ToolDefinition> tools) throws Exception {
-        if (tools == null || tools.isEmpty()) throw new IllegalArgumentException("ToolDefinition 不能为空");
+        java.util.Objects.requireNonNull(tools, "tools");
         JSONArray wireTools = new JSONArray();
         for (ToolDefinition tool : tools) wireTools.put(toTool(tool));
-        return new JSONObject().put("model", config.model).put("max_tokens", 2048)
+        JSONObject request = new JSONObject().put("model", config.model).put("max_tokens", 2048)
                 .put("temperature", 0.1).put("stream", false).put("system", system)
-                .put("messages", toMessages(conversation)).put("tools", wireTools);
+                .put("messages", toMessages(conversation));
+        if (!tools.isEmpty()) request.put("tools", wireTools);
+        return request;
     }
 
     static ModelTurn parseResponse(JSONObject response, List<ToolDefinition> tools) throws Exception {

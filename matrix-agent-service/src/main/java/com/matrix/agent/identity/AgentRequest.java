@@ -140,6 +140,8 @@ public final class AgentRequest {
     public String getSessionId() { return sessionId; }
     /** 调度仲裁键(默认 = sessionId)。TaskScheduler 内部用此 key。 */
     public String getArbitrationKey() { return arbitrationKey; }
+    /** Model input may include quoted documents. Only the Host-captured user utterance can grant intent. */
+    public String getUserInstructionText() { return interactiveOrigin == null ? text : interactiveOrigin.userText(); }
     public String getText() { return text; }
     public Actor getActor() { return actor; }
     public VehicleZone getOccupantZone() { return occupantZone; }

@@ -69,7 +69,7 @@ final class OpenAiToolProtocol {
 
     static JSONObject buildConversationRequest(ModelConfig config, String system,
             List<AgentMessage> conversation, List<ToolDefinition> tools) throws Exception {
-        requireTools(tools);
+        java.util.Objects.requireNonNull(tools, "tools");
         JSONArray toolArray = new JSONArray();
         Map<String, String> names = new LinkedHashMap<>();
         for (ToolDefinition tool : tools) {
@@ -79,9 +79,10 @@ final class OpenAiToolProtocol {
         JSONArray messages = new JSONArray().put(message("system", system));
         JSONArray serialized = toMessages(conversation, names);
         for (int i = 0; i < serialized.length(); i++) messages.put(serialized.getJSONObject(i));
-        return new JSONObject().put("model", config.model).put("stream", false)
-                .put("temperature", 0.1).put("messages", messages)
-                .put("tools", toolArray).put("tool_choice", "auto");
+        JSONObject request = new JSONObject().put("model", config.model).put("stream", false)
+                .put("temperature", 0.1).put("messages", messages);
+        if (!tools.isEmpty()) request.put("tools", toolArray).put("tool_choice", "auto");
+        return request;
     }
 
     static ModelTurn parseConversationResponse(JSONObject response, List<ToolDefinition> tools)

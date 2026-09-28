@@ -70,6 +70,19 @@ public final class ConversationMessageRenderer {
         bubbleContent.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        for (var attachment : message.attachments()) {
+            TextView sources = new TextView(context);
+            sources.setTextSize(11);
+            sources.setTextColor(color(R.color.matrix_muted));
+            sources.setMaxWidth(maxBubbleWidth);
+            sources.setTextIsSelectable(true);
+            String detail = attachment.retrievalSummary == null || attachment.retrievalSummary.isBlank()
+                    ? "没有本轮检索位置记录" : attachment.retrievalSummary;
+            sources.setText("📄 " + attachment.safeDisplayName + "\n" + detail);
+            sources.setPadding(0, (int) (8 * density), 0, 0);
+            bubbleContent.addView(sources);
+        }
+
         if (isUser && !isTerminalStatus(message.status())) {
             TextView status = new TextView(context);
             status.setTextSize(10);

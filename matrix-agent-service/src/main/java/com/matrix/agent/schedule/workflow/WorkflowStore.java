@@ -11,6 +11,12 @@ import java.util.*;
 public final class WorkflowStore {
     private final ScheduleStore store;
     public WorkflowStore(ScheduleStore store) { this.store = store; }
+    public boolean reserveModelCall(String runId, WorkflowTemplate template) {
+        var run = store.dao().run(runId);
+        if (run == null || run.dataEpoch != store.currentEpoch() || run.state != RUNNING
+                || run.modelCalls >= template.profile().maxIterations()) return false;
+        run.modelCalls++; store.dao().updateRun(run); return true;
+    }
     public void initialize(ScheduleRunEntity run, WorkflowTemplate template, ClockSample clock) {
         if (!store.dao().steps(run.runId).isEmpty()) return;
         var spec = ScheduleCodec.spec(run.specJson);
@@ -25,7 +31,9 @@ public final class WorkflowStore {
                 step.required = definition.required(); step.runtimeRequestId = ScheduleStore.uuid(); step.operationKey = ScheduleStore.uuid();
                 step.state = WAITING_DEPENDENCY;
                 org.json.JSONObject input = new org.json.JSONObject();
-                if (definition.kind() == WorkflowTemplate.Kind.TOOL) {
+                if (ResearchWorkflow.isResearch(template) && definition.kind() == WorkflowTemplate.Kind.TOOL) {
+                    input.put("query", parameters.getString("query")).put("source", definition.id());
+                } else if (definition.kind() == WorkflowTemplate.Kind.TOOL) {
                     LocalDate queryDate = definition.id().equals("tomorrow") ? date.plusDays(1) : date;
                     input.put("startMillis", queryDate.atStartOfDay(zone).toInstant().toEpochMilli());
                     input.put("endMillis", queryDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli());
@@ -48,6 +56,22 @@ public final class WorkflowStore {
             run.activeMillis += Math.min(largestCap, elapsed);
         }
         run.budgetAnchorElapsed = null; run.bootId = clock.bootId(); store.dao().updateRun(run);
+        Set<String> invalidated = new HashSet<>();
+        if (ResearchWorkflow.isResearch(template)) for (var definition : template.steps()) {
+            var step = steps.stream().filter(row -> row.stepId.equals(definition.id())).findFirst().orElseThrow();
+            boolean stale = definition.dependencies().stream().anyMatch(invalidated::contains);
+            if (step.state == SUCCEEDED && definition.kind() == WorkflowTemplate.Kind.TOOL) {
+                try { ResearchWorkflow.evidence(run, step, clock.wall().toEpochMilli()); }
+                catch (IllegalArgumentException invalid) { stale = true; }
+            }
+            if (stale && definition.readOnly()) {
+                invalidated.add(step.stepId); step.outputJson = "{}"; step.result = "";
+                step.state = step.attempt <= definition.maxRetries() ? WAITING_DEPENDENCY : FAILED;
+                step.runtimeRequestId = ScheduleStore.uuid(); step.reason = "CHECKPOINT_INVALIDATED";
+                step.completedAt = step.state == FAILED ? clock.wall().toEpochMilli() : null;
+                step.leaseGeneration++; store.dao().updateStep(step);
+            }
+        }
         for (var step : steps) {
             if (step.state == QUEUED) { step.state = WAITING_DEPENDENCY; store.dao().updateStep(step); }
             if (step.state != RUNNING) continue;
@@ -90,7 +114,7 @@ public final class WorkflowStore {
         var run = store.dao().run(runId); var step = store.dao().step(runId, stepId);
         if (run == null || run.dataEpoch != store.currentEpoch() || run.state != RUNNING || step == null || step.leaseGeneration != lease || step.state != QUEUED) return 0;
         run.activeMillis = ActiveBudget.charge(run.activeMillis, run.budgetAnchorElapsed, clock.elapsedMillis());
-        long allowance = ActiveBudget.allowance(run.activeMillis, definition(template, stepId).timeoutMillis(), clock.wall().toEpochMilli(), run.expiresAt);
+        long allowance = ActiveBudget.allowance(run.activeMillis, definition(template, stepId).timeoutMillis(), clock.wall().toEpochMilli(), run.expiresAt, template.profile());
         if (allowance == 0) {
             step.state = FAILED; step.reason = "BUDGET_OR_EXPIRY_EXHAUSTED";
             step.completedAt = clock.wall().toEpochMilli(); store.dao().updateStep(step);
@@ -111,13 +135,18 @@ public final class WorkflowStore {
         if (run == null || run.dataEpoch != store.currentEpoch() || step == null || step.leaseGeneration != lease || step.state != RUNNING) return;
         run.activeMillis = ActiveBudget.charge(run.activeMillis, run.budgetAnchorElapsed, clock.elapsedMillis());
         step.activeMillis += step.startedElapsed == null ? 0 : Math.max(0, clock.elapsedMillis() - step.startedElapsed);
+        if (ResearchWorkflow.isResearch(template) && state == SUCCEEDED
+                && definition(template, stepId).kind() == WorkflowTemplate.Kind.TOOL) {
+            try { output = ResearchWorkflow.checkpoint(run, step, output, clock.wall().toEpochMilli()); }
+            catch (IllegalArgumentException invalid) { state = FAILED; reason = "INVALID_RESEARCH_EVIDENCE"; output = "{}"; }
+        }
         step.startedElapsed = null; step.state = state; step.result = result; step.outputJson = output; step.reason = reason;
         step.completedAt = clock.wall().toEpochMilli();
         var receipt = store.dao().acceptance(step.runtimeRequestId);
         if (receipt != null) { receipt.state = state; receipt.result = result; receipt.reason = reason; receipt.completedAt = step.completedAt; store.dao().updateAcceptance(receipt); }
         var definition = definition(template, stepId);
         if (retryable && definition.readOnly() && step.attempt <= definition.maxRetries() && run.state != CANCEL_REQUESTED
-                && ActiveBudget.allowance(run.activeMillis, definition.timeoutMillis(), clock.wall().toEpochMilli(), run.expiresAt) > 1000) {
+                && ActiveBudget.allowance(run.activeMillis, definition.timeoutMillis(), clock.wall().toEpochMilli(), run.expiresAt, template.profile()) > 1000) {
             step.state = RETRY_WAIT; step.nextAttemptAt = clock.wall().toEpochMilli() + Math.min(30_000, 1000L << (step.attempt - 1));
             step.runtimeRequestId = ScheduleStore.uuid();
         }

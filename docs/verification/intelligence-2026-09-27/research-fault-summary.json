@@ -1,0 +1,42 @@
+[
+  {
+    "fault": "cancel",
+    "state": 6,
+    "reason": "CANCELLED",
+    "observedWithinMillis": 1993,
+    "modelCalls": 0,
+    "deliveryStatus": 6
+  },
+  {
+    "fault": "revoke",
+    "state": 6,
+    "reason": "AUTHORIZATION_REVOKED",
+    "observedWithinMillis": 2014,
+    "modelCalls": 0,
+    "deliveryStatus": 6
+  },
+  {
+    "fault": "expire",
+    "state": 6,
+    "reason": "QUEUE_EXPIRED",
+    "observedWithinMillis": 1922,
+    "modelCalls": 0,
+    "deliveryStatus": 6
+  },
+  {
+    "fault": "exhaust_active",
+    "state": 5,
+    "reason": "REQUIRED_STEP_FAILED",
+    "observedWithinMillis": 2742,
+    "modelCalls": 0,
+    "deliveryStatus": 6
+  },
+  {
+    "fault": "exhaust_models",
+    "state": 5,
+    "reason": "REQUIRED_STEP_FAILED",
+    "observedWithinMillis": 60138,
+    "modelCalls": 40,
+    "deliveryStatus": 6
+  }
+]

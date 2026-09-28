@@ -27,7 +27,7 @@ public final class MediaSwitchGuard {
     private boolean targetDefinitelyNotSent;
 
     public MediaSwitchGuard(AgentRequest request) {
-        String text = request.getText();
+        String text = request.getUserInstructionText();
         active = MediaSwitchIntent.isRequested(text);
         requestedTarget = ExplicitMediaTarget.switchTarget(text);
         for (MediaApp app : MediaApp.values()) states.put(app, State.UNKNOWN);
@@ -39,10 +39,17 @@ public final class MediaSwitchGuard {
         if (requestedTarget == null) {
             return PolicyDecision.denyCapability("切换媒体来源需要明确指定目标应用");
         }
+        // Searching the requested app prepares candidates without starting playback. It must not
+        // require an existing playing source (for example, "改用B站搜索…" during song confirmation).
+        // Selecting/opening a result and resuming playback retain the full handoff prerequisites.
+        String capability = call.getCapabilityName();
+        if (MediaCapabilities.QQ_SEARCH.equals(capability) || MediaCapabilities.BILI_SEARCH.equals(capability)) {
+            return appOf(capability) == requestedTarget ? null
+                    : PolicyDecision.denyCapability("只能搜索用户指定的目标应用");
+        }
         if (source == null || states.get(requestedTarget) != State.OTHER) {
             return PolicyDecision.denyParameter("尚未确认唯一原来源和目标活动会话");
         }
-        String capability = call.getCapabilityName();
         if (isOpen(capability)) {
             return PolicyDecision.denyCapability("切换时目标无可播放会话，请先手动选择内容");
         }

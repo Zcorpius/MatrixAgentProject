@@ -19,3 +19,8 @@ local.properties
 # platform 签名密钥与密码——绝不入库（**/ 前缀匹配三个模块下的 tools/key/；
 # 注意不能写成 tools/key/，带中间斜杠的模式会锚定仓库根而失效）
 **/tools/key/
+.model-evaluation/
+
+# Python evaluation helpers
+__pycache__/
+*.pyc

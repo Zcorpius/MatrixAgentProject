@@ -30,7 +30,8 @@ public final class ScheduleEditorDialog extends DialogFragment {
     private Spinner timing, action, misfire;
     private boolean saving;
     private CheckBox followZone, network, speak, calendar, tomorrow;
-    private EditText calendarId, startDate, endDate;
+    private EditText calendarId, startDate, endDate, researchQuery;
+    private boolean research;
     private final List<CheckBox> days = new ArrayList<>();
     private TextView error;
     private Bundle restored;
@@ -58,6 +59,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         pendingSpec = saved == null ? null : saved.getParcelable("pending");
         requestPending = saved != null && saved.getBoolean("requestPending");
         ScheduleSpec initial = existing == null ? null : existing.spec;
+        research = "source_research".equals(template != null ? template.templateId : initial == null ? "" : initial.action.templateId);
         calendarBinding = initial == null ? requireArguments().getString("binding", "") : initial.timing.calendarBindingId;
         ScrollView scroll = new ScrollView(requireContext()); LinearLayout form = new LinearLayout(requireContext());
         form.setOrientation(LinearLayout.VERTICAL); int padding = dp(18); form.setPadding(padding, padding, padding, padding); scroll.addView(form);
@@ -92,6 +94,8 @@ public final class ScheduleEditorDialog extends DialogFragment {
         org.json.JSONObject parameters;
         try { parameters = new org.json.JSONObject(initial == null ? "{}" : initial.action.parametersJson); }
         catch (org.json.JSONException invalid) { parameters = new org.json.JSONObject(); }
+        researchQuery = field(form, "研究问题（最多 300 字）", "researchQuery", parameters.optString("query"), false);
+        if (research) label(form, "仅检索百科片段、论文摘要和书目信息，不读取全文。活动执行最多 30 分钟，可在任务中心停止。请明确勾选网络授权。");
         tomorrow = check(form, "同时查询明日日程（可选步骤）", "tomorrow", parameters.optBoolean("includeTomorrow", true));
         calendarId = field(form, "限定日历编号（留空表示所有可读日历）", "calendarId", parameters.has("calendarId") ? parameters.optString("calendarId") : "", true);
         misfire = choice(form, "错过时如何处理", new String[]{"跳过历史时段", "宽限内执行", "合并最近一次"},
@@ -100,7 +104,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
             action.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, new String[]{"已授权的确定动作"}));
             action.setEnabled(false);
         }
-        grace = field(form, "允许迟到的分钟数", "grace", initial == null ? "10" : Long.toString(initial.graceMillis / 60_000), true);
+        grace = field(form, research ? "触发后到期窗口，含排队和执行（分钟，至少 30）" : "允许迟到的分钟数", "grace", initial == null ? research ? "40" : "10" : Long.toString(initial.graceMillis / 60_000), true);
         label(form, "权限、后台条件或待机限制可能使执行延后。预览后确认启用，关闭页面不会暂停计划。返回会保留草稿；放弃只删除本地草稿。");
         error = label(form, "");
         if (requestPending && pendingSpec != null) {
@@ -124,7 +128,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
             boolean executes = workflow || action.getSelectedItemPosition() == 1;
             calendar.setVisibility(executes && !workflow ? View.VISIBLE : View.GONE);
             network.setVisibility(executes ? View.VISIBLE : View.GONE); speak.setVisibility(executes ? View.VISIBLE : View.GONE);
-            tomorrow.setVisibility(workflow ? View.VISIBLE : View.GONE); show(calendarId, workflow);
+            tomorrow.setVisibility(workflow && !research ? View.VISIBLE : View.GONE); show(calendarId, workflow && !research); show(researchQuery, workflow && research);
         };
         AdapterView.OnItemSelectedListener changed = new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { updateFields.run(); }
@@ -197,8 +201,12 @@ public final class ScheduleEditorDialog extends DialogFragment {
         String encodedParameters = existing == null ? "{}" : existing.spec.action.parametersJson;
         if (workflow) {
             try {
-                var parameters = new org.json.JSONObject().put("includeTomorrow", tomorrow.isChecked());
-                if (!value(calendarId).isEmpty()) parameters.put("calendarId", Long.parseLong(value(calendarId)));
+                var parameters = new org.json.JSONObject();
+                if (research) parameters.put("query", value(researchQuery));
+                else {
+                    parameters.put("includeTomorrow", tomorrow.isChecked());
+                    if (!value(calendarId).isEmpty()) parameters.put("calendarId", Long.parseLong(value(calendarId)));
+                }
                 encodedParameters = parameters.toString();
             } catch (org.json.JSONException invalid) { throw new IllegalArgumentException(invalid); }
         }
@@ -213,7 +221,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
     }
     private void writeDraft(Bundle saved) {
         saved.putBoolean("requestPending", requestPending); saved.putString("operation", operationId); saved.putParcelable("pending", pendingSpec);
-        EditText[] fields = {title, goal, dateTime, minutes, localTime, zone, grace, offset, calendarId, startDate, endDate}; String[] names = {"title", "goal", "dateTime", "minutes", "localTime", "zone", "grace", "offset", "calendarId", "startDate", "endDate"};
+        EditText[] fields = {title, goal, dateTime, minutes, localTime, zone, grace, offset, calendarId, startDate, endDate, researchQuery}; String[] names = {"title", "goal", "dateTime", "minutes", "localTime", "zone", "grace", "offset", "calendarId", "startDate", "endDate", "researchQuery"};
         for (int i = 0; i < fields.length; i++) saved.putString(names[i], value(fields[i]));
         saved.putInt("misfire", misfire.getSelectedItemPosition()); saved.putInt("timing", timing.getSelectedItemPosition()); saved.putInt("action", action.getSelectedItemPosition());
         saved.putBoolean("tomorrow", tomorrow.isChecked());

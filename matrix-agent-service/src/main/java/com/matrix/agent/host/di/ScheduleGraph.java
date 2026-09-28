@@ -244,9 +244,12 @@ public final class ScheduleGraph implements ScheduleRuntime {
 
     /** Called from the existing clear-all transaction lifecycle; old callbacks remain epoch-fenced. */
     public AutoCloseable holdExecutionCpu(long millis) {
+        return holdExecutionCpu(millis, com.matrix.agent.identity.ExecutionProfile.INTERACTIVE);
+    }
+    public AutoCloseable holdExecutionCpu(long millis, com.matrix.agent.identity.ExecutionProfile profile) {
         var lease = context.getSystemService(android.os.PowerManager.class).newWakeLock(
                 android.os.PowerManager.PARTIAL_WAKE_LOCK, "MatrixAgent:scheduled-execution");
-        lease.setReferenceCounted(false); lease.acquire(Math.min(120_000, Math.max(1, millis)));
+        lease.setReferenceCounted(false); lease.acquire(Math.min(profile.maxActiveMillis(), Math.max(1, millis)));
         return () -> { if (lease.isHeld()) lease.release(); };
     }
     public void close() { lane.shutdownNow(); watchdog.shutdownNow(); observers.clear(); }

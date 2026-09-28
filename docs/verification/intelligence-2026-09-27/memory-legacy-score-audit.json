@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "originalReport": "model-feature-device.json",
+  "originalUnmodified": true,
+  "legacyScoresInvalidForFinalAcceptance": true,
+  "reason": "A positive abstention listed 豆浆 as an example; keyword-only scoring incorrectly counted it. New evidence-v2 requires a successful verified read of the expected key and an affirmative correct answer.",
+  "identifiedFalsePositive": "memory_LEXICAL_q1_repeat2",
+  "legacyMetrics": {
+    "LEXICAL": {
+      "legacyKeywordOnlyCorrect": 11,
+      "samples": 12,
+      "eligibleSemanticKeys": 4,
+      "retainedSemanticKeys": 4,
+      "medianDurationMillis": 6866.0
+    },
+    "HYBRID": {
+      "legacyKeywordOnlyCorrect": 12,
+      "samples": 12,
+      "eligibleSemanticKeys": 10,
+      "retainedSemanticKeys": 10,
+      "medianDurationMillis": 4624.0
+    }
+  },
+  "skillProjectionScenarioCoverage": {
+    "scope": "deterministic PromptProjectionMetricsTest, not real-model Skill quality",
+    "branches": [
+      "NO_SKILL",
+      "FULL",
+      "DROP_MEMORY",
+      "BASE_ONLY",
+      "TRIM_BASE"
+    ],
+    "baseRoomBoundary": [
+      255,
+      256,
+      257
+    ],
+    "noSkillDenominatorExcluded": true
+  },
+  "realModelSkillRetention": null
+}

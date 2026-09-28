@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "modelType": "BERT_EMBEDDING",
+  "modelId": "bge-small-zh-v1.5",
+  "modelVersion": "7999e1d3-mnn3.2-int8-v1",
+  "dimension": 512,
+  "maxTokens": 512,
+  "pooling": "CLS_L2",
+  "sourceRevision": "7999e1d3359715c523056ef9478215996d62a620",
+  "files": [
+    {
+      "name": "config.json",
+      "sha256": "c4bd25dbbc950feffccc3b154d634fdfbce96fbed453dd738bda4abfc763b73a",
+      "bytes": 210
+    },
+    {
+      "name": "llm_config.json",
+      "sha256": "0a81cdd7bd137d16ddc0e47bde0f56fe41812bd58d5b2269a756a10fb95bbf8b",
+      "bytes": 217
+    },
+    {
+      "name": "llm.mnn",
+      "sha256": "74b93dde2ddf0ef815a7fd0edfd24663e36bce16c3409d32652b0132216ae766",
+      "bytes": 82976
+    },
+    {
+      "name": "llm.mnn.weight",
+      "sha256": "6c4b2f5db814c4b61b55a7e874b0bf0f6afb6c33586c855b4ab47464dfbbf9ea",
+      "bytes": 15321232
+    },
+    {
+      "name": "embeddings_bf16.bin",
+      "sha256": "c34cadbc4b9e5ad02dbf101b32c2f1fd247b9baa67a92073b62f3172857e3b08",
+      "bytes": 21635072
+    },
+    {
+      "name": "tokenizer.txt",
+      "sha256": "33e93d2d5eb5a6841ddbd1dc296fe142e7cbcd8699e203dbd77eb0dd16be6ad1",
+      "bytes": 156516
+    }
+  ]
+}

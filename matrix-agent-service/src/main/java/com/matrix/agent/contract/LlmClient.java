@@ -27,6 +27,12 @@ public interface LlmClient {
     String complete(ModelConfig config, String systemPrompt, String userPrompt,
             CancellationToken token, long deadlineAtMillis) throws Exception;
 
+    /** Unsupported protocols retain their existing complete-and-validate path. */
+    default String completeStreaming(ModelConfig config, String system, String user,
+            CancellationToken token, long deadline, java.util.function.Consumer<String> body) throws Exception {
+        return complete(config, system, user, token, deadline);
+    }
+
     /**
      * 增量详情通道（评估 v1.0 §4.3 契约 4）：默认包装 {@link #complete(ModelConfig,
      * String, String, CancellationToken, long)} 只产 text（reasoning=null）。

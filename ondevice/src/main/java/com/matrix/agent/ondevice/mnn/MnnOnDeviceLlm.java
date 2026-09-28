@@ -25,6 +25,11 @@ public final class MnnOnDeviceLlm implements OnDeviceLlm {
     @Override
     public GenerationResult generate(String messagesJson, String toolsJson, int maxNewTokens,
             java.util.function.BooleanSupplier cancelChecker) {
+        return generateStreaming(messagesJson, toolsJson, maxNewTokens, cancelChecker, ignored -> { });
+    }
+
+    @Override public GenerationResult generateStreaming(String messagesJson, String toolsJson, int maxNewTokens,
+            java.util.function.BooleanSupplier cancelChecker, java.util.function.Consumer<String> tokenSink) {
         if (maxNewTokens <= 0) {
             return GenerationResult.failed("maxNewTokens must be > 0");
         }
@@ -38,6 +43,7 @@ public final class MnnOnDeviceLlm implements OnDeviceLlm {
             ok = session.generateStructured(messagesJson, toolsJson, maxNewTokens, token -> {
                 if (cancelChecker.getAsBoolean()) return false;
                 out.append(token);
+                tokenSink.accept(token);
                 return true;
             });
         } catch (RuntimeException e) {

@@ -8,6 +8,11 @@ public final class ActiveBudget {
         return activeSince == null ? accumulated : Math.addExact(accumulated, Math.max(0, monotonicNow - activeSince));
     }
     public static long allowance(long spent, long stepCap, long wallNow, long expiresAt) {
-        return Math.max(0, Math.min(Math.min(120_000 - spent, Math.min(60_000, stepCap)), expiresAt - wallNow));
+        return allowance(spent, stepCap, wallNow, expiresAt, com.matrix.agent.identity.ExecutionProfile.INTERACTIVE);
+    }
+    public static long allowance(long spent, long stepCap, long wallNow, long expiresAt,
+            com.matrix.agent.identity.ExecutionProfile profile) {
+        return Math.max(0, Math.min(Math.min(profile.maxActiveMillis() - spent,
+                Math.min(profile.maxStepMillis(), stepCap)), expiresAt - wallNow));
     }
 }

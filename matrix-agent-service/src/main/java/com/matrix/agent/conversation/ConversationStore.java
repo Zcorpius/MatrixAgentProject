@@ -85,7 +85,19 @@ public interface ConversationStore {
             String text, String languageTag, String conversationTaskId,
             String runtimeRequestId, boolean readOnlyHint, String idempotencyKey,
             String submittedDraftInstanceId, String quotedMessageId, String quoteSnapshot,
-            List<String> contextAttachmentIds) {
+            List<String> contextAttachmentIds, java.util.Map<String, String> attachmentManifests) {
+        public UserSubmission {
+            attachmentManifests = attachmentManifests == null ? java.util.Map.of() : java.util.Map.copyOf(attachmentManifests);
+        }
+        public UserSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String conversationTaskId,
+                String runtimeRequestId, boolean readOnlyHint, String idempotencyKey,
+                String submittedDraftInstanceId, String quotedMessageId, String quoteSnapshot,
+                List<String> contextAttachmentIds) {
+            this(conversationId, messageId, channelWire, text, languageTag, conversationTaskId,
+                    runtimeRequestId, readOnlyHint, idempotencyKey, submittedDraftInstanceId,
+                    quotedMessageId, quoteSnapshot, contextAttachmentIds, java.util.Map.of());
+        }
         /** Source-compatible constructor for inputs that do not originate from a text draft. */
         public UserSubmission(String conversationId, String messageId, int channelWire,
                 String text, String languageTag, String conversationTaskId,
@@ -131,7 +143,17 @@ public interface ConversationStore {
     record SteerSubmission(String conversationId, String messageId, int channelWire,
             String text, String languageTag, String hostUserMessageId,
             String idempotencyKey, String submittedDraftInstanceId,
-            List<String> contextAttachmentIds) {
+            List<String> contextAttachmentIds, java.util.Map<String, String> attachmentManifests) {
+        public SteerSubmission {
+            attachmentManifests = attachmentManifests == null ? java.util.Map.of() : java.util.Map.copyOf(attachmentManifests);
+        }
+        public SteerSubmission(String conversationId, String messageId, int channelWire,
+                String text, String languageTag, String hostUserMessageId,
+                String idempotencyKey, String submittedDraftInstanceId,
+                List<String> contextAttachmentIds) {
+            this(conversationId, messageId, channelWire, text, languageTag, hostUserMessageId,
+                    idempotencyKey, submittedDraftInstanceId, contextAttachmentIds, java.util.Map.of());
+        }
         /** Source-compatible constructor for voice and legacy append callers. */
         public SteerSubmission(String conversationId, String messageId, int channelWire,
                 String text, String languageTag, String hostUserMessageId,

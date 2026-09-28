@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "scheduleId": "b2cd04ab-a283-48ef-ab9f-714f8f0b9609",
+  "startedAt": "2026-09-27T17:08:11.336971Z",
+  "model": "glm-5.3",
+  "profile": "RESEARCH",
+  "query": "large language model reasoning evaluation",
+  "lastObservedAt": "2026-09-27T17:09:31.598950Z",
+  "runId": "acafb40a-b451-4050-b214-03c36b89ae67",
+  "state": 4,
+  "reason": "OPTIONAL_OR_DELIVERY_PARTIAL",
+  "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：【摘要陈述】1) 强化学习（RL）已成为提升大语言模型推理能力的关键技术，策略梯度算法因高效有效而主导后训练阶段；但多数现有基准在理想化设定下评估推理，忽视真实非理想场景 [src_42896446c47525e8]。2) 该文称识别出三种具有实际相关性的代表性非理想场景，具体内容在片段中被截断 [src_42896446c47525e8]。3) 采用推理技术的 LLM 可提升任务表现，但冗长生成带来显著延迟与 token 成本；现有自动提示优化（APO）框架仅以任务准确率为目标，牺牲了推理长度控制 [src_dbf3f977e43fed60]。4) 经 RLHF 优化的 LLM 表现出系统性谄媚倾向：迎合用户、省略矛盾证据、优先产出看似合理而非准确的内容；现有评估侧重模型级基准与对抗测试，个体从业者缺乏采纳前评估输出完整性的结构化方法 [src_102396db1665b19e]。5) 一片段仅含书目信息（题名涉及用 LLM 增强推理），无摘要，不能据此推断论文结论 [src_d360b67f91f327bd]。【推断】多篇摘要共同指向现有 LLM 推理评估的局限：理想化基准 [src_42896446c47525e8]、未计效率成本 [src_dbf3f977e43fed60]、缺少输出诚信维度 [src_102396db1665b19e]，暗示评估需兼顾真实场景、token 效率与可信性。【未知】三种非理想场景的具体定义 [src_42896446c47525e8]、各文方法与实验结论、CROP 具体机制 [src_dbf3f977e43fed60]。未阅读全文，以上仅为摘要级交叉整理，不代表已验证全文。\n[src_42896446c47525e8] https:\/\/arxiv.org\/abs\/2508.04848v1\n[src_dbf3f977e43fed60] https:\/\/arxiv.org\/abs\/2604.14214v1\n[src_102396db1665b19e] https:\/\/doi.org\/10.2139\/ssrn.6609578\n[src_d360b67f91f327bd] https:\/\/doi.org\/10.1038\/s41598-026-39296-8",
+  "activeMillis": 58199,
+  "modelCalls": 3,
+  "toolCalls": 5,
+  "scheduledAt": 1790528896247,
+  "startedAtMillis": 1790528896551,
+  "expiresAt": 1790531296247,
+  "deliveryStatus": 2,
+  "deliveryFacts": {
+    "notification": {
+      "status": "DELIVERED",
+      "observedAt": 1790528955347,
+      "deliveredAt": 1790528955347,
+      "soundStatus": "UNKNOWN",
+      "policy": {
+        "channel": "schedule_execution_status",
+        "importance": 2,
+        "interruptionFilter": 1,
+        "observedAt": 1790528955347
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "arxiv",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 6591,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "acafb40a-b451-4050-b214-03c36b89ae67",
+        "stepId": "arxiv",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "3a7a9775491c2684b633ebc421daf100fc62fc7eac74eecbd2ec540dbc1c8847",
+        "createdAt": 1790528903247,
+        "expiresAt": 1790531296247,
+        "payloadDigest": "0a954c13439271353e9d702cb37d941502bc17b1157d18c8a25cadcc83733a96",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"b1bd06f086e45be9adbed9ea9d4bd5cfb98245ccce47def71817ee930b7c2a63\",\"sources\":[{\"snippet\":\"Reinforcement learning (RL) has become a key technique for enhancing the reasoning abilities of large language models (LLMs), with policy-gradient algorithms dominating the post-training stage because of their efficiency and effectiveness. However, most existing benchmarks evaluate large-language-model reasoning under idealized settings, overlooking performance in realistic, non-ideal scenarios. We identify three representative non-ideal scenarios with practical relevance: summary inference, fine-grained noise suppression, and contextual filtering. We introduce a new research direction guided by brain-science findings that human reasoning remains reliable under imperfect[truncated 861 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_42896446c47525e8\",\"title\":\"Large Language Models Reasoning Abilities Under Non-Ideal Conditions After RL-Fine-Tuning\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2508.04848v1\"},{\"snippet\":\"Large Language Models utilizing reasoning techniques improve task performance but incur significant latency and token costs due to verbose generation. Existing automatic prompt optimization(APO) frameworks target task accuracy exclusively at the expense of generating long reasoning traces. We propose Cost-Regularized Optimization of Prompts (CROP), an APO method that introduces regularization on response length by generating textual feedback in addition to standard accuracy feedback. This forces the optimization process to produce prompts that elicit concise responses containing only critical information and reasoning. We evaluate our approach on complex reasoning datase[truncated 317 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_dbf3f977e43fed60\",\"title\":\"CROP: Token-Efficient Reasoning in Large Language Models via Regularized Prompt Optimization\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2604.14214v1\"},{\"snippet\":\"Large Reasoning Language Models (LRLMs or LRMs) demonstrate remarkable capabilities in complex reasoning tasks, but suffer from significant computational inefficiencies due to overthinking phenomena. Existing efficient reasoning methods face the challenge of balancing reasoning quality with inference cost reduction. We propose \\\\textbf{Adaptive Reasoning Suppression (ARS)}, a novel training-free approach that dynamically suppresses redundant reasoning steps while preserving accuracy through adaptive certainty monitoring. ARS introduces a multi-checkpoint certainty estimation mechanism with progressive suppression thresholds, achieving superior efficiency compared to stati[truncated 263 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_dd437600bd999ae8\",\"title\":\"ARS: Adaptive Reasoning Suppression for Efficient Large Reasoning Language Models\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2510.00071v2\"},{\"snippet\":\"Recent incidents in certain online games and communities, where anonymity is guaranteed, show that unchecked inappropriate remarks frequently escalate into verbal abuse and even criminal behavior, raising significant social concerns. Consequently, there is a growing need for research on techniques that can detect inappropriate utterances within conversational texts to help build a safer communication environment. Although large-scale language models trained on Korean corpora and chain-of-thought reasoning have recently gained attention, research applying these approaches to inappropriate utterance detection remains limited. In this study, we propose a soft inductive bias[truncated 821 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_763379f8bad137c9\",\"title\":\"Soft Inductive Bias Approach via Explicit Reasoning Perspectives in Inappropriate Utterance Detection Using Large Language Models\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2512.08480v1\"},{\"snippet\":\"Large Vision-Language Models (LVLMs) have recently played a dominant role in multimodal vision-language learning. Despite the great success, it lacks a holistic evaluation of their efficacy. This paper presents a comprehensive evaluation of publicly available large multimodal models by building a LVLM evaluation Hub (LVLM-eHub). Our LVLM-eHub consists of $8$ representative LVLMs such as InstructBLIP and MiniGPT-4, which are thoroughly evaluated by a quantitative capability evaluation and an online arena platform. The former evaluates $6$ categories of multimodal capabilities of LVLMs such as visual question answering and embodied artificial intelligence on $47$ standard[truncated 1096 chars]\",\"evidenceKind\":\"AUTHOR_ABSTRACT\",\"id\":\"src_634613a36356cc47\",\"title\":\"LVLM-eHub: A Comprehensive Evaluation Benchmark for Large Vision-Language Models\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/arxiv.org\\\/abs\\\/2306.09265v1\"}],\"retrievedAt\":1790528903237,\"count\":5,\"source\":\"arxiv\",\"version\":1}"
+      },
+      "startedAt": 1790528896656,
+      "completedAt": 1790528903247
+    },
+    {
+      "id": "crossref",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 2356,
+      "reason": "",
+      "result": "只读查询已完成",
+      "checkpoint": {
+        "runId": "acafb40a-b451-4050-b214-03c36b89ae67",
+        "stepId": "crossref",
+        "version": 1,
+        "epoch": 0,
+        "template": "source_research",
+        "templateVersion": 1,
+        "inputDigest": "238a54f62920dd431510e34e3ff37e41621938c4243cdf8afa5c7eaaed54dd1a",
+        "createdAt": 1790528898991,
+        "expiresAt": 1790531296247,
+        "payloadDigest": "a77038b82111826cc0041bd5d751c4b79e0a73763bbf9e46c0bbd239f748834b",
+        "payload": "{\"coverage\":\"SNIPPETS_AND_METADATA_ONLY\",\"queryDigest\":\"b1bd06f086e45be9adbed9ea9d4bd5cfb98245ccce47def71817ee930b7c2a63\",\"sources\":[{\"snippet\":\"Large language models (LLMs) optimized through reinforcement learning from human feedback (RLHF) exhibit systematic tendencies toward sycophancy-agreeing with users, omitting contradictory evidence, and producing outputs that prioritize plausibility over accuracy. Current evaluation approaches focus on model-level benchmarks and adversarial testing, leaving individual practitioners without structured methods to assess the integrity of LLM outputs before acting on them. This paper introduces the Epporul Plumbline Protocol, an open-source, model-agnostic, four-step post-generation audit framework designed for human-executed evaluation of LLM reasoning. The protocol targets[truncated 620 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_102396db1665b19e\",\"title\":\"Epporul-Plumbline: A Structured Evaluation Protocol for Detecting Sycophancy, Hallucination, and Reasoning Failures in Large Language Model Outputs -A 5-Day Field Test\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.2139\\\/ssrn.6609578\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_d360b67f91f327bd\",\"title\":\"Use large language model to enhance reasoning of another large language model through reward updated GRPO\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.1038\\\/s41598-026-39296-8\"},{\"snippet\":\"Abstract Recent advancements in large language models (LLMs) have demonstrated that explicitly prompting for intermediate reasoning steps significantly improves performance in complex tasks. Traditional chain of thought (CoT) prompting, however, can result in verbose outputs that increase both latency and computational cost. Condensed Reasoning Prompting (CRP) addresses this trade-off by encouraging more concise reasoning traces while maintaining high accuracy. In this paper, we systematically evaluate three prompting strategies: Chain Of Thought (CoT), Chain of Draft (CoD) and Condensed Reasoning across multiple datasets, including MMLU, Big Bench, arithmetic, and symbo[truncated 627 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_693be7d89ed0786a\",\"title\":\"Condensed Reasoning Prompting: Efficient Strategies, Evaluations, and Trade Offs in Large Language Model Reasoning\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.21203\\\/rs.3.rs-6170708\\\/v1\"},{\"snippet\":\"&lt;p&gt;Existing benchmarks for evaluating large language model (LLM) performance on economics and finance tasks suffer from a fundamental measurement problem: they conflate surface fluency with structural economic reasoning, rewarding models that retrieve and recombine memorized content over those that genuinely reason about scarcity, incentives, and equilibrium. As LLMs increasingly saturate these benchmarks—with frontier models exceeding 85% on FLARE, FinQA, and related datasets—the field lacks tools to distinguish genuine economic understanding from sophisticated pattern matching. We introduce EconBench, a hierarchically structured evaluation framework comprising 4[truncated 1292 chars]\",\"evidenceKind\":\"DEPOSITED_ABSTRACT\",\"id\":\"src_25c8f8d971fc44fe\",\"title\":\"EconBench: Rethinking Evaluation for Economic Reasoning in Large Language Models beyond Benchmark Saturation\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.2139\\\/ssrn.6803400\"},{\"snippet\":\"仅有书目信息；未提供摘要，不能据此推断论文结论。\",\"evidenceKind\":\"BIBLIOGRAPHIC_METADATA\",\"id\":\"src_8392aa87d5b71c18\",\"title\":\"Survey on Hallucination in Reasoning Large Language Model: Evaluation, Taxonomy, Intervention, and Open Issues\",\"fullTextRead\":false,\"url\":\"https:\\\/\\\/doi.org\\\/10.3724\\\/2096-7004.di.2025.0131\"}],\"retrievedAt\":1790528898978,\"count\":5,\"source\":\"crossref\",\"version\":1}"
+      },
+      "startedAt": 1790528896635,
+      "completedAt": 1790528898991
+    },
+    {
+      "id": "deliver",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 121,
+      "reason": "",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：【摘要陈述】1) 强化学习（RL）已成为提升大语言模型推理能力的关键技术，策略梯度算法因高效有效而主导后训练阶段；但多数现有基准在理想化设定下评估推理，忽视真实非理想场景 [src_42896446c47525e8]。2) 该文称识别出三种具有实际相关性的代表性非理想场景，具体内容在片段中被截断 [src_42896446c47525e8]。3) 采用推理技术的 LLM 可提升任务表现，但冗长生成带来显著延迟与 token 成本；现有自动提示优化（APO）框架仅以任务准确率为目标，牺牲了推理长度控制 [src_dbf3f977e43fed60]。4) 经 RLHF 优化的 LLM 表现出系统性谄媚倾向：迎合用户、省略矛盾证据、优先产出看似合理而非准确的内容；现有评估侧重模型级基准与对抗测试，个体从业者缺乏采纳前评估输出完整性的结构化方法 [src_102396db1665b19e]。5) 一片段仅含书目信息（题名涉及用 LLM 增强推理），无摘要，不能据此推断论文结论 [src_d360b67f91f327bd]。【推断】多篇摘要共同指向现有 LLM 推理评估的局限：理想化基准 [src_42896446c47525e8]、未计效率成本 [src_dbf3f977e43fed60]、缺少输出诚信维度 [src_102396db1665b19e]，暗示评估需兼顾真实场景、token 效率与可信性。【未知】三种非理想场景的具体定义 [src_42896446c47525e8]、各文方法与实验结论、CROP 具体机制 [src_dbf3f977e43fed60]。未阅读全文，以上仅为摘要级交叉整理，不代表已验证全文。\n[src_42896446c47525e8] https:\/\/arxiv.org\/abs\/2508.04848v1\n[src_dbf3f977e43fed60] https:\/\/arxiv.org\/abs\/2604.14214v1\n[src_102396db1665b19e] https:\/\/doi.org\/10.2139\/ssrn.6609578\n[src_d360b67f91f327bd] https:\/\/doi.org\/10.1038\/s41598-026-39296-8",
+      "checkpoint": {},
+      "startedAt": 1790528955240,
+      "completedAt": 1790528955361
+    },
+    {
+      "id": "review_arxiv",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 15827,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：以下核对仅基于所给两个摘要片段，未阅读全文，不声称已验证全文。\n\n摘要陈述：\n1. 强化学习（RL）已成为提升大语言模型推理能力的关键技术，策略梯度算法因高效有效而主导后训练阶段 [src_42896446c47525e8]。\n2. 大多数现有基准在理想化设定下评估 LLM 推理，忽视了真实非理想场景下的表现 [src_42896446c47525e8]。\n3. 该文称识别出三种具有实际相关性的代表性非理想场景，但具体内容在片段中被截断 [src_42896446c47525e8]。\n4. 采用推理技术的 LLM 可提升任务表现，但冗长生成带来显著延迟与 token 成本 [src_dbf3f977e43fed60]。\n5. 现有自动提示优化（APO）框架仅以任务准确率为目标，代价是生成过长的推理轨迹 [src_dbf3f977e43fed60]。\n6. CROP 是一种 APO 方法，通过在标准准确率之外额外生成文本反馈，对回复长度施加正则化 [src_dbf3f977e43fed60]。\n\n推断：两项工作分别从评估场景（非理想条件）与推理成本（token 效率）两个角度，指出现有 LLM 推理评估与优化体系偏重理想条件和准确率、忽略真实场景与成本的不足 [src_42896446c47525e8][src_dbf3f977e43fed60]。\n\n未知：两文的实验结果、所用数据集、三个非理想场景的具体定义、CROP 的完整方法细节与性能数字均未在片段中出现（被截断），无法核对。\n[src_42896446c47525e8] https:\/\/arxiv.org\/abs\/2508.04848v1\n[src_dbf3f977e43fed60] https:\/\/arxiv.org\/abs\/2604.14214v1",
+      "checkpoint": {},
+      "startedAt": 1790528917272,
+      "completedAt": 1790528933099
+    },
+    {
+      "id": "review_crossref",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 13796,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：【摘要陈述】1) 片段为题名被截断的论文摘要（Epporul-Plumbline: A Structured Evaluation Protocol for Det…），主题涉及 LLM 输出评估 [src_102396db1665b19e]。2) 该摘要称：经 RLHF 优化的 LLM 表现出系统性谄媚倾向——迎合用户、省略矛盾证据、优先产出看似合理而非准确的内容 [src_102396db1665b19e]。3) 摘要称现有评估方法侧重模型级基准与对抗测试，个体从业者缺乏在采纳 LLM 输出前评估其完整性的结构化方法 [src_102396db1665b19e]。【推断】该文关注输出诚信\/完整性评估，与研究问题中的推理能力评估相关但侧重点可能不同，属推断，需全文确认。【未知与限制】摘要中段被截断约 221 字符，所提协议的具体内容未知 [src_102396db1665b19e]。另一片段仅有截断题名 Use large language model to enhance reasoning of another lar… 的书目元数据，无摘要，不能据此推断其方法或结论 [src_d360b67f91f327bd]。两篇的作者、发表信息与结论细节均未知；本核对仅基于给定片段，未阅读全文，不构成全文验证。\n[src_102396db1665b19e] https:\/\/doi.org\/10.2139\/ssrn.6609578\n[src_d360b67f91f327bd] https:\/\/doi.org\/10.1038\/s41598-026-39296-8",
+      "checkpoint": {},
+      "startedAt": 1790528903328,
+      "completedAt": 1790528917124
+    },
+    {
+      "id": "review_wikipedia",
+      "state": 5,
+      "attempt": 1,
+      "activeMillis": 48,
+      "reason": "INSUFFICIENT_SOURCE_EVIDENCE",
+      "result": "可用来源不足，未生成研究结论。",
+      "checkpoint": {},
+      "startedAt": 1790528943566,
+      "completedAt": 1790528943614
+    },
+    {
+      "id": "summary",
+      "state": 3,
+      "attempt": 1,
+      "activeMillis": 11429,
+      "reason": "NO_TOOL_CALL",
+      "result": "范围：仅检索片段、摘要和书目信息，未阅读全文；引用关联不代表事实已被独立证实。\n\nLLM\/智谱 GLM：【摘要陈述】1) 强化学习（RL）已成为提升大语言模型推理能力的关键技术，策略梯度算法因高效有效而主导后训练阶段；但多数现有基准在理想化设定下评估推理，忽视真实非理想场景 [src_42896446c47525e8]。2) 该文称识别出三种具有实际相关性的代表性非理想场景，具体内容在片段中被截断 [src_42896446c47525e8]。3) 采用推理技术的 LLM 可提升任务表现，但冗长生成带来显著延迟与 token 成本；现有自动提示优化（APO）框架仅以任务准确率为目标，牺牲了推理长度控制 [src_dbf3f977e43fed60]。4) 经 RLHF 优化的 LLM 表现出系统性谄媚倾向：迎合用户、省略矛盾证据、优先产出看似合理而非准确的内容；现有评估侧重模型级基准与对抗测试，个体从业者缺乏采纳前评估输出完整性的结构化方法 [src_102396db1665b19e]。5) 一片段仅含书目信息（题名涉及用 LLM 增强推理），无摘要，不能据此推断论文结论 [src_d360b67f91f327bd]。【推断】多篇摘要共同指向现有 LLM 推理评估的局限：理想化基准 [src_42896446c47525e8]、未计效率成本 [src_dbf3f977e43fed60]、缺少输出诚信维度 [src_102396db1665b19e]，暗示评估需兼顾真实场景、token 效率与可信性。【未知】三种非理想场景的具体定义 [src_42896446c47525e8]、各文方法与实验结论、CROP 具体机制 [src_dbf3f977e43fed60]。未阅读全文，以上仅为摘要级交叉整理，不代表已验证全文。\n[src_42896446c47525e8] https:\/\/arxiv.org\/abs\/2508.04848v1\n[src_dbf3f977e43fed60] https:\/\/arxiv.org\/abs\/2604.14214v1\n[src_102396db1665b19e] https:\/\/doi.org\/10.2139\/ssrn.6609578\n[src_d360b67f91f327bd] https:\/\/doi.org\/10.1038\/s41598-026-39296-8",
+      "checkpoint": {},
+      "startedAt": 1790528943709,
+      "completedAt": 1790528955138
+    },
+    {
+      "id": "wikipedia",
+      "state": 5,
+      "attempt": 3,
+      "activeMillis": 31078,
+      "reason": "TIMED_OUT",
+      "result": "只读查询未完成",
+      "checkpoint": {},
+      "startedAt": 1790528933204,
+      "completedAt": 1790528943464
+    }
+  ],
+  "complete": true,
+  "completedAtMillis": 1790528955438
+}

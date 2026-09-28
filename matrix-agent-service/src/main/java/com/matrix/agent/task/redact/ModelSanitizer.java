@@ -75,14 +75,21 @@ public final class ModelSanitizer {
      * 旧实现 {@code substring(0, maxChars) + suffix} 会让总长 > maxChars。
      */
     public static String truncateWithSuffix(String input, int maxChars) {
-        int originalLen = input.length();
-        int keep = Math.min(originalLen, maxChars);
+        if (maxChars <= 0) return "";
+        if (input.length() <= maxChars) return input;
+        int keep = Math.min(input.length(), maxChars);
         String suffix;
-        while (true) {
-            suffix = TRUNCATED_PREFIX + (originalLen - keep) + TRUNCATED_SUFFIX;
-            if (keep + suffix.length() <= maxChars || keep <= 1) break;
+        do {
+            suffix = TRUNCATED_PREFIX + (input.length() - keep) + TRUNCATED_SUFFIX;
+            if (keep + suffix.length() <= maxChars) break;
             keep--;
+        } while (keep >= 0);
+        if (keep < 1) {
+            // Even the marker cannot fit. The caller still owns a strict character budget.
+            keep = maxChars;
+            suffix = "";
         }
+        if (keep > 0 && Character.isHighSurrogate(input.charAt(keep - 1))) keep--;
         return input.substring(0, keep) + suffix;
     }
 

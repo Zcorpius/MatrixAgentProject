@@ -91,7 +91,13 @@ public final class OnDeviceModelGateway implements RetirableModelGateway {
 
     @Override
     public CancellableModelCall prepare(final ModelTurnRequest request) {
+        return prepareStreaming(request, com.matrix.agent.contract.ModelStreamSink.NONE);
+    }
+
+    @Override public CancellableModelCall prepareStreaming(ModelTurnRequest request,
+            com.matrix.agent.contract.ModelStreamSink sink) {
         final CallState state = new CallState();
+        state.sink = sink;
         return new CancellableModelCall() {
             @Override
             public ModelTurn call() {
@@ -175,8 +181,11 @@ public final class OnDeviceModelGateway implements RetirableModelGateway {
                 throw new java.util.concurrent.CancellationException(
                         "端侧推理已取消(generate 前检查)");
             }
-            GenerationResult r = llm.generate(messagesJson, toolsJson, maxNew,
-                    () -> state.cancelled || retired);
+            PublicBodyDecoder decoder = new PublicBodyDecoder(text -> state.sink.accept(
+                    new com.matrix.agent.contract.ModelStreamEvent.BodyDelta(text)), true);
+            GenerationResult r = llm.generateStreaming(messagesJson, toolsJson, maxNew,
+                    () -> state.cancelled || retired, decoder::append);
+            boolean completeBody = decoder.finish();
             // generate 后再检查（cancel 可能在 generate 中到达、currentCancelFlag 绑定前丢失）
             if (state.cancelled || retired) {
                 throw new java.util.concurrent.CancellationException(
@@ -185,6 +194,7 @@ public final class OnDeviceModelGateway implements RetirableModelGateway {
             // 在 mapResult 前记录 timing——异常/cancel 路径已在上面抛出，不会到达此处；
             // FAILED/CANCELLED finishReason 由 updateStats 内部跳过（不覆盖上次有效快照）。
             updateStats(r);
+            if (!completeBody && r.finishReason == OnDeviceFinishReason.STOP) return ModelTurn.of("", FinishReason.NONE);
             return mapResult(r, modelToCap);
         } catch (RuntimeException e) {
             throw e; // terminal
@@ -358,5 +368,6 @@ public final class OnDeviceModelGateway implements RetirableModelGateway {
     /** 单次调用的取消状态（per-call cancel，P0-3）。 */
     private static final class CallState {
         volatile boolean cancelled = false;
+        com.matrix.agent.contract.ModelStreamSink sink = com.matrix.agent.contract.ModelStreamSink.NONE;
     }
 }

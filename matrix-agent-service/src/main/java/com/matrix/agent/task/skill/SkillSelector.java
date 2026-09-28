@@ -45,9 +45,9 @@ public final class SkillSelector {
     }
 
     public String promptFor(AgentRequest request) {
-        String text = request.getText().toLowerCase(Locale.ROOT);
-        boolean bilibili = ExplicitMediaTarget.mentions(request.getText(), MediaApp.BILIBILI);
-        boolean qqmusic = ExplicitMediaTarget.mentions(request.getText(), MediaApp.QQMUSIC);
+        String text = request.getUserInstructionText().toLowerCase(Locale.ROOT);
+        boolean bilibili = ExplicitMediaTarget.mentions(request.getUserInstructionText(), MediaApp.BILIBILI);
+        boolean qqmusic = ExplicitMediaTarget.mentions(request.getUserInstructionText(), MediaApp.QQMUSIC);
         boolean mediaAction = text.contains("播放") || text.contains("暂停")
                 || text.contains("听") || text.startsWith("放") || text.contains("首歌")
                 || text.matches(".*\\b(play|listen|song|songs)\\b.*")
@@ -56,15 +56,19 @@ public final class SkillSelector {
                 || text.contains("的歌") || text.contains("歌曲")
                 || text.matches(".*第[一二三四五六七八1-8](?:首|个|项).*");
         boolean replyToSearch = pendingConfirmation.hasPendingConfirmation(request.getSessionId())
-                && MediaSelectionUtterance.isConfirmationReply(request.getText());
+                && MediaSelectionUtterance.isConfirmationReply(request.getUserInstructionText());
         boolean replyToBilibili = pendingBilibiliSelection.bilibiliSnapshot(
                 request.getSessionId()).isPresent()
-                && (MediaSelectionUtterance.isConfirmationReply(request.getText())
-                || MediaSelectionUtterance.indexChoice(request.getText()) > 0);
-        boolean switchSource = MediaSwitchIntent.isRequested(request.getText());
+                && (MediaSelectionUtterance.isConfirmationReply(request.getUserInstructionText())
+                || MediaSelectionUtterance.indexChoice(request.getUserInstructionText()) > 0);
+        boolean switchSource = MediaSwitchIntent.isRequested(request.getUserInstructionText());
         if (!bilibili && !qqmusic && !mediaAction && !replyToSearch && !replyToBilibili
                 && !switchSource) return "";
-        String id = switchSource ? "media-source-switch"
+        MediaApp searchTarget = MediaSwitchIntent.requestsCandidateSearch(request.getUserInstructionText())
+                ? ExplicitMediaTarget.switchTarget(request.getUserInstructionText()) : null;
+        String id = switchSource && searchTarget == null ? "media-source-switch"
+                : searchTarget == MediaApp.QQMUSIC ? "qqmusic-control"
+                : searchTarget == MediaApp.BILIBILI ? "bilibili-open-video"
                 : bilibili || replyToBilibili ? "bilibili-open-video"
                 : "qqmusic-control";
         SkillCatalog.Skill skill = catalog.get(id);

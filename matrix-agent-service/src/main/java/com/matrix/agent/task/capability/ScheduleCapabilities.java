@@ -13,6 +13,7 @@ public final class ScheduleCapabilities {
                 .property("atMillis", number()).property("afterMinutes", number()).property("localTime", text(5))
                 .property("weekdaysMask", number()).property("timeZone", text(80)).property("followDeviceZone", CanonicalSchema.booleanType().build())
                 .property("action", CanonicalSchema.string().enumValues("NOTIFICATION", "AGENT", "WORKFLOW").build())
+                .property("researchQuery", CanonicalSchema.string().maxLength(300).sensitive(true).sensitivePlaceholder("<research-query>").build())
                 .property("templateId", text(64)).property("templateVersion", number())
                 .property("allowNetwork", CanonicalSchema.booleanType().build()).property("speakResult", CanonicalSchema.booleanType().build())
                 .property("readCalendar", CanonicalSchema.booleanType().build())

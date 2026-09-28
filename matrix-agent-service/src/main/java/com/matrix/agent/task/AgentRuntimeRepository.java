@@ -243,7 +243,11 @@ public final class AgentRuntimeRepository {
     }
     public AgentOutcome executeAutomatic(
             com.matrix.agent.task.scheduler.PreparedAutomaticTask task, CancellationToken token) {
-        return taskDispatchCoordinator.dispatchAutomatic(requestFactory.newAutomaticRequestBuilder(task, token).build(), token, modelRuntime.currentEngine());
+        AgentEngine engine = modelRuntime.currentEngine();
+        if (task.scope().profile() == com.matrix.agent.identity.ExecutionProfile.RESEARCH) {
+            engine = engine.withBudget(AgentBudget.forProfile(task.scope().profile()));
+        }
+        return taskDispatchCoordinator.dispatchAutomatic(requestFactory.newAutomaticRequestBuilder(task, token).build(), token, engine);
     }
 
     public AgentOutcome executePrepared(

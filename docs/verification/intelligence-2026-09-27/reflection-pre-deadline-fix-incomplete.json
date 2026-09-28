@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "model": "glm-5.3",
+  "protocol": "OPENAI_CHAT",
+  "selectedBeforeRun": [
+    "multiturn-qq-expired",
+    "schedule-delay-5",
+    "media-qq-no-session",
+    "media-bili-no-session"
+  ],
+  "repetitions": 2,
+  "reflectionDeadlineMillis": 8000,
+  "productionDefaultEnabled": false,
+  "complete": false,
+  "corpusSha256": "adc867fe4538ac6d4180bb215e2da5b6166a5e5aa0d5d854273ea8cc5b97b61b",
+  "samples": [
+    {
+      "case": "media-qq-no-session",
+      "repeat": 1,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "",
+          "durationMillis": 55908
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TIMEOUT",
+          "durationMillis": 60005,
+          "modelCalls": 2,
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ]
+}

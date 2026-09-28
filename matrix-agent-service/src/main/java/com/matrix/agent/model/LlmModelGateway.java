@@ -127,6 +127,21 @@ public final class LlmModelGateway implements ModelGateway {
         return "structured-json-compatibility";
     }
 
+    @Override public com.matrix.agent.contract.CancellableModelCall prepareStreaming(ModelTurnRequest request,
+            com.matrix.agent.contract.ModelStreamSink sink) {
+        if (config.protocol == ApiProtocol.OLLAMA_CHAT) return prepare(request);
+        return new com.matrix.agent.contract.CancellableModelCall() {
+            @Override public ModelTurn call() {
+                try {
+                    return useAnthropicNative || useOpenAiNative || useGeminiNative
+                            ? client.streamTools(config, request, sink) : compatibilityPlanner.decide(request, sink);
+                } catch (RuntimeException error) { throw error; }
+                catch (Exception error) { throw new IllegalStateException("模型流式响应失败", error); }
+            }
+            @Override public void abort() { /* Transport registers the request token directly. */ }
+        };
+    }
+
     private ModelTurn compatibilityDecide(ModelTurnRequest request) {
         ModelTurn turn = compatibilityPlanner.decide(request);
         Log.d(TAG, "[LlmGateway] compatibility turn finish=" + turn.getFinishReason()

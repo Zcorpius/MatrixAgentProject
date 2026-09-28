@@ -18,7 +18,14 @@ import java.util.function.Consumer;
 public final class OverlayConversationPresenter implements AutoCloseable {
     public record State(String title, String progress, List<UiMessage> messages, int status, boolean connected,
             boolean cancelling, String notice, boolean hasMoreHistory, boolean loadingHistory, String historyError,
-            String primaryMessageId, int runtimeStage) {}
+            String primaryMessageId, int runtimeStage, String assistantStream) {
+        public State(String title, String progress, List<UiMessage> messages, int status, boolean connected,
+                boolean cancelling, String notice, boolean hasMoreHistory, boolean loadingHistory, String historyError,
+                String primaryMessageId, int runtimeStage) {
+            this(title, progress, messages, status, connected, cancelling, notice, hasMoreHistory,
+                    loadingHistory, historyError, primaryMessageId, runtimeStage, "");
+        }
+    }
     private final com.matrix.agent.launcher.data.OverlayConversationSource repository;
     private final Runnable changed;
     private final Map<String, UiMessage> messages = new LinkedHashMap<>();
@@ -42,6 +49,8 @@ public final class OverlayConversationPresenter implements AutoCloseable {
     private int status = -1;
     private long stageGeneration = -1, subscriptionVersion, latestSequence;
     private ConversationRuntimeStage stage;
+    private final com.matrix.agent.launcher.presentation.AssistantStreamState assistantStream =
+            new com.matrix.agent.launcher.presentation.AssistantStreamState();
 
     public OverlayConversationPresenter(com.matrix.agent.launcher.data.OverlayConversationSource repository, OverlayBinding binding,
             Runnable changed) {
@@ -85,6 +94,10 @@ public final class OverlayConversationPresenter implements AutoCloseable {
                 if (!current() || terminal() || !binding.taskId().equals(value.conversationTaskId)
                         || value.generation <= stageGeneration) return;
                 stageGeneration = value.generation; stage = value; changed.run();
+            }
+            @Override public void onAssistantStream(ConversationAssistantStream value) {
+                if (current() && !terminal() && binding.taskId().equals(value.conversationTaskId)
+                        && assistantStream.accept(value)) changed.run();
             }
             @Override public void onConversationInfoChanged(ConversationInfo info) {
                 if (current() && binding.conversationId().equals(info.conversationId)) {
@@ -246,6 +259,7 @@ public final class OverlayConversationPresenter implements AutoCloseable {
         });
     }
     private void finishTerminal() {
+        assistantStream.terminal(binding.taskId());
         cancelling = false; stage = null;
         if (cancellationNotice) { cancellationNotice = false; notice = ""; }
     }
@@ -268,9 +282,11 @@ public final class OverlayConversationPresenter implements AutoCloseable {
                 .sorted(Comparator.comparingLong(UiMessage::sequence).thenComparing(UiMessage::messageId))
                 .collect(java.util.stream.Collectors.toList());
         return new State(title, progress, List.copyOf(timeline), status, connected, cancelling, notice,
-                hasMoreHistory, loadingHistory, historyError, binding.userMessageId(), stage == null ? -1 : stage.stage);
+                hasMoreHistory, loadingHistory, historyError, binding.userMessageId(), stage == null ? -1 : stage.stage,
+                assistantStream.text());
     }
     private void closeSubscription() {
+        assistantStream.clear();
         if (debugSubscription != null) {
             try { debugSubscription.close(); } catch (Exception ignored) { }
             debugSubscription = null;

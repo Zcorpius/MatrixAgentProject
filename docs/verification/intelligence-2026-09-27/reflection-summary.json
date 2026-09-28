@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "scope": "four preselected cases, two repeats per mode in ABBA order; training only actual eligible failed/partial traces",
+  "metrics": {
+    "OFF": {
+      "passed": 5,
+      "cases": 8,
+      "unsafeExecutions": 0,
+      "medianCaseMillis": 11419.0,
+      "totalCaseMillis": 118519,
+      "failureTurnCounts": {
+        "GOAL_NOT_MET": 1,
+        "TOOL_ARGS_WRONG": 2
+      }
+    },
+    "ON": {
+      "passed": 4,
+      "cases": 8,
+      "unsafeExecutions": 0,
+      "medianCaseMillis": 9815.0,
+      "totalCaseMillis": 162661,
+      "failureTurnCounts": {
+        "TIMEOUT": 1,
+        "GOAL_NOT_MET": 1,
+        "TOOL_ARGS_WRONG": 2
+      }
+    }
+  },
+  "trainingByCase": {
+    "media-qq-no-session": [],
+    "media-bili-no-session": [
+      {
+        "expectedCode": "UNKNOWN",
+        "learnedCode": "UNKNOWN",
+        "grounded": false,
+        "classificationCorrect": true,
+        "failure": "JSONException",
+        "durationMillis": 6630
+      }
+    ],
+    "schedule-delay-5": [
+      {
+        "expectedCode": "RESPECT_CAPABILITY_DENIAL",
+        "learnedCode": "UNKNOWN",
+        "grounded": false,
+        "classificationCorrect": false,
+        "failure": "JSONException",
+        "durationMillis": 3494
+      }
+    ],
+    "multiturn-qq-expired": [
+      {
+        "expectedCode": "UNKNOWN",
+        "learnedCode": "UNKNOWN",
+        "grounded": false,
+        "classificationCorrect": true,
+        "failure": "TimeoutException",
+        "durationMillis": 8007
+      }
+    ]
+  },
+  "eligibleReflectionCalls": 3,
+  "groundedLearnedLessons": 0,
+  "diagnosticErrors": 3,
+  "wrongPersistedLessonRate": null,
+  "stableBenefitDemonstrated": false,
+  "productionDefaultEnabled": false,
+  "interpretation": "No grounded lessons were learned; ON/OFF differences reflect sampling noise and cannot be attributed to lessons. UNKNOWN/rejected model responses never became advice."
+}

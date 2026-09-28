@@ -62,7 +62,7 @@ final class TaskRuntimeGraph {
                 values.pendingMediaConfirmation, values.pendingBilibiliSelection);
         PromptContextAssembler promptAssembler = new PromptContextAssembler(
                 values.memoryRecaller, new DefaultPromptBuilder(), skillSelector,
-                values.budget.getMaxMessageChars());
+                values.budget.getMaxMessageChars(), values.failureLessons);
         AgentRuntimeRepository.AgentEngineFactory engineFactory = gateway -> {
             SummaryProvider summaryProvider = gateway instanceof OnDeviceModelGateway
                     ? null : new LlmSummaryProvider(values.modelClient, values.configStore::load);
@@ -73,7 +73,7 @@ final class TaskRuntimeGraph {
                     .auditEventRecorder(values.auditEventRecorder)
                     .promptContextAssembler(promptAssembler)
                     .conversationCompressor(new ConversationCompressor(summaryProvider))
-                    .taskMemoryWriter(new EpisodicMemorySink(values.memoryWriter))
+                    .taskMemoryWriter(new EpisodicMemorySink(values.memoryWriter).andThen(values.failureObserver))
                     // 运行阶段出站端口（I3）：Engine 级一次性装配，事件携带 runtimeRequestId。
                     .taskProgressSink(values.taskProgressSink)
                     .build();
@@ -118,6 +118,8 @@ final class TaskRuntimeGraph {
         AuditEventRecorder auditEventRecorder;
         MemoryRecaller memoryRecaller;
         MemoryWriter memoryWriter;
+        com.matrix.agent.task.port.TaskMemoryWriter failureObserver = com.matrix.agent.task.port.TaskMemoryWriter.NOOP;
+        com.matrix.agent.failure.FailureLessonRecaller failureLessons;
         TaskScheduler scheduler;
         VehicleStateSource vehicleStateSource;
         com.matrix.agent.identity.RuntimeProfileSource runtimeProfileSource;

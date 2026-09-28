@@ -25,6 +25,20 @@ public final class ConversationTaskProgressBridge implements TaskProgressSink {
     private final ConversationRuntimeStageRegistry registry;
     private final UnaryOperator<String> capabilityLabel;
     private final ConcurrentHashMap<String, Binding> bindings = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, BodyState> bodies = new ConcurrentHashMap<>();
+    private volatile java.util.function.Consumer<AssistantStreamEvent> bodySink = ignored -> { };
+    private static final int MAX_BODY_CHARS = 8192;
+    private static final long MIN_INTERVAL_NANOS = 100_000_000L;
+    private static final class BodyState {
+        int turn;
+        long sequence, emittedAt;
+        boolean closed, turnClosed;
+        final StringBuilder text = new StringBuilder();
+    }
+
+    public void setAssistantStreamSink(java.util.function.Consumer<AssistantStreamEvent> sink) {
+        bodySink = sink == null ? ignored -> { } : sink;
+    }
 
     public ConversationTaskProgressBridge(ConversationRuntimeStageRegistry registry,
             UnaryOperator<String> capabilityLabel) {
@@ -36,11 +50,69 @@ public final class ConversationTaskProgressBridge implements TaskProgressSink {
     public void bind(String runtimeRequestId, String conversationId,
             String conversationTaskId) {
         bindings.put(runtimeRequestId, new Binding(conversationId, conversationTaskId));
+        bodies.put(runtimeRequestId, new BodyState());
     }
 
     /** Coordinator 在终态清理时调用；幂等。 */
     public void unbind(String runtimeRequestId) {
-        bindings.remove(runtimeRequestId);
+        Binding binding = bindings.remove(runtimeRequestId);
+        BodyState state = bodies.remove(runtimeRequestId);
+        if (binding != null && state != null) synchronized (state) {
+            state.closed = true;
+            emit(binding, runtimeRequestId, state, true);
+        }
+    }
+
+    @Override public boolean supportsAssistantStream() { return true; }
+
+    @Override public void onAssistantStreamStarted(String request, int turn) {
+        BodyState state = bodies.get(request);
+        Binding binding = bindings.get(request);
+        if (state == null || binding == null) return;
+        synchronized (state) {
+            if (state.closed || turn <= state.turn) return;
+            state.turn = turn;
+            state.turnClosed = false;
+            state.text.setLength(0);
+            state.emittedAt = 0;
+            emit(binding, request, state, true);
+        }
+    }
+
+    @Override public void onAssistantStreamEvent(String request, int turn,
+            com.matrix.agent.contract.ModelStreamEvent event) {
+        BodyState state = bodies.get(request);
+        Binding binding = bindings.get(request);
+        if (state == null || binding == null) return;
+        synchronized (state) {
+            if (state.closed || state.turnClosed || turn != state.turn) return;
+            if (event instanceof com.matrix.agent.contract.ModelStreamEvent.BodyDelta delta) {
+                int room = MAX_BODY_CHARS - state.text.length();
+                if (room <= 0 || delta.text() == null || delta.text().isEmpty()) return;
+                int end = Math.min(room, delta.text().length());
+                if (Character.isHighSurrogate(delta.text().charAt(end - 1))) end--;
+                state.text.append(delta.text(), 0, end);
+                long now = System.nanoTime();
+                if (state.emittedAt == 0 || now - state.emittedAt >= MIN_INTERVAL_NANOS) {
+                    emit(binding, request, state, false);
+                    state.emittedAt = now;
+                }
+            } else if (event instanceof com.matrix.agent.contract.ModelStreamEvent.Completed done) {
+                state.turnClosed = true;
+                emit(binding, request, state, done.reason() != com.matrix.agent.contract.FinishReason.STOP);
+            } else if (event instanceof com.matrix.agent.contract.ModelStreamEvent.Failed) {
+                state.turnClosed = true;
+                emit(binding, request, state, true);
+            }
+        }
+    }
+
+    private void emit(Binding binding, String request, BodyState state, boolean clear) {
+        if (clear) state.text.setLength(0);
+        try {
+            bodySink.accept(new AssistantStreamEvent(binding.conversationId(), binding.conversationTaskId(),
+                    request, state.turn, ++state.sequence, state.text.toString(), clear));
+        } catch (RuntimeException ignored) { /* Optional UI delivery cannot affect execution. */ }
     }
 
     @Override

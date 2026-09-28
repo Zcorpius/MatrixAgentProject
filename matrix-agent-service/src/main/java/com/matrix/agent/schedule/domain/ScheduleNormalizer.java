@@ -44,6 +44,8 @@ public final class ScheduleNormalizer {
         String title = text(input.title, 80, 320, "标题");
         ScheduleAction action = normalizeAction(input.action);
         if (input.graceMillis < 0 || input.graceMillis > 24 * 60 * 60_000L) fail("允许迟到窗口必须在 0 至 24 小时内");
+        if (action.kind == ScheduleCodes.WORKFLOW && com.matrix.agent.schedule.workflow.ResearchWorkflow.ID.equals(action.templateId)
+                && input.graceMillis < com.matrix.agent.identity.ExecutionProfile.RESEARCH.maxActiveMillis()) fail("研究模板的触发后到期窗口至少为 30 分钟（含排队与执行）");
         if (input.misfirePolicy < ScheduleCodes.SKIP || input.misfirePolicy > ScheduleCodes.COALESCE_LATEST) fail("未知补跑策略");
 
         ScheduleTiming t = input.timing;

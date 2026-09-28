@@ -1,0 +1,44 @@
+{
+  "matrix-agent-service:runEvaluations": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1
+  },
+  "matrix-agent-service:testDebugUnitTest": {
+    "tests": 1439,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 2
+  },
+  "matrix-agent-service-lib:testDebugUnitTest": {
+    "tests": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-test:testTrustedReleaseUnitTest": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-test:testUntrustedReleaseUnitTest": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-launcher:testDebugUnitTest": {
+    "tests": 70,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "ondevice:testDebugUnitTest": {
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

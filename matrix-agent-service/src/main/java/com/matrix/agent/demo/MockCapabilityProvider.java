@@ -250,7 +250,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             String value = String.valueOf(ctx.getCall().argument("value"));
             if (!ctx.getRequest().isMemorySaveAllowed()
                     || !MemoryKeyCatalog.isPreferenceKey(key)
-                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getText())) {
+                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getUserInstructionText())) {
                 return new ToolResult(ToolResult.Status.POLICY_REJECTED,
                         "memory.preference.save", "记忆保存需要用户明确指定内容",
                         Collections.emptyMap(), false, elapsedMillis(started));
@@ -365,7 +365,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             long started = System.nanoTime();
             String key = String.valueOf(ctx.getCall().argument("key"));
             if (!MemoryKeyCatalog.isReadablePreferenceKey(key)
-                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getText())) {
+                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getUserInstructionText())) {
                 return new ToolResult(ToolResult.Status.POLICY_REJECTED,
                         "memory.preference.delete", "删除记忆需要用户明确指定目标",
                         Collections.emptyMap(), false, elapsedMillis(started));
@@ -416,7 +416,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             String key = String.valueOf(ctx.getCall().argument("key"));
             String value = String.valueOf(ctx.getCall().argument("value"));
             if (!MemoryKeyCatalog.isSemanticKey(key)
-                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getText())) {
+                    || !MemoryKeyCatalog.saveAuthorized(key, value, ctx.getRequest().getUserInstructionText())) {
                 return new ToolResult(ToolResult.Status.POLICY_REJECTED,
                         "memory.semantic.save", "记忆保存需要用户明确指定内容",
                         Collections.emptyMap(), false, elapsedMillis(started));
@@ -480,7 +480,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             long started = System.nanoTime();
             String key = String.valueOf(ctx.getCall().argument("key"));
             if (!MemoryKeyCatalog.isSemanticKey(key)
-                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getText())) {
+                    || !MemoryKeyCatalog.deleteAuthorized(key, ctx.getRequest().getUserInstructionText())) {
                 return new ToolResult(ToolResult.Status.POLICY_REJECTED,
                         "memory.semantic.delete", "删除记忆需要用户明确指定目标",
                         Collections.emptyMap(), false, elapsedMillis(started));
@@ -514,7 +514,7 @@ public final class MockCapabilityProvider implements CapabilityProvider {
             long started = System.nanoTime();
             String eventId = String.valueOf(ctx.getCall().argument("event_id"));
             if (!EpisodicFactCodec.validEventId(eventId)
-                    || !MemoryKeyCatalog.episodicDeleteAuthorized(eventId, ctx.getRequest().getText())) {
+                    || !MemoryKeyCatalog.episodicDeleteAuthorized(eventId, ctx.getRequest().getUserInstructionText())) {
                 return new ToolResult(ToolResult.Status.POLICY_REJECTED,
                         "memory.episodic.delete", "请先查询历史事件，再明确指定要删除的事件编号",
                         Collections.emptyMap(), false, elapsedMillis(started));

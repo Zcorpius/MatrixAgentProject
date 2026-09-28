@@ -1,0 +1,153 @@
+{
+  "mode": "DEVICE_REAL_APPS",
+  "complete": true,
+  "startedAtDevice": "09-27 22:40:42.000",
+  "device": "Mi 9 SE",
+  "android": "15",
+  "samples": [
+    {
+      "id": "qq-playback-before",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "cap=media\\.qqmusic\\.get_state status=SUCCESS",
+        "playback=(PAUSED|PLAYING|STOPPED)"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "--------- beginning of main",
+        "09-27 22:40:48.120 22155 22256 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:40:48.163 22155 22256 I MatrixMediaProbe: cap=media.qqmusic.get_state status=SUCCESS verified=false error=null dispatch=null playback=PAUSED candidateCount=0 confirmableIndex=null actions=[PLAY, PAUSE, NEXT, PREVIOUS, SEEK]",
+        "09-27 22:40:48.163 22155 22256 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "qq-selection-first-policy",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "cap=media\\.qqmusic\\.play policy=DENIED type=CAPABILITY"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:40:48.594 22155 22280 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:40:48.611 22155 22280 I MatrixMediaProbe: cap=media.qqmusic.play policy=DENIED type=CAPABILITY",
+        "09-27 22:40:48.612 22155 22280 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "bili-selection-first-policy",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "cap=media\\.bilibili\\.resume policy=DENIED type=CAPABILITY"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:40:49.075 22155 22304 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:40:49.095 22155 22304 I MatrixMediaProbe: cap=media.bilibili.resume policy=DENIED type=CAPABILITY",
+        "09-27 22:40:49.095 22155 22304 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "qq-optional-empty-title",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "cap=media\\.qqmusic\\.search_songs status=SUCCESS verified=true",
+        "candidateCount=[1-8]"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:40:49.537 22155 22327 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:40:51.556 22155 22327 I MatrixMediaProbe: cap=media.qqmusic.search_songs status=SUCCESS verified=true error=null dispatch=CONFIRMED playback=null candidateCount=7 confirmableIndex=null actions=null",
+        "09-27 22:40:51.557 22155 22327 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "model-qq-search-confirmation",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "engineSearch state=SUCCEEDED .*asksConfirmation=true",
+        "engineSearch tool=media\\.qqmusic\\.search_songs status=SUCCESS"
+      ],
+      "forbiddenPatterns": [
+        "engineSearch tool=(media\\.qqmusic\\.(play|play_search_result|pause|next|previous|seek|open_app)|media\\.bilibili\\.(resume|pause|open_video|open_search_result)|schedule\\.(create|control)) status="
+      ],
+      "evidence": [
+        "09-27 22:40:52.206 22155 22521 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:40:52.228 22155 22521 I MatrixMediaProbe: engineConfig model=glm-5.3 protocol=OPENAI_CHAT plannerMode=STRUCTURED_JSON_COMPATIBILITY",
+        "09-27 22:40:59.241 22155 22521 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=true elapsedMs=7035",
+        "09-27 22:40:59.241 22155 22521 I MatrixMediaProbe: engineSearch tool=media.qqmusic.search_songs status=SUCCESS error=null confirmableIndex=1",
+        "09-27 22:40:59.242 22155 22521 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "model-qq-negative-confirmation",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "engineReject state=SUCCEEDED .*toolCalls=0 answerReady=true"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:41:00.728 22155 22634 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:41:00.823 22155 22634 I MatrixMediaProbe: engineReject state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=0 answerReady=true elapsedMs=94",
+        "09-27 22:41:00.823 22155 22634 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "model-cross-app-search",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "engineSearch state=SUCCEEDED",
+        "engineSearch tool=media\\.bilibili\\.search_videos status=SUCCESS"
+      ],
+      "forbiddenPatterns": [
+        "engineSearch tool=(media\\.qqmusic\\.(play|play_search_result|pause|next|previous|seek|open_app)|media\\.bilibili\\.(resume|pause|open_video|open_search_result)|schedule\\.(create|control)) status="
+      ],
+      "evidence": [
+        "09-27 22:41:01.292 22155 22659 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:41:01.313 22155 22659 I MatrixMediaProbe: engineConfig model=glm-5.3 protocol=OPENAI_CHAT plannerMode=STRUCTURED_JSON_COMPATIBILITY",
+        "09-27 22:41:12.683 22155 22659 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=false elapsedMs=11391",
+        "09-27 22:41:12.683 22155 22659 I MatrixMediaProbe: engineSearch tool=media.bilibili.search_videos status=SUCCESS error=null confirmableIndex=null",
+        "09-27 22:41:12.684 22155 22659 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "model-bili-negative-confirmation",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "engineReject state=SUCCEEDED .*toolCalls=0 answerReady=true"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:41:13.401 22155 22830 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:41:13.483 22155 22830 I MatrixMediaProbe: engineReject state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=0 answerReady=true elapsedMs=82",
+        "09-27 22:41:13.483 22155 22830 I MatrixMediaProbe: probe finished id=1"
+      ]
+    },
+    {
+      "id": "qq-playback-readback",
+      "passed": true,
+      "completed": true,
+      "requiredPatterns": [
+        "cap=media\\.qqmusic\\.get_state status=SUCCESS",
+        "playback=PAUSED"
+      ],
+      "forbiddenPatterns": [],
+      "evidence": [
+        "09-27 22:41:13.944 22155 22859 I MatrixMediaProbe: probe started id=1",
+        "09-27 22:41:13.969 22155 22859 I MatrixMediaProbe: cap=media.qqmusic.get_state status=SUCCESS verified=false error=null dispatch=null playback=PAUSED candidateCount=0 confirmableIndex=null actions=[PLAY, PAUSE, NEXT, PREVIOUS, SEEK]",
+        "09-27 22:41:13.969 22155 22859 I MatrixMediaProbe: probe finished id=1"
+      ]
+    }
+  ],
+  "apkSha256": "99fbb9060eaac2b8e79a3cb4ec1717321a8a10d350f444ff9ef1f3fc3008bb2a",
+  "serviceStopped": true,
+  "passed": true,
+  "stayAwakeSettingRestored": true
+}

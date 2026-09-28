@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <service android:name="com.matrix.agent.debug.MediaProbeService"
+            android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Privileged debug-only media and model validation" />
+        </service>
         <!-- Root/privileged debug validation only; absent from release variants. -->
         <receiver
             android:name="com.matrix.agent.debug.MediaProbeReceiver"

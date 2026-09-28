@@ -14,10 +14,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Host 持有的全局线程预算登记处（重整版 §2.4.1）：所有长生命周期的业务线程池
  * 统一在此创建、命名与关停，业务域不得自行 {@code Executors.new*}。
  *
- * <p>预算：15 个有界业务 worker、3 个单线程有界 scheduler 与 1 个实时采音线程，
- * Java 线程总上限为 19（不含 MNN native 内部线程）：
+ * <p>预算：20 个有界业务 worker、3 个单线程有界 scheduler 与 1 个实时采音线程，
+ * Java 线程总上限为 24（不含 MNN native 内部线程）：
  * <pre>
  * task 2/32 · network/download 4/16 · mnn 1/2 · db 1/32 · host-dispatch 2/16
+ * conversation 2/16 · reflection 1/8 · embedding-index 1/4 · embedding-install 1/1
  * voice 流水线 5（download/state/agent/lifecycle/lifecycle 五个串行单线程）+ capture 1：
  *   五段是会话状态机的串行隔离边界，存在受控的跨段提交，合并为单 worker
  *   会引入嵌套等待死锁，故按域单独成池（2026-09-15 审计 A-113 收敛时修订）。
@@ -34,6 +35,9 @@ public final class MatrixExecutorRegistry {
     private final ExecutorService networkExecutor;
     private final ExecutorService modelExecutor;
     private final ExecutorService dbExecutor;
+    private final ExecutorService reflectionExecutor;
+    private final ExecutorService embeddingIndexExecutor;
+    private final ExecutorService embeddingInstallExecutor;
     private final ExecutorService hostDispatcherExecutor;
     /** 对话域共享 lane：KeyedSerialDispatcher 在其上按 conversation 串行派发（阶段 A 起）。 */
     private final ExecutorService conversationExecutor;
@@ -54,6 +58,9 @@ public final class MatrixExecutorRegistry {
         networkExecutor = newBoundedPool("matrix-network", 4, 16);
         modelExecutor = newBoundedPool("matrix-mnn", 1, 2);
         dbExecutor = newBoundedPool("matrix-db", 1, 32);
+        reflectionExecutor = newBoundedPool("matrix-reflection", 1, 8);
+        embeddingIndexExecutor = newBoundedPool("matrix-embedding-index", 1, 4);
+        embeddingInstallExecutor = newSingleBounded("matrix-embedding-install", 1);
         // Host work waits for TaskScheduler futures, so it must never share the scheduler pool.
         hostDispatcherExecutor = newBoundedPool("matrix-host-dispatch", 2, 16);
         // 对话 lane 与 host-dispatch 同容量：每个正在排水的 conversation 占一个 worker，
@@ -66,6 +73,9 @@ public final class MatrixExecutorRegistry {
         allExecutors.add(networkExecutor);
         allExecutors.add(modelExecutor);
         allExecutors.add(dbExecutor);
+        allExecutors.add(reflectionExecutor);
+        allExecutors.add(embeddingIndexExecutor);
+        allExecutors.add(embeddingInstallExecutor);
         allExecutors.add(hostDispatcherExecutor);
         allExecutors.add(conversationExecutor);
         allSchedulers.add(timerScheduler);
@@ -105,6 +115,15 @@ public final class MatrixExecutorRegistry {
     public ExecutorService dbExecutor() {
         return dbExecutor;
     }
+
+    /** Optional diagnostic I/O cannot occupy the interactive model workers. */
+    public ExecutorService reflectionExecutor() { return reflectionExecutor; }
+
+    /** Bounded index preparation; native inference remains on modelExecutor. */
+    public ExecutorService embeddingIndexExecutor() { return embeddingIndexExecutor; }
+
+    /** Artifact copy and SHA verification cannot occupy the inference or index lane. */
+    public ExecutorService embeddingInstallExecutor() { return embeddingInstallExecutor; }
 
     /** Host dispatches durable requests here; it may wait on taskExecutor but never shares it. */
     /** 对话域唯一执行 lane；Coordinator 的阻塞 runtime 调用与 keyed 排水都在此运行。 */

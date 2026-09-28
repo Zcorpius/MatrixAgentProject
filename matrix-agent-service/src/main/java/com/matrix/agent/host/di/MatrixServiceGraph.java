@@ -50,7 +50,7 @@ public final class MatrixServiceGraph {
                 container.getConversationProgressBridge(), container.getHttpClient().provider(),
                 container.getExecutorRegistry().networkExecutor(),
                 container.getModelConfigStore(),
-                container.getExecutorRegistry().networkExecutor());
+                container.getExecutorRegistry().networkExecutor(), container.getExecutorRegistry().timerScheduler());
         handoff = new com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub(
                 container.getAppContext(), container.getHandoffCoordinator());
         overlayInteraction = android.os.Build.VERSION.SDK_INT >= 35

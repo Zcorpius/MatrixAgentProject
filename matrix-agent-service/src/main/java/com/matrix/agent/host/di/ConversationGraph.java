@@ -80,7 +80,7 @@ final class ConversationGraph {
             okhttp3.OkHttpClient voiceCloudClient,
             ExecutorService voiceOutputExecutor,
             com.matrix.agent.model.SecureModelConfigStore modelConfigStore,
-            ExecutorService attachmentIoExecutor) {
+            ExecutorService attachmentIoExecutor, java.util.concurrent.ScheduledExecutorService attachmentTimers) {
         if (database == null) {
             // 降级模式：不装配任何组件，gate 永不 open，featureFlags 不通告该位。
             this.coordinator = null;
@@ -103,7 +103,7 @@ final class ConversationGraph {
         // 附件域（I6 §9.2）：正文与元数据全驻 SQLCipher；Coordinator 端口负责提交验证
         // 与受限文本投影（ModelSanitizer 同配置），冻结在受理事务内由 store 完成。
         this.attachmentStore = new com.matrix.agent.attachment.RoomAttachmentStagingStore(
-                database.conversationAttachmentDao(), database::runInTransaction);
+                database.conversationAttachmentDao(), database.attachmentChunkDao(), database::runInTransaction);
         ConversationStore store = new RoomConversationStore(database, database::runInTransaction,
                 draftStore::consumeSubmittedInCallerTransaction,
                 database.conversationAttachmentDao(),
@@ -120,12 +120,12 @@ final class ConversationGraph {
                         "DRIVER", "DRIVER"),
                 runtime::offerSteer);
         this.coordinator.setAttachmentPort(new com.matrix.agent.attachment
-                .ConversationAttachmentPort(database.conversationAttachmentDao(),
+                .ConversationAttachmentPort(database.conversationAttachmentDao(), database.attachmentChunkDao(),
                 new com.matrix.agent.attachment.AttachmentContextProjector(
-                        sharedBudget.getMaxMessageChars())));
+                        sharedBudget.getMaxMessageChars()), sharedBudget.getMaxMessageChars()));
         this.attachmentService = new com.matrix.agent.host.rpc
                 .ConversationAttachmentServiceStub(attachmentStore, store, persistence,
-                callers, attachmentIoExecutor);
+                callers, attachmentIoExecutor, attachmentTimers);
         // 运行阶段追踪（I3）：bind 映射 + QUEUED/清理生命周期挂在协调器上。
         this.coordinator.setProgressTracking(progressRegistry, progressBridge);
         // 自动标题（评估 v1.0 §4.1）：功能型轻量调用——同一 LlmClient + 配置 supplier，

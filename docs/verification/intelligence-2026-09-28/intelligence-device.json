@@ -1,0 +1,896 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-28T09:52:38.844181Z",
+  "complete": true,
+  "device": "Mi 9 SE",
+  "sdk": 35,
+  "synthetic": true,
+  "checks": [
+    {
+      "name": "production_encrypted_schema",
+      "result": {
+        "version": 20,
+        "completedChatModels": [
+          "Qwen3-0.6B-MNN"
+        ]
+      },
+      "passed": true,
+      "durationMillis": 5
+    },
+    {
+      "name": "legacy_room_migrations",
+      "result": {
+        "from": 16,
+        "to": 20,
+        "sourceRowPreserved": true,
+        "isolatedPlainSqlite": true
+      },
+      "passed": true,
+      "durationMillis": 148
+    },
+    {
+      "name": "stream_explicit_json_null",
+      "result": {
+        "androidJsonRuntime": true
+      },
+      "passed": true,
+      "durationMillis": 4
+    },
+    {
+      "name": "research_prompt_budget",
+      "result": {
+        "samples": [
+          {
+            "stress": "HTML_ESCAPE",
+            "characters": 4077,
+            "utf8Bytes": 4429,
+            "independentSources": 3
+          },
+          {
+            "stress": "MULTIBYTE_UTF8",
+            "characters": 2990,
+            "utf8Bytes": 8190,
+            "independentSources": 3
+          }
+        ],
+        "userPlanTouched": false
+      },
+      "passed": true,
+      "durationMillis": 51
+    },
+    {
+      "name": "packaged_embedding_install",
+      "result": {
+        "isolatedFreshDirectory": true,
+        "artifactSource": "SIGNED_APK_ASSETS",
+        "dimension": 512,
+        "firstInstallAndEncodeMillis": 1334
+      },
+      "passed": true,
+      "durationMillis": 1367
+    },
+    {
+      "name": "attachment_bm25_max_corpus",
+      "result": {
+        "sourceBytes": 8160060,
+        "chunks": 4000,
+        "rankMillis": 1690,
+        "tailRetrieved": true
+      },
+      "passed": true,
+      "durationMillis": 30292
+    },
+    {
+      "name": "memory_vector_room_lifecycle",
+      "result": {
+        "replaceCascade": true,
+        "deleteCAS": true,
+        "epochCAS": true
+      },
+      "passed": true,
+      "durationMillis": 82
+    },
+    {
+      "name": "attachment_room_lifecycle",
+      "result": {
+        "fullChars": 24012,
+        "chunks": 36,
+        "tailRetrieved": true,
+        "deleteCascade": true,
+        "failedNoIndex": true
+      },
+      "passed": true,
+      "durationMillis": 68
+    },
+    {
+      "name": "attachment_pipe_cancellation",
+      "result": {
+        "deleteUnblocked": true,
+        "clearUnblocked": true,
+        "deadlineUnblocked": true
+      },
+      "passed": true,
+      "durationMillis": 187
+    },
+    {
+      "name": "failure_lesson_room_lifecycle",
+      "result": {
+        "deduplicated": true,
+        "scoped": true,
+        "ttl": true,
+        "readOnlyRecall": true,
+        "epochCAS": true
+      },
+      "passed": true,
+      "durationMillis": 73
+    },
+    {
+      "name": "embedding_jni_hybrid_comparison",
+      "result": {
+        "modelVersion": "7999e1d3-mnn3.2-int8-v1",
+        "dimension": 512,
+        "minimumCosine": 0.5,
+        "documents": 12,
+        "samples": [
+          {
+            "queryIndex": 0,
+            "split": "calibration",
+            "expected": [
+              "fact.drink"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 9
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 174
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 145
+            }
+          },
+          {
+            "queryIndex": 1,
+            "split": "holdout",
+            "expected": [
+              "fact.drink"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.drink"
+              ],
+              "durationMillis": 140
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.drink"
+              ],
+              "durationMillis": 139
+            }
+          },
+          {
+            "queryIndex": 2,
+            "split": "calibration",
+            "expected": [
+              "fact.commute"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 145
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 150
+            }
+          },
+          {
+            "queryIndex": 3,
+            "split": "holdout",
+            "expected": [
+              "fact.commute"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.commute",
+                "fact.drink"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.commute"
+              ],
+              "durationMillis": 156
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.commute",
+                "fact.drink"
+              ],
+              "durationMillis": 142
+            }
+          },
+          {
+            "queryIndex": 4,
+            "split": "calibration",
+            "expected": [
+              "fact.weekend"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 138
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 139
+            }
+          },
+          {
+            "queryIndex": 5,
+            "split": "holdout",
+            "expected": [
+              "fact.weekend"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.reading",
+                "fact.weekend"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.travel"
+              ],
+              "durationMillis": 146
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.reading",
+                "fact.travel",
+                "fact.weekend"
+              ],
+              "durationMillis": 139
+            }
+          },
+          {
+            "queryIndex": 6,
+            "split": "calibration",
+            "expected": [
+              "fact.pet"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.reading"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.pet"
+              ],
+              "durationMillis": 152
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.pet",
+                "fact.reading"
+              ],
+              "durationMillis": 132
+            }
+          },
+          {
+            "queryIndex": 7,
+            "split": "holdout",
+            "expected": [
+              "fact.pet"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.pet"
+              ],
+              "durationMillis": 147
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.pet"
+              ],
+              "durationMillis": 127
+            }
+          },
+          {
+            "queryIndex": 8,
+            "split": "calibration",
+            "expected": [
+              "fact.exercise"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.drink"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 152
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.drink"
+              ],
+              "durationMillis": 140
+            }
+          },
+          {
+            "queryIndex": 9,
+            "split": "holdout",
+            "expected": [
+              "fact.exercise"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 140
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 137
+            }
+          },
+          {
+            "queryIndex": 10,
+            "split": "calibration",
+            "expected": [
+              "fact.reading"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.instrument"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.reading"
+              ],
+              "durationMillis": 144
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.instrument",
+                "fact.reading"
+              ],
+              "durationMillis": 152
+            }
+          },
+          {
+            "queryIndex": 11,
+            "split": "holdout",
+            "expected": [
+              "fact.reading"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 5
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 260
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 228
+            }
+          },
+          {
+            "queryIndex": 12,
+            "split": "calibration",
+            "expected": [
+              "fact.clothes"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.clothes"
+              ],
+              "durationMillis": 152
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.clothes"
+              ],
+              "durationMillis": 138
+            }
+          },
+          {
+            "queryIndex": 13,
+            "split": "holdout",
+            "expected": [
+              "fact.clothes"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.clothes"
+              ],
+              "durationMillis": 161
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.clothes"
+              ],
+              "durationMillis": 127
+            }
+          },
+          {
+            "queryIndex": 14,
+            "split": "calibration",
+            "expected": [
+              "fact.sleep"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 140
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 138
+            }
+          },
+          {
+            "queryIndex": 15,
+            "split": "holdout",
+            "expected": [
+              "fact.sleep"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.sleep"
+              ],
+              "durationMillis": 139
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.sleep"
+              ],
+              "durationMillis": 127
+            }
+          },
+          {
+            "queryIndex": 16,
+            "split": "calibration",
+            "expected": [
+              "fact.instrument"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.instrument"
+              ],
+              "durationMillis": 130
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.instrument"
+              ],
+              "durationMillis": 122
+            }
+          },
+          {
+            "queryIndex": 17,
+            "split": "holdout",
+            "expected": [
+              "fact.instrument"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.hobby",
+                "fact.commute"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.instrument"
+              ],
+              "durationMillis": 145
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.hobby",
+                "fact.instrument",
+                "fact.commute"
+              ],
+              "durationMillis": 130
+            }
+          },
+          {
+            "queryIndex": 18,
+            "split": "calibration",
+            "expected": [
+              "fact.hobby"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 138
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 136
+            }
+          },
+          {
+            "queryIndex": 19,
+            "split": "holdout",
+            "expected": [
+              "fact.hobby"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.hobby"
+              ],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 131
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.hobby"
+              ],
+              "durationMillis": 130
+            }
+          },
+          {
+            "queryIndex": 20,
+            "split": "calibration",
+            "expected": [
+              "fact.cooking"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.cooking"
+              ],
+              "durationMillis": 145
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.cooking"
+              ],
+              "durationMillis": 129
+            }
+          },
+          {
+            "queryIndex": 21,
+            "split": "holdout",
+            "expected": [
+              "fact.cooking"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.cooking"
+              ],
+              "durationMillis": 146
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.cooking"
+              ],
+              "durationMillis": 159
+            }
+          },
+          {
+            "queryIndex": 22,
+            "split": "calibration",
+            "expected": [
+              "fact.travel"
+            ],
+            "LEXICAL": {
+              "keys": [
+                "fact.reading"
+              ],
+              "durationMillis": 3
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.travel"
+              ],
+              "durationMillis": 139
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.reading",
+                "fact.travel"
+              ],
+              "durationMillis": 130
+            }
+          },
+          {
+            "queryIndex": 23,
+            "split": "holdout",
+            "expected": [
+              "fact.travel"
+            ],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 2
+            },
+            "VECTOR": {
+              "keys": [
+                "fact.travel"
+              ],
+              "durationMillis": 128
+            },
+            "HYBRID": {
+              "keys": [
+                "fact.travel"
+              ],
+              "durationMillis": 130
+            }
+          },
+          {
+            "queryIndex": 24,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 138
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 122
+            }
+          },
+          {
+            "queryIndex": 25,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 140
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 131
+            }
+          },
+          {
+            "queryIndex": 26,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 130
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 134
+            }
+          },
+          {
+            "queryIndex": 27,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 139
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 124
+            }
+          },
+          {
+            "queryIndex": 28,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 137
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 121
+            }
+          },
+          {
+            "queryIndex": 29,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 125
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 119
+            }
+          },
+          {
+            "queryIndex": 30,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 137
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 129
+            }
+          },
+          {
+            "queryIndex": 31,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 136
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 122
+            }
+          },
+          {
+            "queryIndex": 32,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 140
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 129
+            }
+          },
+          {
+            "queryIndex": 33,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 132
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 124
+            }
+          },
+          {
+            "queryIndex": 34,
+            "split": "calibration",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 142
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 128
+            }
+          },
+          {
+            "queryIndex": 35,
+            "split": "holdout",
+            "expected": [],
+            "LEXICAL": {
+              "keys": [],
+              "durationMillis": 1
+            },
+            "VECTOR": {
+              "keys": [],
+              "durationMillis": 134
+            },
+            "HYBRID": {
+              "keys": [],
+              "durationMillis": 130
+            }
+          }
+        ],
+        "realJni": true,
+        "productionRetrieval": true,
+        "endToEndAnswerQuality": null
+      },
+      "passed": true,
+      "durationMillis": 12251
+    }
+  ],
+  "finishedAt": "2026-09-28T09:53:23.431054Z"
+}

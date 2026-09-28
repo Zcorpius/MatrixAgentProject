@@ -17,20 +17,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/**
- * Semantic Memory 召回源——基于 MemoryRecordDao 的语义层召回。
- *
- * <p>替代旧版 {@link EmptySemanticMemorySource}——按 (userId, zone, layer="semantic")
- * 拉取所有语义层记录,用关键词匹配 + score 排序。
- *
- * <p><b>不引入 embedding / 向量 DB</b>——硬约束纯 Java,Android 端无开箱即用向量数据库。
- * 关键词匹配:把 userText 切词(空格 / 标点 / 中文按字符),与 MemoryRecordEntity.key / value
- * 匹配命中次数作为 score;MemoryRecordEntity.score 字段作为静态优先级加分。
- *
- * <p><b>候选</b>:接入 on-device embedding(如 TensorFlow Lite MiniLM),score 改为
- * cosine similarity + 关键词命中的加权融合。
- *
- * <p><b>fail-open</b>:Dao 异常仅 log,返回空 list——记忆是增强能力,不能成为车机任务入口的单点故障。
+/** Scoped semantic retrieval: lexical baseline with optional, versioned on-device vector ranking.
+ * Reciprocal rank fusion keeps the two score scales separate; values still pass the existing
+ * prompt projection boundary and must be read through an authorized memory tool.
  */
 public final class SemanticMemorySourceImpl implements SemanticMemorySource {
     private static final String TAG = "MatrixAgent";
@@ -48,6 +37,9 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
 
     private final MemoryRecordDao dao;
     private final int limit;
+    public enum Mode { LEXICAL, VECTOR, HYBRID }
+    private final com.matrix.agent.embedding.SemanticVectorRecall vectors;
+    private final Mode mode;
 
     public SemanticMemorySourceImpl(MemoryRecordDao dao) {
         this(dao, DEFAULT_LIMIT);
@@ -55,8 +47,15 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
 
     /** 测试用——注入自定义 limit。 */
     public SemanticMemorySourceImpl(MemoryRecordDao dao, int limit) {
+        this(dao, limit, com.matrix.agent.embedding.SemanticVectorRecall.NONE, Mode.LEXICAL);
+    }
+
+    public SemanticMemorySourceImpl(MemoryRecordDao dao, int limit,
+            com.matrix.agent.embedding.SemanticVectorRecall vectors, Mode mode) {
         if (dao == null) throw new IllegalArgumentException("dao 不能为空");
         this.dao = dao;
+        this.vectors = java.util.Objects.requireNonNull(vectors);
+        this.mode = java.util.Objects.requireNonNull(mode);
         this.limit = limit <= 0 ? DEFAULT_LIMIT : limit;
     }
 
@@ -97,6 +96,27 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
             }
         });
 
+        if (mode != Mode.LEXICAL) {
+            List<com.matrix.agent.embedding.SemanticVectorRecall.Hit> vectorHits;
+            try { vectorHits = vectors.recall(scope, userText); }
+            catch (RuntimeException unavailable) { vectorHits = List.of(); }
+            // Hybrid is fail-open to the lexical baseline; VECTOR is a pure comparison mode.
+            if (mode == Mode.VECTOR && vectorHits.isEmpty()) return List.of();
+            if (!vectorHits.isEmpty()) {
+                java.util.Map<String, Double> ranks = new java.util.HashMap<>();
+                if (mode == Mode.HYBRID) for (int i = 0; i < scored.size(); i++) {
+                    ranks.put(scored.get(i).row.key, 1.0 / (60 + i + 1));
+                }
+                for (int i = 0; i < vectorHits.size(); i++) {
+                    ranks.merge(vectorHits.get(i).key(), 1.0 / (60 + i + 1), Double::sum);
+                }
+                scored.clear();
+                for (var row : rows) if (ranks.containsKey(row.key)) scored.add(new Scored(row, ranks.get(row.key)));
+                scored.sort(Comparator.comparingDouble((Scored hit) -> hit.score).reversed()
+                        .thenComparing(hit -> hit.row.key));
+            }
+        }
+
         List<MemorySnippet> out = new ArrayList<>(Math.min(scored.size(), effectiveLimit));
         for (int i = 0; i < scored.size() && out.size() < effectiveLimit; i++) {
             Scored hit = scored.get(i);
@@ -109,7 +129,7 @@ public final class SemanticMemorySourceImpl implements SemanticMemorySource {
     }
 
     /**
-     * 简单分词:空格 / 标点切英文;中文按单字。小写化去重。
+     * 分词：英文按词，连续中文按二元组，小写化并移除高频停用词。
      *
      * <p>中文连续字符不累加——每个 CJK 字符单独成 token(中文分词需要词典,这里走最保守的
      * 单字切分);CJK 与 Latin 拼接也按字符类型切换边界。

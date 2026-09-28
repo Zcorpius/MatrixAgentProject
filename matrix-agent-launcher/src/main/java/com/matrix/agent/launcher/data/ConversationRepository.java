@@ -40,6 +40,7 @@ public final class ConversationRepository implements OverlayConversationSource {
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
         default void onRuntimeStageChanged(ConversationRuntimeStage stage) { }
+        default void onAssistantStream(com.matrix.agent.api.conversation.ConversationAssistantStream snapshot) { }
         default void onConversationError(String conversationId, int errorCode) { }
     }
 
@@ -378,6 +379,10 @@ public final class ConversationRepository implements OverlayConversationSource {
                         @Override public void onRuntimeStageChanged(
                                 ConversationRuntimeStage stage) {
                             listener.onRuntimeStageChanged(stage);
+                        }
+
+                        @Override public void onAssistantStream(com.matrix.agent.api.conversation.ConversationAssistantStream snapshot) {
+                            listener.onAssistantStream(snapshot);
                         }
                         @Override public void onConversationError(String conversationId,
                                 int errorCode) {

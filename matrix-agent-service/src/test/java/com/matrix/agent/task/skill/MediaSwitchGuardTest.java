@@ -21,6 +21,16 @@ import java.util.Collections;
 import java.util.Map;
 
 public final class MediaSwitchGuardTest {
+    @Test public void targetSearchDoesNotRequirePlaybackButCannotAuthorizePlayback() {
+        MediaSwitchGuard guard = new MediaSwitchGuard(
+                AgentRequest.builder("改用B站搜索星海旅行", Actor.DRIVER).build());
+        assertNull(guard.before(call(MediaCapabilities.BILI_SEARCH)));
+        assertNotNull(guard.before(call(MediaCapabilities.QQ_SEARCH)));
+        assertNotNull(guard.before(call(MediaCapabilities.BILI_RESUME)));
+        assertNotNull(guard.before(call(MediaCapabilities.BILI_OPEN_RESULT)));
+        assertNotNull(guard.before(call(MediaCapabilities.BILI_OPEN)));
+    }
+
     @Test public void targetPlaybackWaitsForVerifiedSourcePause() {
         MediaSwitchGuard guard = new MediaSwitchGuard(
                 AgentRequest.builder("从QQ音乐切换到B站", Actor.DRIVER).build());

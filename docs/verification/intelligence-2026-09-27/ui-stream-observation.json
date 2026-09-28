@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "device": "Mi 9 SE / Android 15",
+  "source": "adb screencap manually inspected; raw frames remain in ignored local directory",
+  "captureDirectory": ".model-evaluation/ui-stream-rain-valid",
+  "submittedAt": "2026-09-28T01:05:51.807188+08:00",
+  "requestId": "732306df-1d46-4790-bf47-9aa2fe6dee13",
+  "question": "Explain how rain forms in 12 short numbered points.",
+  "firstVisibleSecondsBound": [
+    13.841,
+    15.052
+  ],
+  "timing": "Host monotonic time relative to send tap; screenshot acquisition adds a bounded sampling interval. Not interchangeable with model outlet TTFT.",
+  "partialBodyVisible": true,
+  "grewAcrossFrames": true,
+  "reasoningOrToolJsonVisible": false,
+  "cancelledRequest": {
+    "requestId": "f6be4e22-68d4-4d8f-8318-72841467b1f8",
+    "state": "CANCELLED",
+    "durationMillis": 57212,
+    "uiTerminal": "任务已取消。",
+    "firstBodyBeforeCancel": false
+  },
+  "observations": [
+    {
+      "frame": 19,
+      "state": "WAITING",
+      "visibleNumberedPoint": 0,
+      "captureStartSeconds": 13.841,
+      "captureEndSeconds": 14.372,
+      "sha256": "2b0ca06b848bd76f8d5bc1821240cfcc08d0ad7dfb45a5bee6fbf4c9865e6c11"
+    },
+    {
+      "frame": 20,
+      "state": "STREAMING",
+      "visibleNumberedPoint": 3,
+      "captureStartSeconds": 14.475,
+      "captureEndSeconds": 15.052,
+      "sha256": "d0fa974748744ac808dc3fbe9babd357c849d506363f0583a5e81479be625eda"
+    },
+    {
+      "frame": 21,
+      "state": "STREAMING",
+      "visibleNumberedPoint": 6,
+      "captureStartSeconds": 15.158,
+      "captureEndSeconds": 15.709,
+      "sha256": "2171529daec678eedf1ae1c77d9b9aed65b80eceeffa28b90b3ee890eaa1c93e"
+    },
+    {
+      "frame": 22,
+      "state": "STREAMING",
+      "visibleNumberedPoint": 8,
+      "captureStartSeconds": 15.815,
+      "captureEndSeconds": 16.415,
+      "sha256": "0dd1d51b8e60aff63f0c440074d508fa110cc90d4245cbaa77e45c075e5938ac"
+    },
+    {
+      "frame": 44,
+      "state": "FINAL",
+      "visibleNumberedPoint": 12,
+      "captureStartSeconds": 31.341,
+      "captureEndSeconds": 31.938,
+      "sha256": "dedb4618f02ac200e6758404d6b1b888de72881c2f07fda1ae214f41834be7a1"
+    }
+  ],
+  "reconnect": {
+    "method": "service APK replace/install; Launcher remained alive and rebound",
+    "sameFinalBody": true,
+    "beforeChars": 398,
+    "afterChars": 398,
+    "bodySha256": "9392e8e521ac8e25828610e57d84d28d7e568a16906bd81c55a8ca6b7589d4d2"
+  },
+  "coldLauncherReload": {
+    "method": "force-stop Launcher, start Launcher, load timeline from restarted Host",
+    "sameFinalBody": true,
+    "bodyChars": 398
+  },
+  "model": "glm-5.3",
+  "protocol": "OPENAI_CHAT",
+  "planner": "STRUCTURED_JSON_COMPATIBILITY",
+  "plannerEvidence": "unchanged saved configuration, debug engineConfig observation at 2026-09-28T01:29:25.057+08:00"
+}

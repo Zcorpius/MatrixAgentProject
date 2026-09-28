@@ -26,18 +26,19 @@ final class GeminiToolProtocol {
 
     static JSONObject buildRequest(ModelConfig config, String system, List<AgentMessage> conversation,
             List<ToolDefinition> tools) throws Exception {
-        if (tools == null || tools.isEmpty()) throw new IllegalArgumentException("ToolDefinition 不能为空");
+        java.util.Objects.requireNonNull(tools, "tools");
         JSONArray declarations = new JSONArray();
         Map<String, String> names = new LinkedHashMap<>();
         for (ToolDefinition tool : tools) {
             declarations.put(toDeclaration(tool));
             names.put(tool.getCapabilityName(), tool.getModelName());
         }
-        return new JSONObject().put("systemInstruction", new JSONObject().put("parts",
+        JSONObject request = new JSONObject().put("systemInstruction", new JSONObject().put("parts",
                 new JSONArray().put(new JSONObject().put("text", system))))
                 .put("contents", toContents(conversation, names))
-                .put("tools", new JSONArray().put(new JSONObject().put("functionDeclarations", declarations)))
                 .put("generationConfig", new JSONObject().put("temperature", 0.1));
+        if (!tools.isEmpty()) request.put("tools", new JSONArray().put(new JSONObject().put("functionDeclarations", declarations)));
+        return request;
     }
 
     static ModelTurn parseResponse(JSONObject response, List<ToolDefinition> tools) throws Exception {

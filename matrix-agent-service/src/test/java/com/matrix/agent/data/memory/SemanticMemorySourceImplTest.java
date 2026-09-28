@@ -13,6 +13,7 @@ import com.matrix.agent.data.memory.MemorySnippet;
 import com.matrix.agent.identity.VehicleZone;
 import com.matrix.agent.data.db.MemoryRecordDao;
 import com.matrix.agent.data.db.MemoryRecordEntity;
+import com.matrix.agent.embedding.SemanticVectorRecall;
 
 /**
  * SemanticMemorySourceImpl JVM 测试——关键词召回 + score 排序 + fail-open。
@@ -115,6 +116,52 @@ public final class SemanticMemorySourceImplTest {
         java.util.Set<String> tokens = SemanticMemorySourceImpl.tokenize("a 大测");
         assertTrue(tokens.contains("大测"));
         assertTrue(!tokens.contains("大"));
+    }
+
+    @Test public void hybridFusesRanksWithoutComparingCosineToLexicalScore() {
+        FakeDao dao = new FakeDao();
+        dao.add("user-d", "driver", "semantic", "fact.lexical", "高速路线", 1.0, 10);
+        dao.add("user-d", "driver", "semantic", "fact.vector", "风景路线", 0.0, 20);
+        dao.add("user-p", "passenger", "semantic", "fact.other", "高速路线", 1.0, 30);
+        SemanticVectorRecall vectors = (scope, query) -> List.of(
+                new SemanticVectorRecall.Hit("fact.vector", 0.51),
+                new SemanticVectorRecall.Hit("fact.lexical", 0.99),
+                new SemanticVectorRecall.Hit("fact.other", 1.0));
+        var source = new SemanticMemorySourceImpl(dao, 5, vectors,
+                SemanticMemorySourceImpl.Mode.HYBRID);
+
+        var hits = source.recallSemantic(new MemoryScope("user-d", VehicleZone.DRIVER), "高速路线", 2);
+        assertEquals(2, hits.size());
+        assertEquals("fact.lexical", hits.get(0).getKey());
+        assertEquals("fact.vector", hits.get(1).getKey());
+    }
+
+    @Test public void vectorModeIsPureAndEmptyVectorDoesNotBorrowLexicalHits() {
+        FakeDao dao = new FakeDao();
+        dao.add("user-d", "driver", "semantic", "fact.lexical", "高速路线", 1.0, 10);
+        dao.add("user-d", "driver", "semantic", "fact.vector", "风景路线", 0.0, 20);
+        var scope = new MemoryScope("user-d", VehicleZone.DRIVER);
+        var vectorOnly = new SemanticMemorySourceImpl(dao, 5,
+                (ignored, query) -> List.of(new SemanticVectorRecall.Hit("fact.vector", 0.8)),
+                SemanticMemorySourceImpl.Mode.VECTOR);
+        assertEquals("fact.vector", vectorOnly.recallSemantic(scope, "高速路线", 5).get(0).getKey());
+        assertEquals(1, vectorOnly.recallSemantic(scope, "高速路线", 5).size());
+        var absent = new SemanticMemorySourceImpl(dao, 5, SemanticVectorRecall.NONE,
+                SemanticMemorySourceImpl.Mode.VECTOR);
+        assertTrue(absent.recallSemantic(scope, "高速路线", 5).isEmpty());
+    }
+
+    @Test public void vectorFailureFallsBackOnlyInHybridMode() {
+        FakeDao dao = new FakeDao();
+        dao.add("user-d", "driver", "semantic", "fact.route", "高速路线", 1.0, 10);
+        SemanticVectorRecall unavailable = (scope, query) -> { throw new IllegalStateException("unavailable"); };
+        var scope = new MemoryScope("user-d", VehicleZone.DRIVER);
+        var hybrid = new SemanticMemorySourceImpl(dao, 5, unavailable,
+                SemanticMemorySourceImpl.Mode.HYBRID);
+        var vector = new SemanticMemorySourceImpl(dao, 5, unavailable,
+                SemanticMemorySourceImpl.Mode.VECTOR);
+        assertEquals("fact.route", hybrid.recallSemantic(scope, "高速路线", 5).get(0).getKey());
+        assertTrue(vector.recallSemantic(scope, "高速路线", 5).isEmpty());
     }
 
     private static final class FakeDao implements MemoryRecordDao {

@@ -69,6 +69,7 @@ public final class AgentEngine {
     private final SessionLockManager sessionLockManager;
     private final ToolExecutor toolExecutor;
     private final AgentBudget budget;
+    private final AgentEngineConfiguration configuration;
     private final ModelSanitizer modelSanitizer;
     private final AuditRedactor auditRedactor;
     // 可选 SteerMailbox,null 时跳过 drain(向后兼容旧构造器)。
@@ -182,6 +183,7 @@ public final class AgentEngine {
         this.steerMailbox = steerMailbox;
         AgentEngineConfiguration safeConfiguration = configuration == null
                 ? AgentEngineConfiguration.defaults() : configuration;
+        this.configuration = safeConfiguration;
         this.auditSink = safeConfiguration.auditSink();
         this.promptContextAssembler = safeConfiguration.promptContextAssembler();
         this.memoryWriter = safeConfiguration.memoryWriter();
@@ -199,6 +201,12 @@ public final class AgentEngine {
                 + " steerMailbox=" + (steerMailbox == null ? "off" : "on")
                 + " audit=" + this.auditSink.getClass().getSimpleName()
                 + " promptContext=" + promptContextAssembler.getClass().getSimpleName());
+    }
+
+    /** Shares immutable ports and the existing gateway lease boundary; no model is loaded or owned twice. */
+    public AgentEngine withBudget(AgentBudget budget) {
+        return new AgentEngine(modelGateway, modelCallExecutor, policyEngine, registry, provider,
+                sessionManager, contextUpdater, sessionLockManager, toolExecutor, budget, steerMailbox, configuration);
     }
 
     /** 进度发布 fail-open：阶段事件异常绝不影响任务执行（I3 端口契约）。 */
@@ -371,7 +379,14 @@ public final class AgentEngine {
                 // 运行阶段（I3）：进入模型前发布 PLANNING。压缩摘要调用在
                 // tryCompressConversation 内部、不经过此处，天然不发布（§6.4）。
                 publishPlanning(request.getRequestId());
-                ModelCallExecutor.Result result = modelCallExecutor.decide(modelGateway, turnRequest);
+                final int streamTurn = iteration;
+                com.matrix.agent.contract.ModelStreamSink stream = com.matrix.agent.contract.ModelStreamSink.NONE;
+                if (taskProgressSink.supportsAssistantStream()) {
+                    try { taskProgressSink.onAssistantStreamStarted(request.getRequestId(), streamTurn); }
+                    catch (RuntimeException ignored) { }
+                    stream = event -> taskProgressSink.onAssistantStreamEvent(request.getRequestId(), streamTurn, event);
+                }
+                ModelCallExecutor.Result result = modelCallExecutor.decide(modelGateway, turnRequest, stream);
                 if (!result.isSuccess()) {
                     stopReason = result.getTerminalReason();
                     stopMessage = result.getMessage();
@@ -912,7 +927,7 @@ public final class AgentEngine {
             case ASSISTANT:
                 return AgentMessage.assistant(truncated, message.getToolCalls());
             case TOOL:
-                return AgentMessage.tool(message.getToolCallId(), message.getToolName(), truncated);
+                return message.withContent(truncated);
             case USER:
                 return AgentMessage.user(truncated);
             case SYSTEM:

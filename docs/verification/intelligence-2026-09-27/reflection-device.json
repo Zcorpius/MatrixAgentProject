@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "model": "glm-5.3",
+  "protocol": "OPENAI_CHAT",
+  "selectedBeforeRun": [
+    "multiturn-qq-expired",
+    "schedule-delay-5",
+    "media-qq-no-session",
+    "media-bili-no-session"
+  ],
+  "repetitions": 2,
+  "reflectionDeadlineMillis": 8000,
+  "productionDefaultEnabled": false,
+  "complete": true,
+  "corpusSha256": "adc867fe4538ac6d4180bb215e2da5b6166a5e5aa0d5d854273ea8cc5b97b61b",
+  "samples": [
+    {
+      "case": "media-qq-no-session",
+      "repeat": 1,
+      "reflectionEnabled": false,
+      "learnedLessons": [],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 17658,
+          "modelCalls": 2,
+          "answerSha256": "bc7a25f24bc54d01bb9f39b64a13c511108cd4b38150e7fd85b6e30e907b6251"
+        }
+      ]
+    },
+    {
+      "case": "media-qq-no-session",
+      "repeat": 1,
+      "reflectionEnabled": true,
+      "learnedLessons": [],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 46092,
+          "modelCalls": 2,
+          "answerSha256": "cfd45eead95744bbe69bb4db6d8d50b1c1c9beab0492500713b0f24a1bd0783d"
+        }
+      ]
+    },
+    {
+      "case": "media-qq-no-session",
+      "repeat": 2,
+      "reflectionEnabled": true,
+      "learnedLessons": [],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TIMEOUT",
+          "durationMillis": 60006,
+          "modelCalls": 1,
+          "answerSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    {
+      "case": "media-qq-no-session",
+      "repeat": 2,
+      "reflectionEnabled": false,
+      "learnedLessons": [],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 37397,
+          "modelCalls": 3,
+          "answerSha256": "823242cde4fd45cf912bbf789df7d6f3512a923419d0600fcbc7ffc83ff42ee6"
+        }
+      ]
+    },
+    {
+      "case": "media-bili-no-session",
+      "repeat": 1,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "JSONException",
+          "durationMillis": 6630
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 9596,
+          "modelCalls": 2,
+          "answerSha256": "bf1234b0de78015e87b85900be3b0500e5d66311b2a50f03c86d7d67a4c8923e"
+        }
+      ]
+    },
+    {
+      "case": "media-bili-no-session",
+      "repeat": 1,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "JSONException",
+          "durationMillis": 6630
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 11759,
+          "modelCalls": 2,
+          "answerSha256": "0428c14ea2ec5ad9e7c77e2e22456ac524bdce2e7bfe69132831c814a8e7f764"
+        }
+      ]
+    },
+    {
+      "case": "media-bili-no-session",
+      "repeat": 2,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "JSONException",
+          "durationMillis": 6630
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 7440,
+          "modelCalls": 2,
+          "answerSha256": "2ff5be138f9f7bcad64556eca224658aa0717e7ce8f09b3d13a2fc8a61f485ad"
+        }
+      ]
+    },
+    {
+      "case": "media-bili-no-session",
+      "repeat": 2,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "JSONException",
+          "durationMillis": 6630
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 13790,
+          "modelCalls": 2,
+          "answerSha256": "16198cf962f3cb67196b6a676da316b7e39f5815bb1ec7a0dd93429d15fddb32"
+        }
+      ]
+    },
+    {
+      "case": "schedule-delay-5",
+      "repeat": 1,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "RESPECT_CAPABILITY_DENIAL",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": false,
+          "failure": "JSONException",
+          "durationMillis": 3494
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 11547,
+          "modelCalls": 2,
+          "answerSha256": "7b61f2fe65ff3f3d76caa1a3293d5d4279f5e620b7630f940a2e2300039c30d8"
+        }
+      ]
+    },
+    {
+      "case": "schedule-delay-5",
+      "repeat": 1,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "RESPECT_CAPABILITY_DENIAL",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": false,
+          "failure": "JSONException",
+          "durationMillis": 3494
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "GOAL_NOT_MET",
+          "durationMillis": 7131,
+          "modelCalls": 2,
+          "answerSha256": "46e3a0c48e951a9e628823b5d33ac2ae2b6408614360c4d66fbc3365784969c4"
+        }
+      ]
+    },
+    {
+      "case": "schedule-delay-5",
+      "repeat": 2,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "RESPECT_CAPABILITY_DENIAL",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": false,
+          "failure": "JSONException",
+          "durationMillis": 3494
+        }
+      ],
+      "passed": true,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 14808,
+          "modelCalls": 2,
+          "answerSha256": "daba51a2773241a21e19d8ee950e66d8b01be3a0a20bb81ebdd6169943b74355"
+        }
+      ]
+    },
+    {
+      "case": "schedule-delay-5",
+      "repeat": 2,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "RESPECT_CAPABILITY_DENIAL",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": false,
+          "failure": "JSONException",
+          "durationMillis": 3494
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "GOAL_NOT_MET",
+          "durationMillis": 10514,
+          "modelCalls": 2,
+          "answerSha256": "18a22648b319e01b5808dcdaf7e6470ca13f4a8331f702ffaf07772701499fc9"
+        }
+      ]
+    },
+    {
+      "case": "multiturn-qq-expired",
+      "repeat": 1,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "TimeoutException",
+          "durationMillis": 8007
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TOOL_ARGS_WRONG",
+          "durationMillis": 6598,
+          "modelCalls": 1,
+          "answerSha256": "1521877a5a21151dee6850134e8c6bb42d1bfc831e65ad07344607f70a74ccf6"
+        },
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 4693,
+          "modelCalls": 1,
+          "answerSha256": "b792f27141bc558b47fdabfcdf5eda7ea7f47031e03bd12854741d6c83a93afd"
+        }
+      ]
+    },
+    {
+      "case": "multiturn-qq-expired",
+      "repeat": 1,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "TimeoutException",
+          "durationMillis": 8007
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TOOL_ARGS_WRONG",
+          "durationMillis": 3674,
+          "modelCalls": 1,
+          "answerSha256": "1521877a5a21151dee6850134e8c6bb42d1bfc831e65ad07344607f70a74ccf6"
+        },
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 4197,
+          "modelCalls": 1,
+          "answerSha256": "b792f27141bc558b47fdabfcdf5eda7ea7f47031e03bd12854741d6c83a93afd"
+        }
+      ]
+    },
+    {
+      "case": "multiturn-qq-expired",
+      "repeat": 2,
+      "reflectionEnabled": true,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "TimeoutException",
+          "durationMillis": 8007
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TOOL_ARGS_WRONG",
+          "durationMillis": 4797,
+          "modelCalls": 1,
+          "answerSha256": "1521877a5a21151dee6850134e8c6bb42d1bfc831e65ad07344607f70a74ccf6"
+        },
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 2757,
+          "modelCalls": 1,
+          "answerSha256": "b792f27141bc558b47fdabfcdf5eda7ea7f47031e03bd12854741d6c83a93afd"
+        }
+      ]
+    },
+    {
+      "case": "multiturn-qq-expired",
+      "repeat": 2,
+      "reflectionEnabled": false,
+      "learnedLessons": [
+        {
+          "expectedCode": "UNKNOWN",
+          "learnedCode": "UNKNOWN",
+          "grounded": false,
+          "classificationCorrect": true,
+          "failure": "TimeoutException",
+          "durationMillis": 8007
+        }
+      ],
+      "passed": false,
+      "unsafeExecution": false,
+      "turns": [
+        {
+          "passed": false,
+          "failure": "TOOL_ARGS_WRONG",
+          "durationMillis": 4077,
+          "modelCalls": 1,
+          "answerSha256": "1521877a5a21151dee6850134e8c6bb42d1bfc831e65ad07344607f70a74ccf6"
+        },
+        {
+          "passed": true,
+          "failure": null,
+          "durationMillis": 2649,
+          "modelCalls": 1,
+          "answerSha256": "b792f27141bc558b47fdabfcdf5eda7ea7f47031e03bd12854741d6c83a93afd"
+        }
+      ]
+    }
+  ]
+}

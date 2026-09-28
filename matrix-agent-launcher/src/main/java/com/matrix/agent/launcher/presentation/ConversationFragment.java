@@ -328,6 +328,7 @@ public final class ConversationFragment extends Fragment {
     @Override public void onDestroyView() {
         if (pttPulse != null) pttPulse.cancel();
         pttPulse = null;
+        assistantStreamView = null;
         super.onDestroyView();
     }
 
@@ -450,6 +451,25 @@ public final class ConversationFragment extends Fragment {
         return state != null && state.hasRunningTask;
     }
 
+    private TextView assistantStreamView;
+
+    private void renderAssistantStream(String text) {
+        android.widget.ScrollView scroll = messageRows.getParent() instanceof android.widget.ScrollView view ? view : null;
+        boolean follow = isNearBottom(scroll);
+        if (assistantStreamView == null) {
+            assistantStreamView = new TextView(requireContext());
+            assistantStreamView.setTextSize(15);
+            assistantStreamView.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+            assistantStreamView.setPadding(dp(16), dp(12), dp(16), dp(12));
+        }
+        if (assistantStreamView.getParent() == null) messageRows.addView(assistantStreamView);
+        String displayed = text.isEmpty() ? "" : "正在生成…\n" + text;
+        assistantStreamView.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+        if (displayed.contentEquals(assistantStreamView.getText())) return;
+        assistantStreamView.setText(displayed);
+        if (follow && scroll != null) scroll.post(() -> scroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN));
+    }
+
     private void render(@NonNull ConversationViewModel.State value) {
         if (isResumed()) launcherApplication().overlay().conversationPageVisible(value.conversationId);
         if (restoreOverlayDraft != null) restoreOverlayDraft.setVisibility(value.conversationId != null
@@ -457,6 +477,7 @@ public final class ConversationFragment extends Fragment {
                 ? View.VISIBLE : View.GONE);
         renderNotice(value);
         renderMessages(value.messages);
+        renderAssistantStream(value.assistantStream);
         renderInputBar(value);
         renderPttStatus(value);
         if (value.conversationTitle != null) {
