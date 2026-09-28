@@ -88,25 +88,9 @@
 
 ## 系统架构
 
-```mermaid
-flowchart TB
-    L["Matrix AI Launcher<br/>页面 · 会话小窗 · 悬浮角色"] --> S["版本化 SDK<br/>AIDL · DTO · Domain Managers"]
-    A["可信系统客户端"] --> S
-    S --> H["System Host<br/>身份校验 · 策略 · 状态"]
-    H --> E["执行与计划"]
-    H --> M["模型 · 语音 · 记忆"]
-    H --> D["加密持久化"]
-    classDef client fill:#E8F5F4,stroke:#2E8B87,color:#123840
-    classDef contract fill:#E2F0FA,stroke:#4282B8,color:#173B5E
-    classDef host fill:#DDF3EA,stroke:#187666,color:#103D36
-    classDef domain fill:#F5F8FA,stroke:#9AAEBB,color:#253A47
-    class L,A client
-    class S contract
-    class H host
-    class E,M,D domain
-```
+[![MatrixAgent 系统架构：Launcher 和可信应用经版本化 SDK 接入 System Host，Host 内包含业务域、执行、端侧推理与安全存储](docs/architecture/matrix-agent-architecture-dark-2026-09-28.png)](docs/architecture/matrix-agent-architecture-dark-2026-09-28.png)
 
-Launcher 呈现状态，SDK 定义调用契约，Host 持有执行权威。仓库主要模块为 [Launcher](matrix-agent-launcher)、[Host](matrix-agent-service)、[SDK](matrix-agent-service-lib)、[端侧推理](ondevice)和[设备验证](matrix-agent-test)。[阅读架构与 SDK 接入说明](docs/开发与验证.md#architecture)
+Launcher 呈现状态，SDK 定义调用契约，Host 持有执行权威。图中 Host 内的业务域与支撑模块按职责分组，具体调用依赖见[架构与 SDK 接入说明](docs/开发与验证.md#architecture)。仓库主要模块为 [Launcher](matrix-agent-launcher)、[Host](matrix-agent-service)、[SDK](matrix-agent-service-lib)、[端侧推理](ondevice)和[设备验证](matrix-agent-test)。
 
 <a id="quickstart"></a>
 
