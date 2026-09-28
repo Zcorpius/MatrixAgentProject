@@ -1,0 +1,17 @@
+{
+  "date": "2026-09-28",
+  "timezone": "Asia/Shanghai",
+  "device": "Mi 9 SE (grus)",
+  "os": "LineageOS 22.2 / Android 15 (API 35)",
+  "app_version": "0.7.1 (7001)",
+  "images": [
+    {
+      "file": "launcher-settings-appearance.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "8cc58533a75834a75f8760be07bba0485f36e7236d614b99b59249e5c01be571",
+      "source": "adb exec-out screencap -p; Launcher settings after manual scroll",
+      "capture_batch": "README appearance capture"
+    }
+  ]
+}

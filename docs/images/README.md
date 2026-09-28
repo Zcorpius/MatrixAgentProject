@@ -1,6 +1,6 @@
 # README 图片来源与维护
 
-主 README 当前使用 **2026-09-27 · v0.7.1** 的真机图片：默认展示对话、工作流与会话小窗，更多工作区和角色动作可展开查看。完整角色、注视及小窗图集位于[功能与交互](../功能与交互.md#overlay)。所有真机图片均保留设备实际内容，未合成角色、替换图标或修改页面文案。
+主 README 使用 **2026-09-27** 的对话与工作流截图，以及 **2026-09-28** 的设置页截图；另链接同轮会话小窗。完整角色、注视及小窗图集位于[功能与交互](../功能与交互.md#overlay)。所有真机图片均保留设备实际内容，未合成角色、替换图标或修改页面文案。
 
 首页标志复用应用的[实心矩阵素材](../../matrix-agent-launcher/src/main/res/drawable-nodpi/matrix_ai_mark.png)。架构示意图属于单独生成的说明性图片，不是真机截图；其提示词和来源见[生成记录](../architecture/imagegen-prompt.md)。
 
@@ -10,6 +10,7 @@
 - Host / Launcher：开发版本 `0.7.1 / 7001`，当前 Parcel schema 13；不同开发构建以对应验证记录的 APK 摘要区分。
 - 图片：1080 × 2340 PNG，ADB 原始截屏，保留状态栏与导航栏。README 中仅通过 HTML 宽度缩小显示，点击可查看原图。
 - 工作区：2026-09-27 20:20–20:26（UTC+8）重新浏览采集，Host 在线；没有为截图创建计划、提交对话、播放媒体、开始录音、修改模型配置或下载资源。
+- 设置页：2026-09-28 23:24（UTC+8）从已连接的 Mi 9 SE 原始截屏；Host 在线，选中宁姚，仅滚动页面查看设置，没有修改选择。
 - 小窗：来自 2026-09-27 20:02 左右的最新 47 项 Launcher 真机测试，重新从设备导出；该轮证据见[注视与挥手验证](../verification/yukino-interaction-2026-09-27/README.md)。
 
 ## 本次更新的图片
@@ -17,6 +18,7 @@
 | 图片 | 实际展示内容与阅读说明 |
 |---|---|
 | [对话交互](2026-09-27/launcher-conversation.png) | 既有测试会话“播放李健的传奇”；助手找到候选并询问是否播放。图中未展示下一轮确认，也不能据此认定歌曲已经播放。 |
+| [外观与悬浮形象](2026-09-28/launcher-settings-appearance.png) | 设置页滚动到颜色主题和四个角色卡片；宁姚为设备当时已保存的选择。截图未展示外观模式控件，它们位于本页上方。 |
 | [计划入口](2026-09-27/launcher-plans.png) | 计划 / 运行记录 / 模板 / 临时任务四个页签，新建与日历绑定入口；当时计划列表为空。 |
 | [工作流模板](2026-09-27/launcher-workflows.png) | “每日行程提醒”“Agent 日程简报”及其查询、摘要、交付步骤；第二张卡片继续延伸到屏幕下方。 |
 | [语音功能](2026-09-27/launcher-voice.png) | 等待开始，录音 / 打断控制，空转写区，腾讯云 TTS 未配置；图片不作为语音闭环通过的证据。 |
@@ -29,7 +31,7 @@
 
 三张小窗图的设备来源为 `/sdcard/Android/data/com.matrix.agent.launcher/files/overlay-verification/`，文件分别对应 `02-panel.png`、`03e-process-expanded.png`、`03-editing.png`。它们属于同一轮真实 `OverlayDeviceTest` 产物。当前 `matrix.debugTraceUi=true`，过程展示已开启；debug 与 release 均按该显式开关构建，并非仅 debug 可见。
 
-本目录新增图片的尺寸、SHA-256 和来源映射见 [manifest.json](2026-09-27/manifest.json)。
+图片的尺寸、SHA-256 和来源映射见 [2026-09-27 manifest](2026-09-27/manifest.json) 与 [2026-09-28 manifest](2026-09-28/manifest.json)。
 
 ## README 与功能指南复用的验证图片
 
