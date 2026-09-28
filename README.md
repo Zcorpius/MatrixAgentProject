@@ -175,6 +175,8 @@ SDK 面向符合签名权限要求的可信客户端。连接可异步开始，�
 
 同一设备切到已安装的 `Qwen3-0.6B-MNN` 后，真实问候请求另因“端侧 system prompt 独自超出 token 预算”失败。该错误来自当前端侧模型上下文与 48 个工具定义的组合，现归为模型调用失败；它与云端 429 和安全策略拒绝分别独立，仍需调整端侧工具投影及预算才能让这一路径稳定执行。
 
+**GLM 入口对照验证**：同一电脑凭据和 `glm-5.3` 对 `/api/anthropic/v1/messages` 返回 HTTP 200，对原 `/api/paas/v4/chat/completions` 返回 HTTP 429、业务码 `1113`（[智谱错误码](https://docs.bigmodel.cn/cn/api/api-code)：“账户已欠费”）；后者响应恰为 54 字符，与真机此前日志的 54 字符一致。现新增可选的「智谱 GLM（Anthropic 接口）」配置，保留原入口不变。Mi 9 SE 上新入口连接测试 HTTP 200，真实 Agent 问候请求 `SUCCEEDED / NO_TOOL_CALL`。[脱敏验证记录](docs/verification/intelligence-2026-09-28/glm-anthropic-endpoint.json)。智谱将该地址列为 [Coding Plan 的 Anthropic 入口](https://docs.bigmodel.cn/cn/coding-plan/quick-start)，但[套餐仅限指定工具与环境](https://docs.bigmodel.cn/cn/coding-plan/tool/others)；选择入口本身不保证 MatrixAgent 可使用套餐额度。
+
 此前 **2026-09-27 · v0.7.1** 基线的 1,516 项 JVM 测试与 47 项真机联合套件结果仍单独保留，不能与本轮采样混算。[原基线报告与 APK 摘要](docs/verification/yukino-interaction-2026-09-27/README.md) · [复验方法](docs/开发与验证.md#verification)
 
 <a id="boundaries"></a>

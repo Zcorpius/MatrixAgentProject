@@ -34,6 +34,9 @@ public final class ModelProviderPreset {
         return Collections.unmodifiableList(Arrays.asList(
                 new ModelProviderPreset("glm", "智谱 GLM", ApiProtocol.OPENAI_CHAT,
                         "https://open.bigmodel.cn/api/paas/v4/chat/completions", "glm-5.2", true),
+                new ModelProviderPreset("glm_anthropic", "智谱 GLM Anthropic 接口",
+                        ApiProtocol.ANTHROPIC_MESSAGES,
+                        "https://open.bigmodel.cn/api/anthropic/v1/messages", "glm-5.3", true),
                 new ModelProviderPreset("deepseek", "DeepSeek", ApiProtocol.OPENAI_CHAT,
                         "https://api.deepseek.com/chat/completions", "deepseek-v4-flash", true),
                 new ModelProviderPreset("qwen", "阿里通义千问", ApiProtocol.OPENAI_CHAT,

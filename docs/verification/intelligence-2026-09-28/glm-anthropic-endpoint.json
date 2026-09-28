@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-09-28",
+  "model": "glm-5.3",
+  "sameDesktopCredential": true,
+  "credentialArchived": false,
+  "desktop": {
+    "anthropicMessages": {
+      "endpoint": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+      "httpStatus": 200,
+      "streamingHttpStatus": 200,
+      "streamingStopReason": "end_turn"
+    },
+    "openAiChat": {
+      "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      "httpStatus": 429,
+      "providerErrorCode": 1113,
+      "responseCharacters": 54
+    }
+  },
+  "device": {
+    "model": "glm-5.3",
+    "protocol": "ANTHROPIC_MESSAGES",
+    "credentialLengthVerified": true,
+    "connectionTestHttpStatus": 200,
+    "agentRequestFinalState": "SUCCEEDED",
+    "agentRequestStopReason": "NO_TOOL_CALL",
+    "agentRequestToolCalls": 0,
+    "agentRequestAnswerReady": true,
+    "userDataCleared": false
+  },
+  "limits": [
+    "The previous device HTTP 429 response body was deliberately redacted; matching the 54-character response length does not prove its provider business code.",
+    "A successful request to this endpoint does not establish Coding Plan entitlement for MatrixAgent."
+  ]
+}

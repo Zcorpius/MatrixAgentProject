@@ -97,7 +97,9 @@ public final class ModelFragment extends Fragment {
     }
     private List<ProviderOption> providerOptions() {
         return Arrays.asList(
-                cloud("glm", R.string.model_provider_glm, "glm-5.2"), cloud("deepseek", R.string.model_provider_deepseek, "deepseek-v4-flash"),
+                cloud("glm", R.string.model_provider_glm, "glm-5.2"),
+                cloud("glm_anthropic", R.string.model_provider_glm_anthropic, "glm-5.3"),
+                cloud("deepseek", R.string.model_provider_deepseek, "deepseek-v4-flash"),
                 cloud("qwen", R.string.model_provider_qwen, "qwen3.7-plus"), cloud("kimi", R.string.model_provider_kimi, "kimi-k2.5"),
                 cloud("doubao", R.string.model_provider_doubao, "Endpoint ID"), cloud("anthropic", R.string.model_provider_anthropic, "claude-sonnet-4-5"),
                 cloud("gemini", R.string.model_provider_gemini, "gemini-3.5-flash"),
@@ -116,8 +118,12 @@ public final class ModelFragment extends Fragment {
         setCredentialSaved(false);
         idLabel.setText(p.onDevice ? R.string.model_installed_id_label : R.string.model_id_label); modelId.setHint(p.onDevice ? R.string.model_on_device_id_hint : p.id.equals("doubao") ? R.string.model_doubao_id_hint : R.string.model_id_hint);
         keyLabel.setText(p.apiKeyRequired ? R.string.model_key_required : R.string.model_key_optional);
-        detail.setText(p.onDevice ? R.string.model_on_device_guidance
-                : p.endpointEditable ? R.string.model_endpoint_lan_guidance : R.string.model_guidance);
+        detail.setText(guidanceFor(p));
+    }
+    private static int guidanceFor(ProviderOption provider) {
+        if (provider.onDevice) return R.string.model_on_device_guidance;
+        if (provider.id.equals("glm_anthropic")) return R.string.model_glm_anthropic_guidance;
+        return provider.endpointEditable ? R.string.model_endpoint_lan_guidance : R.string.model_guidance;
     }
     private void provision() {
         ProviderOption p=currentProvider(); String model=modelId.getText().toString().trim();
