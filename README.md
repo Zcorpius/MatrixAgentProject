@@ -24,7 +24,7 @@
 
 ## 从对话到行动
 
-在 Launcher 中发起请求、安排计划、选择角色；执行跨应用任务时，悬浮入口可打开同一会话。下图均为 **2026-09-28** 从 Mi 9 SE / LineageOS 22.2 真机采集的当前界面。
+在 Launcher 中发起请求、安排计划、选择角色；执行跨应用任务时，悬浮入口可打开同一会话。
 
 <p align="center">
   <a href="docs/images/2026-09-28/launcher-refresh/conversation.png"><img src="docs/images/2026-09-28/launcher-refresh/conversation.png" width="260" alt="对话交互：消息、执行过程和输入区" /></a>
