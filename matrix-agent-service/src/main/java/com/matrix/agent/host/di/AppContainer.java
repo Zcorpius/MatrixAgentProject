@@ -34,6 +34,13 @@ import com.matrix.agent.task.conversation.ConversationTaskSubmitter;
 import com.matrix.agent.platform.control.AndroidSystemControlAdapter;
 import com.matrix.agent.platform.control.SystemControlCapabilityProvider;
 import com.matrix.agent.task.capability.RoutedCapabilityProvider;
+import com.matrix.agent.task.capability.MediaCapabilities;
+import com.matrix.agent.platform.media.AndroidAppLaunchPort;
+import com.matrix.agent.platform.media.AndroidMediaSessionPort;
+import com.matrix.agent.platform.media.AndroidPackageProbe;
+import com.matrix.agent.platform.media.AndroidQQMusicUiPort;
+import com.matrix.agent.platform.media.MediaCapabilityProvider;
+import com.matrix.agent.platform.media.MediaAvailabilityCache;
 import com.matrix.agent.task.tool.ToolExecutor;
 import com.matrix.agent.data.memory.MemoryStore;
 import com.matrix.agent.task.AgentRuntimeRepository;
@@ -52,12 +59,22 @@ import com.matrix.agent.platform.MatrixHttpClient;
 
 /** Explicit composition root for replaceable runtime and platform dependencies. */
 public final class AppContainer implements DownloadRuntime {
+    private final com.matrix.agent.handoff.HandoffContextRegistry handoffContexts =
+            new com.matrix.agent.handoff.HandoffContextRegistry();
+    private final com.matrix.agent.diagnostics.HandoffDiagnostics handoffDiagnostics =
+            new com.matrix.agent.diagnostics.HandoffDiagnostics();
+    public com.matrix.agent.diagnostics.HandoffDiagnostics getHandoffDiagnostics() { return handoffDiagnostics; }
+    private final com.matrix.agent.handoff.HandoffCoordinator handoff;
+    public com.matrix.agent.handoff.HandoffContextRegistry getHandoffContexts() { return handoffContexts; }
+    public com.matrix.agent.handoff.HandoffCoordinator getHandoffCoordinator() { return handoff; }
+
     private static final String TAG = "MatrixAgent";
     private final AgentRuntimeRepository agentRuntimeRepository;
     private final ModelGatewayRepository modelGatewayRepository;
     private final SteerMailbox steerMailbox;
 
     private final DefaultVehicleStateSource vehicleStateSource;
+    private final MediaAvailabilityCache mediaAvailability;
     /**
      * 统一 shutdown 入口持有的资源。
      *
@@ -66,6 +83,8 @@ public final class AppContainer implements DownloadRuntime {
      * /AAOS Service 重建场景下残留 worker 不可控。改为 final field + {@link #shutdown()} 统一关闭。
      */
     private final MatrixExecutorRegistry executorRegistry;
+    private final FailureReflectionGraph failureReflectionGraph;
+    private final EmbeddingRuntimeGraph embeddingGraph;
     /** SQLCipher/database/download subgraph; separates persistence ownership from runtime wiring. */
     private final PersistenceRuntimeGraph persistenceGraph;
     private final MatrixDatabase activeDatabase;
@@ -98,7 +117,7 @@ public final class AppContainer implements DownloadRuntime {
         // deadlock-free while every production worker has one lifecycle owner.
         this.executorRegistry = new MatrixExecutorRegistry();
         this.httpClient = new MatrixHttpClient();
-        CapabilityRegistry registry = CapabilityRegistry.createDemoRegistry();
+        CapabilityRegistry registry = CapabilityRegistry.createRuntimeRegistry();
         PolicyEngine policyEngine = new PolicyEngine(registry);
         SessionManager sessionManager = new SessionManager();
         SessionLockManager sessionLockManager = new SessionLockManager();
@@ -112,14 +131,18 @@ public final class AppContainer implements DownloadRuntime {
         vehicleStateSource = new DefaultVehicleStateSource();
         // MatrixDatabase 提前装配——audit + memory 共用同一 SQLCipher 实例
         // (getInstance 单例,keyProvider 失败 → database=null → audit/memory 均进入显式降级)。
-        this.persistenceGraph = new PersistenceRuntimeGraph(appContext);
-        MatrixDatabase encryptedDatabase = PendingUserDataReset.databaseAfterRecovery(
-                appContext, persistenceGraph.database(),
-                executorRegistry.dbExecutor());
+        this.persistenceGraph = PersistenceRuntimeGraph.get(appContext);
+        PersistenceRuntimeGraph.Admission storage;
+        try {
+            storage = persistenceGraph.await(30_000);
+        } catch (java.util.concurrent.TimeoutException timeout) {
+            throw new IllegalStateException("shared persistence initialization timed out", timeout);
+        }
+        MatrixDatabase encryptedDatabase = storage.database();
         // Memory graph owns the legacy migration plus the encrypted/volatile fallback boundary.
         // It is assembled before models because prompt construction needs the recaller.
-        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(appContext, encryptedDatabase, sessionManager,
-                executorRegistry.dbExecutor());
+        this.embeddingGraph = new EmbeddingRuntimeGraph(appContext, storage.available() ? encryptedDatabase : null, executorRegistry);
+        MemoryRuntimeGraph memoryGraph = new MemoryRuntimeGraph(storage, sessionManager, embeddingGraph.recaller());
         MatrixDatabase database = memoryGraph.isDegraded() ? null : encryptedDatabase;
         this.activeDatabase = database;
         this.downloadGraph = new DownloadRuntimeGraph(appContext, database, executorRegistry.dbExecutor(),
@@ -133,15 +156,50 @@ public final class AppContainer implements DownloadRuntime {
         CapabilityProvider domainProvider = new MockCapabilityProvider(memoryStore, memoryWriter);
         SystemControlCapabilityProvider systemControlProvider = new SystemControlCapabilityProvider(
                 new AndroidSystemControlAdapter(appContext));
+        handoff = new com.matrix.agent.handoff.HandoffCoordinator(handoffContexts,
+                android.os.SystemClock::elapsedRealtime,
+                new com.matrix.agent.handoff.HandoffFallbackNotifier(appContext),
+                (mode, result, reason, elapsed) -> android.util.Log.i("MatrixHandoff",
+                        "mode=" + mode + " result=" + result + " reason=" + reason + " elapsedMs=" + elapsed), handoffDiagnostics);
+        AndroidAppLaunchPort mediaLauncher = new AndroidAppLaunchPort(appContext, handoff);
+        MediaCapabilityProvider mediaProvider = new MediaCapabilityProvider(
+                new AndroidPackageProbe(appContext), new AndroidMediaSessionPort(appContext),
+                mediaLauncher, new AndroidQQMusicUiPort(appContext, mediaLauncher),
+                new com.matrix.agent.platform.media.AndroidBilibiliUiPort(appContext,
+                        mediaLauncher), handoff);
+        mediaAvailability = new MediaAvailabilityCache(appContext,
+                new AndroidPackageProbe(appContext), executorRegistry.networkExecutor());
         java.util.Map<String, CapabilityProvider> platformRoutes = new java.util.LinkedHashMap<>();
+        ScheduleGraph scheduleGraph = ((com.matrix.agent.host.MatrixAgentApplication) appContext).scheduleRuntime();
+        var scheduleProvider = new com.matrix.agent.schedule.tool.ScheduleCapabilityProvider(
+                new ScheduleToolBackend(appContext, scheduleGraph));
+        for (String capability : com.matrix.agent.task.capability.ScheduleCapabilities.ALL) platformRoutes.put(capability, scheduleProvider);
+        var calendarClock = new com.matrix.agent.platform.calendar.CalendarClockProvider(appContext);
+        for (String capability : com.matrix.agent.task.capability.CalendarClockCapabilities.ALL) platformRoutes.put(capability, calendarClock);
+        platformRoutes.put(com.matrix.agent.task.capability.WebCapabilities.SEARCH,
+                new com.matrix.agent.platform.web.WebSearchProvider(
+                        new com.matrix.agent.platform.web.PinnedWebSearchTransport(httpClient.metadata())));
         platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
         platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
+        for (String capability : MediaCapabilityProvider.capabilities()) {
+            if (registry.find(capability) == null) {
+                throw new IllegalStateException("媒体 Provider 能力未注册: " + capability);
+            }
+            platformRoutes.put(capability, mediaProvider);
+        }
+        for (String capability : registry.snapshot().keySet()) {
+            if (capability.startsWith("media.") && !MediaCapabilities.ALL.contains(capability)) {
+                throw new IllegalStateException("媒体能力缺少 Provider 路由: " + capability);
+            }
+        }
         CapabilityProvider provider = new RoutedCapabilityProvider(domainProvider, platformRoutes);
         ModelRuntimeGraph modelGraph = new ModelRuntimeGraph(appContext, memoryStore,
                 memoryRecaller, executorRegistry.modelRetirementScheduler(), httpClient);
         modelGatewayRepository = modelGraph.repository();
         ModelApiClient modelClient = modelGraph.client();
         SecureModelConfigStore configStore = modelGraph.configStore();
+        failureReflectionGraph = new FailureReflectionGraph(database, memoryStore, modelClient,
+                configStore::load, executorRegistry);
         this.modelConfigStore = configStore;
         IntentClassifier appClassifier = modelGraph.intentClassifier();
         AuditRuntimeGraph auditGraph = new AuditRuntimeGraph(appContext, database,
@@ -205,20 +263,35 @@ public final class AppContainer implements DownloadRuntime {
         taskDependencies.auditEventRecorder = auditEventRecorder;
         taskDependencies.memoryRecaller = memoryRecaller;
         taskDependencies.memoryWriter = memoryWriter;
+        taskDependencies.failureObserver = failureReflectionGraph.terminalObserver();
+        taskDependencies.failureLessons = failureReflectionGraph.recaller();
         taskDependencies.scheduler = scheduler;
         taskDependencies.vehicleStateSource = vehicleStateSource;
+        taskDependencies.runtimeProfileSource = new RuntimeProfileResolver(appContext);
         taskDependencies.memoryStore = memoryStore;
         taskDependencies.intentClassifier = appClassifier;
         taskDependencies.lifecycleExecutor = executorRegistry.lifecycleExecutor();
         taskDependencies.taskProgressSink = this.conversationProgressBridge;
+        taskDependencies.context = appContext;
+        taskDependencies.mediaAvailability = mediaAvailability;
+        taskDependencies.pendingMediaConfirmation = mediaProvider;
+        taskDependencies.pendingBilibiliSelection = mediaProvider;
         TaskRuntimeGraph taskRuntimeGraph = new TaskRuntimeGraph(taskDependencies);
         agentRuntimeRepository = taskRuntimeGraph.repository();
+        calendarChanges = new com.matrix.agent.platform.calendar.CalendarChangeObserver(appContext, scheduleGraph::calendarChanged);
+        scheduleGraph.calendarChanged();
+        automaticTasks = new com.matrix.agent.task.scheduler.AutomaticTaskExecutor(
+                agentRuntimeRepository, registry, provider, policyEngine, toolExecutor);
         agentRuntimeRepository.setLegacyMemoryClearHook(
                 () -> com.matrix.agent.data.memory.RoomMemoryMigrator
                         .clearLegacySharedPreferences(appContext));
         agentRuntimeRepository.setResetLifecycleHooks(
                 () -> PendingUserDataReset.mark(appContext),
                 () -> PendingUserDataReset.clearMarker(appContext));
+        if (database != null) {
+            agentRuntimeRepository.addConversationClearHook(
+                    () -> database.runInTransaction(() -> database.scheduleDao().clearAll()));
+        }
         gatewayLifecycleManager = taskRuntimeGraph.lifecycleManager();
         // 调试轨迹日志无条件开启。所有构建变体均只由显式 Gradle 属性
         // matrix.debugTraceUi 决定是否把已净化投影写入 SQLCipher 并允许 UI 订阅；
@@ -265,6 +338,10 @@ public final class AppContainer implements DownloadRuntime {
         Log.i(TAG, "[App] AppContainer init done capabilities=" + registry.toToolDefinitions().size()
                 + " durationMs=" + ((System.nanoTime() - started) / 1_000_000L));
     }
+
+    private final com.matrix.agent.platform.calendar.CalendarChangeObserver calendarChanges;
+    private final com.matrix.agent.task.scheduler.AutomaticTaskExecutor automaticTasks;
+    public com.matrix.agent.task.scheduler.AutomaticTaskExecutor automaticTasks() { return automaticTasks; }
 
     public AgentRuntimeRepository getAgentRuntimeRepository() { return agentRuntimeRepository; }
     public ModelGatewayRepository getModelGatewayRepository() { return modelGatewayRepository; }
@@ -353,8 +430,14 @@ public final class AppContainer implements DownloadRuntime {
     /** Process-owned network client family; only Host graphs may consume this dependency. */
     public MatrixHttpClient getHttpClient() { return httpClient; }
 
+    public EmbeddingRuntimeGraph getEmbeddingGraph() { return embeddingGraph; }
+
     public void shutdown() {
+        embeddingGraph.close();
+        failureReflectionGraph.close();
+        calendarChanges.close();
         Log.i(TAG, "[App] shutdown begin");
+        mediaAvailability.close();
         try {
             agentRuntimeRepository.shutdown();
         } catch (Throwable t) {

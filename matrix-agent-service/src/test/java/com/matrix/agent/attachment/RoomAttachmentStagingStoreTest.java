@@ -27,6 +27,13 @@ import java.util.Map;
 public final class RoomAttachmentStagingStoreTest {
 
     private static final class FakeDao implements ConversationAttachmentDao {
+        @Override public int freezeManifest(String id, String message, String manifest) {
+            var row = getById(id);
+            if (row == null || !message.equals(row.linkedMessageId)) return 0;
+            row.retrievalManifest = manifest;
+            return 1;
+        }
+
         final Map<String, ConversationAttachmentEntity> rows = new HashMap<>();
 
         @Override public ConversationAttachmentEntity getById(String attachmentId) {

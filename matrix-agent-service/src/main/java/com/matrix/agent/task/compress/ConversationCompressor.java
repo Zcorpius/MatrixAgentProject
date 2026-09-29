@@ -121,6 +121,9 @@ public final class ConversationCompressor {
         List<AgentMessage> toSummarizeNatural = new ArrayList<>();
         splitStructuredFromNatural(toSummarize, structuredKeep, toSummarizeNatural);
 
+        if (request != null && request.getExecutionScope().profile() == com.matrix.agent.identity.ExecutionProfile.RESEARCH) {
+            structuredKeep = ReadTransactionCompactor.compact(structuredKeep);
+        }
         // 剩余预算 < 2s → 直接 heuristic 降级,不调 Provider
         // (Provider 内部还会再做一次剩余检查,这里提前跳过节省开销)。
         String summaryText;
@@ -189,6 +192,7 @@ public final class ConversationCompressor {
      */
     static boolean isStructuredTransaction(List<AgentMessage> txn) {
         for (AgentMessage m : txn) {
+            if (!m.getReadReceipts().isEmpty()) return true;
             if (m.getRole() == AgentMessage.Role.TOOL) return true;
             if (m.getRole() == AgentMessage.Role.ASSISTANT
                     && m.getToolCalls() != null && !m.getToolCalls().isEmpty()) {

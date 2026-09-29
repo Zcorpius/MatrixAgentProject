@@ -44,7 +44,20 @@ public final class ConversationViewModel extends ViewModel {
             String text, int failureCode, int inputKind, String steerHostUserMessageId,
             int steerDeliveryState, String conversationTaskId,
             List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces,
-            List<DebugTraceWireEvent> debugTraces) {
+            List<DebugTraceWireEvent> debugTraces,
+            List<com.matrix.agent.api.conversation.ConversationAttachment> attachments) {
+        public UiMessage {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+        public UiMessage(String messageId, long sequence, int role, int status, int channel,
+                String text, int failureCode, int inputKind, String steerHostUserMessageId,
+                int steerDeliveryState, String conversationTaskId,
+                List<com.matrix.agent.api.conversation.CapabilityTraceEntry> executionTraces,
+                List<DebugTraceWireEvent> debugTraces) {
+            this(messageId, sequence, role, status, channel, text, failureCode, inputKind,
+                    steerHostUserMessageId, steerDeliveryState, conversationTaskId, executionTraces,
+                    debugTraces, List.of());
+        }
 
         /** 兼容构造（v5 元数据缺省）。 */
         public UiMessage(String messageId, long sequence, int role, int status, int channel,
@@ -54,17 +67,26 @@ public final class ConversationViewModel extends ViewModel {
                     ConversationMessage.STEER_DELIVERY_PENDING, null, List.of(), List.of());
         }
 
+        /** Shared Host projection for the full conversation and the floating conversation. */
+        public static UiMessage from(ConversationMessage message) {
+            return new UiMessage(message.messageId, message.sequenceNo, message.role,
+                    message.status, message.channel, message.text, message.failureCode,
+                    message.inputKind, message.steerHostUserMessageId, message.steerDeliveryState,
+                    message.conversationTaskId, message.executionTraces == null ? List.of() : message.executionTraces,
+                    List.of(), message.contextAttachments);
+        }
+
         /** 状态迁移拷贝（保留全部元数据）。 */
         public UiMessage withStatus(int newStatus, int newFailureCode) {
             return new UiMessage(messageId, sequence, role, newStatus, channel, text,
                     newFailureCode, inputKind, steerHostUserMessageId, steerDeliveryState,
-                    conversationTaskId, executionTraces, debugTraces);
+                    conversationTaskId, executionTraces, debugTraces, attachments);
         }
 
         public UiMessage withDebugTraces(List<DebugTraceWireEvent> traces) {
             return new UiMessage(messageId, sequence, role, status, channel, text, failureCode,
                     inputKind, steerHostUserMessageId, steerDeliveryState, conversationTaskId,
-                    executionTraces, traces == null ? List.of() : List.copyOf(traces));
+                    executionTraces, traces == null ? List.of() : List.copyOf(traces), attachments);
         }
     }
 
@@ -122,6 +144,7 @@ public final class ConversationViewModel extends ViewModel {
         public final String conversationTitle;
         /** Host 驱动的运行阶段（I3）；null = 无活跃任务阶段。 */
         public final ConversationRuntimeStage runtimeStage;
+        public final String assistantStream;
         /** 草稿附件 chips（I6）：READY 才可提交，FAILED 显示原因。 */
         public final List<com.matrix.agent.api.conversation.ConversationAttachment>
                 draftAttachments;
@@ -136,6 +159,17 @@ public final class ConversationViewModel extends ViewModel {
                 List<com.matrix.agent.api.conversation.ConversationAttachment>
                         draftAttachments,
                 com.matrix.agent.api.model.ModelRuntimeStatus modelRuntime) {
+            this(conversationId, messages, sending, loadingHistory, hasMoreHistory, transientError,
+                    hasRunningTask, pttPhase, liveTranscript, summaryActive, conversationTitle,
+                    runtimeStage, draftAttachments, modelRuntime, "");
+        }
+
+        State(String conversationId, List<UiMessage> messages, boolean sending,
+                boolean loadingHistory, boolean hasMoreHistory, String transientError,
+                boolean hasRunningTask, PttPhase pttPhase, String liveTranscript,
+                boolean summaryActive, String conversationTitle, ConversationRuntimeStage runtimeStage,
+                List<com.matrix.agent.api.conversation.ConversationAttachment> draftAttachments,
+                com.matrix.agent.api.model.ModelRuntimeStatus modelRuntime, String assistantStream) {
             this.conversationId = conversationId;
             this.messages = messages;
             this.sending = sending;
@@ -148,6 +182,7 @@ public final class ConversationViewModel extends ViewModel {
             this.summaryActive = summaryActive;
             this.conversationTitle = conversationTitle;
             this.runtimeStage = runtimeStage;
+            this.assistantStream = assistantStream;
             this.draftAttachments = draftAttachments;
             this.modelRuntime = modelRuntime;
         }
@@ -158,6 +193,8 @@ public final class ConversationViewModel extends ViewModel {
     private static final long DRAFT_DEBOUNCE_MS = 350L;
 
     private final ConversationRepository repository;
+    private final AssistantStreamState assistantStream = new AssistantStreamState();
+    private long assistantStreamGeneration;
     private final MutableLiveData<State> state = new MutableLiveData<>(
             new State(null, List.of(), false, false, false, null, false, PttPhase.IDLE, null,
                     false, null, null, List.of(), null));
@@ -684,6 +721,8 @@ public final class ConversationViewModel extends ViewModel {
     }
 
     public void closeSubscription() {
+        assistantStreamGeneration++;
+        assistantStream.clear();
         AutoCloseable handle = subscription;
         subscription = null;
         if (handle != null) {
@@ -919,6 +958,7 @@ public final class ConversationViewModel extends ViewModel {
         // 新订阅前清空本地运行阶段（I3 §6.2）：Host 快照到达前不显示旧会话残影。
         runtimeStage = null;
         String target = conversationId;
+        final long streamGeneration = assistantStreamGeneration;
         subscription = repository.subscribe(target, new ConversationListener() {
             @Override public void onMessageUpsert(ConversationMessage message) {
                 if (target.equals(message.conversationId)) {
@@ -961,6 +1001,12 @@ public final class ConversationViewModel extends ViewModel {
                 }
                 runtimeStage = stage;
                 publish(null);
+            }
+
+            @Override public void onAssistantStream(com.matrix.agent.api.conversation.ConversationAssistantStream event) {
+                if (event == null || streamGeneration != assistantStreamGeneration
+                        || !target.equals(conversationId) || !target.equals(event.conversationId)) return;
+                if (assistantStream.accept(event)) publish(null);
             }
 
             @Override public void onConversationInfoChanged(ConversationInfo info) {
@@ -1012,12 +1058,7 @@ public final class ConversationViewModel extends ViewModel {
 
     private void merge(ConversationMessage message) {
         // SDK DTO 是显式字段（非 record 访问器）；v5 元数据（steer 注记 + 轨迹）随行
-        UiMessage mapped = new UiMessage(message.messageId, message.sequenceNo, message.role,
-                message.status, message.channel, message.text, message.failureCode,
-                message.inputKind, message.steerHostUserMessageId,
-                message.steerDeliveryState, message.conversationTaskId,
-                message.executionTraces == null ? List.of() : message.executionTraces,
-                debugTracesFor(message));
+        UiMessage mapped = UiMessage.from(message).withDebugTraces(debugTracesFor(message));
         // Host 的 upsert 可能只补充 capability trace / steer 投递态；不能仅比较 status/text，
         // 否则 UI 会错过同序号的后续事实。调试轨迹同样随本行不可变快照带入。
         bySequence.put(mapped.sequence(), mapped);
@@ -1033,6 +1074,9 @@ public final class ConversationViewModel extends ViewModel {
 
     /** 阶段指向的任务到达终态 → 立即隐藏输入栏运行状态（§6.2 顺序契约的客户端半边）。 */
     private void clearStageIfTerminal(String conversationTaskId, int status) {
+        if (status != ConversationMessage.STATUS_ACCEPTED && status != ConversationMessage.STATUS_RUNNING) {
+            assistantStream.terminal(conversationTaskId);
+        }
         if (runtimeStage == null || conversationTaskId == null) return;
         if (!conversationTaskId.equals(runtimeStage.conversationTaskId)) return;
         if (status != ConversationMessage.STATUS_ACCEPTED
@@ -1109,7 +1153,7 @@ public final class ConversationViewModel extends ViewModel {
         state.postValue(new State(conversationId, List.copyOf(all), sending, loadingHistory,
                 hasMoreHistory, error, hasRunningTask, pttPhase,
                 liveTranscript, summaryActive, conversationTitle, runtimeStage,
-                submittedAttachments, modelRuntime));
+                submittedAttachments, modelRuntime, assistantStream.text()));
     }
 
     // ---------------------------------------------------------------- 附件与模型胶囊（I6/I5）

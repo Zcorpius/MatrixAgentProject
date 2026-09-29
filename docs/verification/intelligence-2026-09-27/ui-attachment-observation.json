@@ -1,0 +1,24 @@
+{
+  "observedAt": "2026-09-28T01:00:00+08:00",
+  "source": "real Launcher UIAutomator accessibility tree",
+  "requestId": "44faa949-7b7e-4239-bdb7-3ee78b1cb65f",
+  "fullAttachmentChars": 31279,
+  "tailBlock": "a1-c47",
+  "tailRecovered": true,
+  "sourceRangesVisible": true,
+  "coverageVisible": true,
+  "observations": [
+    {
+      "text": "Using only the attached synthetic file, what is the emergency passphrase and the delivery date? Cite the source block.",
+      "bounds": "[212,870][876,1012]"
+    },
+    {
+      "text": "📄 matrix-rag-synthetic-20260928.txt\n本轮提供的资料片段（原文字符位置）：\n[a1-c47] 第 31082–31279 字\n[a1-c1] 第 1–780 字\n[a1-c2] 第 661–1456 字\n[a1-c3] 第 1337–2132 字\n[a1-c4] 第 2013–2808 字\n覆盖 3006 / 31279 字；其他内容未提供给本轮模型",
+      "bounds": "[212,1012][876,1425]"
+    },
+    {
+      "text": "LLM/智谱 GLM：根据所附合成文件，应急口令（emergency passphrase）是 ORBIT-SEVEN，交付日期（delivery date）是 11 月 3 日（November third）。依据来源块：[a1-c47]，其中明确写道 \"The emergency passphrase is ORBIT-SEVEN. The delivery date is November third.\" 其余片段（a1-c1 至 a1-c4）仅为关于档案存储的背景填充内容，不含相关信息。",
+      "bounds": "[204,1640][868,1908]"
+    }
+  ]
+}

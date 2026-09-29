@@ -15,6 +15,7 @@ tasks.register("verifyArchitecture") {
     description = "Runs all non-device checks and verifies the SDK publication is dependency-pure."
     dependsOn(
         ":matrix-agent-service:check",
+        ":matrix-agent-service:runEvaluations",
         ":matrix-agent-service-lib:check",
         ":matrix-agent-launcher:check",
         ":matrix-agent-test:check",

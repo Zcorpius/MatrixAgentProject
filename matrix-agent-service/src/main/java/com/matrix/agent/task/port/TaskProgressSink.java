@@ -23,6 +23,11 @@ public interface TaskProgressSink {
     /** 每个 ToolExecutor.execute 前发布；capabilityName 为能力名（非参数、非结果）。 */
     void onCapabilityExecuting(String runtimeRequestId, String capabilityName);
 
+    default boolean supportsAssistantStream() { return false; }
+    default void onAssistantStreamStarted(String runtimeRequestId, int turn) { }
+    default void onAssistantStreamEvent(String runtimeRequestId, int turn,
+            com.matrix.agent.contract.ModelStreamEvent event) { }
+
     /** 安全默认：未装配即不发布任何阶段（行为与端口引入前完全一致）。 */
     TaskProgressSink NOOP = new TaskProgressSink() {
         @Override public void onModelPlanning(String runtimeRequestId) { }

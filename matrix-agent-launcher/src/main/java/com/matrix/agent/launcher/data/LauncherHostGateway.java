@@ -43,12 +43,30 @@ public final class LauncherHostGateway {
             new MutableLiveData<>(ConnectionState.CONNECTING);
 
     @Nullable private volatile MatrixAgent agent;
+    private int connectionLeases;
+
+    public interface ConnectionLease extends AutoCloseable { @Override void close(); }
+
+    /** Activity and overlay own independent, idempotent handles. No view lifecycle disconnects peers. */
+    public synchronized ConnectionLease acquireConnection() {
+        connectionLeases++;
+        if (connectionLeases == 1 && !isConnected()) connect();
+        AtomicBoolean released = new AtomicBoolean();
+        return () -> {
+            if (!released.compareAndSet(false, true)) return;
+            synchronized (LauncherHostGateway.this) {
+                if (--connectionLeases == 0) disconnect();
+            }
+        };
+    }
 
     public LauncherHostGateway(@NonNull Context context, @NonNull LauncherExecutorRegistry executors) {
         applicationContext = context.getApplicationContext();
         calls = executors.sdkCalls();
         polling = executors.polling();
     }
+
+    private synchronized boolean connectionWanted() { return connectionLeases > 0; }
 
     public LiveData<Integer> connectionState() { return connectionState; }
 
@@ -75,7 +93,7 @@ public final class LauncherHostGateway {
 
     /** Idempotently starts (or retries) SDK discovery off the UI thread. */
     public void connect() {
-        if (!connecting.compareAndSet(false, true)) return;
+        if (isConnected() || !connecting.compareAndSet(false, true)) return;
         final long generation = connectionGeneration.get();
         Log.i(TAG, "[LauncherHost] connect begin generation=" + generation);
         try {
@@ -101,6 +119,11 @@ public final class LauncherHostGateway {
                     publishConnectionState(generation, null, ConnectionState.DISCONNECTED);
                 } finally {
                     connecting.set(false);
+                    // A new lease can arrive while a released generation is still negotiating.
+                    // Its earlier connect() saw connecting=true; resume that requested connection now.
+                    if (generation != connectionGeneration.get() && connectionWanted()) {
+                        main.post(this::connect);
+                    }
                 }
             });
         } catch (RejectedExecutionException unavailable) {

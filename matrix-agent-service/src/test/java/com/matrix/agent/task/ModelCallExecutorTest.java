@@ -70,6 +70,19 @@ public final class ModelCallExecutorTest {
     }
 
     @Test
+    public void exhaustedExecutorIsCapacityRejectionRatherThanSafetyPolicy() {
+        ExecutorService stopped = Executors.newSingleThreadExecutor();
+        stopped.shutdownNow();
+        ModelGateway gateway = ignored -> ModelTurn.directAnswer("never called");
+
+        ModelCallExecutor.Result result = new ModelCallExecutor(1, stopped)
+                .decide(gateway, request("rejected-lane"));
+
+        assertFalse(result.isSuccess());
+        assertEquals(StopReason.REJECTED, result.getTerminalReason());
+    }
+
+    @Test
     public void tokenCancelFiresAbortHookSynchronously() {
         CancellationToken token = new CancellationToken();
         AtomicBoolean hookFired = new AtomicBoolean(false);
@@ -211,13 +224,12 @@ public final class ModelCallExecutorTest {
 
     /**
      * 网络异常被中间层包成 IllegalStateException 时,ModelCallExecutor 必须沿 cause 链识别出
-     * NetworkException → TIMEOUT 终态(而非 POLICY_HALT)。
+     * NetworkException → NETWORK_UNAVAILABLE 终态(而非 POLICY_HALT)。
      *
      * <p>场景:ModelApiClient.post 抛 NetworkException,LlmModelGateway 或未来 CancellableModelCall
      * 把它包成外层 IllegalStateException。顶层 instanceof 会漏判,沿链查找才能正确归类。
-     * 本层是模型决策阶段(调 LLM,尚未执行工具),网络/超时属时间类临时故障,归 TIMEOUT 语义最
-     * 准确(区别于 POLICY_HALT 表示协议/模型不可恢复错误);两者都会终止 loop,但 TIMEOUT 准确
-     * 反映"网络/超时"原因。(注:写操作 EXECUTION_UNKNOWN 是 Repository 在整体 future 超时收敛的,
+     * 本层是模型决策阶段(调 LLM,尚未执行工具),网络不可达和真正超时应分开呈现。
+     * (注:写操作 EXECUTION_UNKNOWN 是 Repository 在整体 future 超时收敛的,
      * 与本层模型决策超时无关。)
      */
     @Test
@@ -263,9 +275,34 @@ public final class ModelCallExecutorTest {
                 StopReason.NETWORK_UNAVAILABLE, result.getTerminalReason());
     }
 
-    /** 对照:非网络异常(普通 IllegalStateException,cause 链无 Network/Timeout)仍 POLICY_HALT。 */
     @Test
-    public void nonNetworkExceptionMapsToPolicyHalt() {
+    public void wrappedProviderRateLimitIsNotReportedAsSafetyPolicy() {
+        ModelGateway gateway = request -> {
+            throw new IllegalStateException("模型规划失败", new ModelApiException.RateLimitException(
+                    "stream", new IllegalStateException("HTTP 429")));
+        };
+
+        ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, request("rate-limit"));
+
+        assertFalse(result.isSuccess());
+        assertEquals(StopReason.MODEL_RATE_LIMITED, result.getTerminalReason());
+    }
+
+    @Test
+    public void serverErrorIsNotReportedAsSafetyPolicy() {
+        ModelGateway gateway = request -> {
+            throw new ModelApiException.ServerException(503, "stream", new IllegalStateException("HTTP 503"));
+        };
+
+        ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, request("provider-error"));
+
+        assertFalse(result.isSuccess());
+        assertEquals(StopReason.MODEL_CALL_FAILED, result.getTerminalReason());
+    }
+
+    /** A model implementation failure is not evidence that the user's request was unsafe. */
+    @Test
+    public void nonNetworkExceptionMapsToModelCallFailed() {
         ModelGateway gateway = request -> {
             throw new IllegalStateException("协议解析失败");
         };
@@ -279,7 +316,7 @@ public final class ModelCallExecutorTest {
         ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, turnRequest);
 
         assertFalse(result.isSuccess());
-        assertEquals("非网络异常应映射为 POLICY_HALT", StopReason.POLICY_HALT,
+        assertEquals("非网络异常应映射为 MODEL_CALL_FAILED", StopReason.MODEL_CALL_FAILED,
                 result.getTerminalReason());
     }
 }

@@ -155,7 +155,9 @@ public final class RuntimeBoundaryTest {
                 scheduler.contains("enqueueUniqueWork"));
         assertTrue("scheduler must admit the dedicated start worker",
                 scheduler.contains("new OneTimeWorkRequest.Builder(ModelDownloadStartWorker.class)"));
-        assertTrue("admission must wait for usable network", scheduler.contains("NetworkType.CONNECTED"));
+        assertTrue("the worker must check the active network without requiring OS validation",
+                worker.contains("hasInternetCapableNetwork()")
+                        && worker.contains("NET_CAPABILITY_INTERNET"));
         assertTrue("admission must respect low-storage protection",
                 scheduler.contains("setRequiresStorageNotLow(true)"));
         assertTrue("the worker may only launch the visible transfer service",

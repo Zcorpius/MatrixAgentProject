@@ -50,7 +50,7 @@ public final class ModelViewModel extends ViewModel {
             if (!operations.isCurrent(operation)) return;
             SavedForm saved = code == 0
                     ? new SavedForm(providerId, modelId, endpoint, credentialProvided) : null;
-            update(current.withBusy(false, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code)
+            update(current.withBusy(code == 0, code == 0 ? Notice.SAVED : Notice.SAVE_FAILED, code)
                     .withSavedForm(saved));
             if (code == 0) refresh(operation);
         }, result -> {
@@ -63,7 +63,13 @@ public final class ModelViewModel extends ViewModel {
         });
     }
 
-    public void testConnection(@NonNull String providerId) {
+    public void testActiveConnection() {
+        ModelInfo active = activeCloudModel(current);
+        if (active == null) {
+            update(current.withNotice(Notice.NO_ACTIVE_CLOUD_MODEL, 0));
+            return;
+        }
+        String providerId = active.providerId;
         final long operation = operations.begin();
         update(current.withBusy(true, Notice.TESTING, 0));
         repository.test(providerId, result -> {
@@ -75,7 +81,17 @@ public final class ModelViewModel extends ViewModel {
         });
     }
 
+    @Nullable static ModelInfo activeCloudModel(@Nullable State state) {
+        if (state == null || state.runtime == null
+                || state.runtime.backend != ModelRuntimeStatus.BACKEND_CLOUD) return null;
+        for (ModelInfo model : state.models) if (model.active) return model;
+        return null;
+    }
+
     public void refresh() {
+        // Connection callbacks can request a refresh while native model loading is still in
+        // flight. Only the operation completion may replace the pending selection state.
+        if (current.busy) return;
         refresh(operations.current());
     }
 
@@ -83,7 +99,8 @@ public final class ModelViewModel extends ViewModel {
         repository.snapshot(result -> {
             if (!operations.isCurrent(expectedOperation)) return;
             if (!result.isSuccess() || result.value == null) {
-                update(current.withBusy(false, Notice.HOST_UNAVAILABLE, 0));
+                update(current.withBusy(false, Notice.HOST_UNAVAILABLE, 0)
+                        .withSwitchingModelId(null));
                 return;
             }
             ModelRepository.Snapshot snapshot = result.value;
@@ -93,16 +110,21 @@ public final class ModelViewModel extends ViewModel {
     }
 
     public void select(@NonNull ModelInfo model) {
+        if (current.busy || model.active || !model.available) return;
         final long operation = operations.begin();
-        update(current.withBusy(true, Notice.SWITCHING, 0));
+        update(current.withBusy(true, Notice.SWITCHING, 0)
+                .withSwitchingModelId(model.modelId));
         repository.select(model.modelId, code -> {
             if (!operations.isCurrent(operation)) return;
-            update(current.withBusy(false, code == 0 ? Notice.SWITCHED : Notice.SWITCH_FAILED, code));
+            update(current.withBusy(code == 0,
+                    code == 0 ? Notice.SWITCHED : Notice.SWITCH_FAILED, code)
+                    .withSwitchingModelId(code == 0 ? model.modelId : null));
             if (code == 0) refresh(operation);
         }, result -> {
             if (!operations.isCurrent(operation)) return;
             if (!result.isSuccess() || !Boolean.TRUE.equals(result.value)) {
-                update(current.withBusy(false, Notice.HOST_UNAVAILABLE, 0));
+                update(current.withBusy(false, Notice.HOST_UNAVAILABLE, 0)
+                        .withSwitchingModelId(null));
             }
         });
     }
@@ -112,7 +134,8 @@ public final class ModelViewModel extends ViewModel {
     public enum Notice {
         IDLE, MISSING_KEY, MISSING_MODEL_ID, INVALID_MODEL_ID, PROVISIONING, SAVED, SAVE_FAILED,
         TESTING, TEST_SUCCEEDED, TEST_FAILED,
-        RUNTIME, SWITCHING, SWITCHED, SWITCH_FAILED, HOST_UNAVAILABLE
+        RUNTIME, SWITCHING, SWITCHED, SWITCH_FAILED, HOST_UNAVAILABLE,
+        NO_ACTIVE_CLOUD_MODEL
     }
 
     public static final class State {
@@ -123,26 +146,37 @@ public final class ModelViewModel extends ViewModel {
         public final int code;
         /** 最近一次成功保存的非敏感表单摘要；保留到下一次保存操作，防止刷新状态吞掉 SAVED 帧。 */
         @Nullable public final SavedForm savedForm;
+        /** Model currently loading after a user requested a switch. */
+        @Nullable public final String switchingModelId;
         State(@Nullable ModelRuntimeStatus runtime, @NonNull List<ModelInfo> models, boolean busy,
                 @NonNull Notice notice, int code) {
-            this(runtime, models, busy, notice, code, null);
+            this(runtime, models, busy, notice, code, null, null);
         }
         State(@Nullable ModelRuntimeStatus runtime, @NonNull List<ModelInfo> models, boolean busy,
                 @NonNull Notice notice, int code, @Nullable SavedForm savedForm) {
+            this(runtime, models, busy, notice, code, savedForm, null);
+        }
+        State(@Nullable ModelRuntimeStatus runtime, @NonNull List<ModelInfo> models, boolean busy,
+                @NonNull Notice notice, int code, @Nullable SavedForm savedForm,
+                @Nullable String switchingModelId) {
             this.runtime = runtime;
             this.models = Collections.unmodifiableList(new ArrayList<>(models));
             this.busy = busy;
             this.notice = notice;
             this.code = code;
             this.savedForm = savedForm;
+            this.switchingModelId = switchingModelId;
         }
         static State initial() { return new State(null, Collections.emptyList(), false, Notice.IDLE, 0); }
         State withBusy(boolean busy, Notice notice, int code) {
-            return new State(runtime, models, busy, notice, code, savedForm);
+            return new State(runtime, models, busy, notice, code, savedForm, switchingModelId);
         }
         State withNotice(Notice notice, int code) { return withBusy(busy, notice, code); }
         State withSavedForm(@Nullable SavedForm savedForm) {
-            return new State(runtime, models, busy, notice, code, savedForm);
+            return new State(runtime, models, busy, notice, code, savedForm, switchingModelId);
+        }
+        State withSwitchingModelId(@Nullable String switchingModelId) {
+            return new State(runtime, models, busy, notice, code, savedForm, switchingModelId);
         }
     }
 

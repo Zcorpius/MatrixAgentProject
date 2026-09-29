@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Enforces per-capability timeout and propagates cancellation around provider calls. */
 public final class ToolExecutor {
+    private final WriteResourceArbiter writeResources = new WriteResourceArbiter();
     private static final String TAG = "MatrixAgent";
     private static final long CANCELLATION_POLL_MILLIS = 50L;
     private final ExecutorService workers;
@@ -77,9 +78,26 @@ public final class ToolExecutor {
                 + " budgetMs=" + budgetMillis
                 + " (capability=" + definition.getTimeoutMillis()
                 + " request=" + request.remainingMillis() + ")");
+        if (!request.getExecutionScope().prepareTool()) return ToolResult.rejected(call.getCapabilityName(), "计划源已变化或无法核验");
+        budgetMillis = Math.min(budgetMillis, request.remainingMillis());
+        if (budgetMillis <= 0) return ToolResult.rejected(call.getCapabilityName(), "核验后任务已过期，未发送动作");
         Future<ToolResult> future;
         try {
-            future = workers.submit(() -> provider.execute(request, call));
+            future = workers.submit(() -> {
+                AutoCloseable writeLease = definition.isWriteOperation()
+                        ? writeResources.acquire(call.getCapabilityName(), Math.min(definition.getTimeoutMillis(), request.remainingMillis())) : null;
+                try {
+                    if (definition.isWriteOperation() && writeLease == null) return ToolResult.rejected(call.getCapabilityName(), "写入资源正忙，未发送动作");
+                    if (request.isCancelled() || request.remainingMillis() <= 0
+                            || !request.getExecutionScope().allows(call.getCapabilityName())
+                            || !request.getExecutionScope().reserveTool()) {
+                        return ToolResult.rejected(call.getCapabilityName(), "计划授权已失效或工具预算耗尽");
+                    }
+                    return provider.execute(request, call);
+                } finally {
+                    if (writeLease != null) writeLease.close();
+                }
+            });
         } catch (RejectedExecutionException rejected) {
             // ioPool 队列满 / Executor 关闭时,submit 抛 RejectedExecutionException。
             // 写操作走 EXECUTION_UNKNOWN(命令可能未下发,但保守按"未知"提示用户二次确认);

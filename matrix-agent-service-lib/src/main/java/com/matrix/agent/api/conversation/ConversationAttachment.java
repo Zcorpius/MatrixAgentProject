@@ -40,6 +40,8 @@ public final class ConversationAttachment implements Parcelable {
     /** 提取出的文本字符数（chip 摘要用）；正文不跨 Binder。 */
     public final int extractedChars;
     public final long createdAtMs;
+    /** Host-frozen source IDs and original character ranges; never a model-generated citation claim. */
+    public final String retrievalSummary;
 
     public ConversationAttachment(String attachmentId, String conversationId,
             String mimeType, String safeDisplayName, long byteSize, int state,
@@ -52,6 +54,15 @@ public final class ConversationAttachment implements Parcelable {
             String conversationId, String mimeType, String safeDisplayName,
             long byteSize, int state, int errorCode, int extractedChars,
             long createdAtMs) {
+        this(schemaVersion, attachmentId, conversationId, mimeType, safeDisplayName, byteSize,
+                state, errorCode, extractedChars, createdAtMs, "");
+    }
+
+    public ConversationAttachment(int schemaVersion, String attachmentId,
+            String conversationId, String mimeType, String safeDisplayName,
+            long byteSize, int state, int errorCode, int extractedChars,
+            long createdAtMs, String retrievalSummary) {
+        this.retrievalSummary = retrievalSummary == null ? "" : retrievalSummary;
         this.schemaVersion = schemaVersion;
         this.attachmentId = attachmentId;
         this.conversationId = conversationId;
@@ -83,6 +94,7 @@ public final class ConversationAttachment implements Parcelable {
         errorCode = in.readInt();
         extractedChars = in.readInt();
         createdAtMs = in.readLong();
+        retrievalSummary = schemaVersion >= 15 ? in.readString() : "";
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -96,6 +108,7 @@ public final class ConversationAttachment implements Parcelable {
         dest.writeInt(errorCode);
         dest.writeInt(extractedChars);
         dest.writeLong(createdAtMs);
+        if (schemaVersion >= 15) dest.writeString(retrievalSummary);
     }
 
     @Override public int describeContents() { return 0; }

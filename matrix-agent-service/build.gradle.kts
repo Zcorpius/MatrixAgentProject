@@ -1,4 +1,9 @@
 import java.util.Properties
+import java.security.MessageDigest
+import java.nio.file.Files
+import java.nio.charset.StandardCharsets
+import java.util.HexFormat
+import org.gradle.api.tasks.testing.Test
 
 // 内部调试轨迹门控（评估 v1.0 §4.3）：只控制 UI 可见性；诊断日志无条件输出。
 // 默认 false；所有构建变体均以该项目级显式配置为唯一可见性开关。
@@ -30,11 +35,136 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// The privileged debug runner and JVM gate consume the same frozen evaluator sources.
+// Nothing from this directory is compiled into release, and no JUnit code enters the APK.
+abstract class DeviceEvaluationSources : Sync() {
+    @get:OutputDirectory
+    abstract val generatedSources: DirectoryProperty
+}
+val deviceEvaluationSources = tasks.register<DeviceEvaluationSources>("prepareDeviceEvaluationSources") {
+    from("src/test/java") {
+        include("com/matrix/agent/evaluation/*.java")
+        exclude("**/*Test.java", "**/ModelProfiles.java", "**/HttpMeasurements.java")
+        include("com/matrix/agent/schedule/store/ScheduleStoreFixture.java")
+        include("com/matrix/agent/task/skill/EvaluationSkills.java")
+    }
+    generatedSources.set(layout.buildDirectory.dir("generated/deviceEvaluationSources"))
+    into(generatedSources)
+}
+
+/** Debug-only provenance is generated at build time, since Android cannot inspect the Git tree. */
+abstract class EvaluationBuildProvenance : DefaultTask() {
+    @get:Internal abstract val repositoryRoot: DirectoryProperty
+    @get:OutputDirectory abstract val generatedAssets: DirectoryProperty
+
+    @TaskAction fun generate() {
+        val root = repositoryRoot.get().asFile.toPath()
+        fun sha256(bytes: ByteArray): String = HexFormat.of().formatHex(
+            MessageDigest.getInstance("SHA-256").digest(bytes))
+        fun treeHash(relative: String): String {
+            val directory = root.resolve(relative)
+            val manifest = StringBuilder()
+            Files.walk(directory).use { stream ->
+                stream.filter(Files::isRegularFile).sorted().forEach { path ->
+                    manifest.append(directory.relativize(path)).append('\u0000')
+                        .append(sha256(Files.readAllBytes(path))).append('\n')
+                }
+            }
+            return sha256(manifest.toString().toByteArray(StandardCharsets.UTF_8))
+        }
+        fun git(vararg args: String): String {
+            val process = ProcessBuilder(listOf("git", "-C", root.toString()) + args)
+                .redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            check(process.waitFor() == 0) { "Cannot resolve evaluation Git provenance" }
+            return output.trim()
+        }
+        val commit = git("rev-parse", "HEAD")
+        check(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid Git commit for evaluation" }
+        val dirty = git("status", "--porcelain").isNotEmpty()
+        val source = treeHash("matrix-agent-service/src/main/java")
+        val evaluator = treeHash("matrix-agent-service/src/test/java/com/matrix/agent/evaluation")
+        val deviceEvaluator = treeHash("matrix-agent-service/src/debug/java/com/matrix/agent/evaluation")
+        val onDevice = treeHash("ondevice/src/main")
+        val buildDefinition = sha256((sha256(Files.readAllBytes(root.resolve("build.gradle.kts")))
+            + sha256(Files.readAllBytes(root.resolve("matrix-agent-service/build.gradle.kts"))))
+            .toByteArray(StandardCharsets.UTF_8))
+        val output = generatedAssets.get().asFile.resolve("evaluation/build-provenance.json")
+        output.parentFile.mkdirs()
+        output.writeText("""{"commit":"$commit","worktreeDirty":$dirty,"productionSourceSha256":"$source","evaluatorSourceSha256":"$evaluator","deviceEvaluatorSourceSha256":"$deviceEvaluator","onDeviceSourceSha256":"$onDevice","buildDefinitionSha256":"$buildDefinition"}""")
+    }
+}
+val evaluationBuildProvenance = tasks.register<EvaluationBuildProvenance>("prepareEvaluationBuildProvenance") {
+    repositoryRoot.set(rootProject.layout.projectDirectory)
+    generatedAssets.set(layout.buildDirectory.dir("generated/evaluationProvenanceAssets"))
+    // Git status and source hashes may change without Gradle's declared file inputs.
+    outputs.upToDateWhen { false }
+}
+
+// Optional offline distribution of the pinned embedding artifact. No weights are checked into Git.
+// Runtime SHA verification remains authoritative, including for packaged assets.
+abstract class EmbeddingAssets : DefaultTask() {
+    @get:InputDirectory @get:Optional @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val artifactDirectory: DirectoryProperty
+    @get:OutputDirectory
+    abstract val generatedAssets: DirectoryProperty
+
+    @TaskAction fun prepare() {
+        val output = generatedAssets.get().asFile
+        // This task owns this directory. An unbundled build must also remove a previous bundle.
+        output.deleteRecursively()
+        output.mkdirs()
+        if (!artifactDirectory.isPresent) return
+        val source = artifactDirectory.get().asFile
+        val destination = output.resolve("embedding/bge-small-zh-v1.5").apply { mkdirs() }
+        listOf("config.json", "llm_config.json", "llm.mnn", "llm.mnn.weight",
+                "embeddings_bf16.bin", "tokenizer.txt").forEach { name ->
+            val part = source.resolve(name)
+            require(part.isFile) { "Missing pinned embedding artifact part: $name" }
+            part.copyTo(destination.resolve(name))
+        }
+    }
+}
+val embeddingAssets = tasks.register<EmbeddingAssets>("prepareEmbeddingAssets") {
+    providers.gradleProperty("matrix.embeddingArtifactDir").orNull?.let {
+        artifactDirectory.set(rootProject.layout.projectDirectory.dir(it))
+    }
+    generatedAssets.set(layout.buildDirectory.dir("generated/embeddingAssets"))
+}
+val verifyEmbeddingManifest = tasks.register("verifyEmbeddingManifest") {
+    group = "verification"
+    description = "Require the pinned embedding profile and its distribution notice in every APK build."
+    val manifest = layout.projectDirectory.file("src/main/assets/embedding/bge-small-zh-v1.5.json")
+    val notice = layout.projectDirectory.file("src/main/assets/embedding/NOTICE.txt")
+    inputs.files(manifest, notice)
+    doLast {
+        check(manifest.asFile.isFile) { "Missing packaged embedding manifest: ${manifest.asFile}" }
+        check(notice.asFile.isFile) { "Missing embedding distribution notice: ${notice.asFile}" }
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(verifyEmbeddingManifest) }
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(embeddingAssets) { it.generatedAssets }
+}
+
+androidComponents.onVariants(androidComponents.selector().withBuildType("debug")) { variant ->
+    variant.sources.java?.addGeneratedSourceDirectory(deviceEvaluationSources) { it.generatedSources }
+    variant.sources.assets?.addGeneratedSourceDirectory(evaluationBuildProvenance) { it.generatedAssets }
+}
+
 android {
     namespace = "com.matrix.agent"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    sourceSets.getByName("debug") {
+        assets.srcDir("src/test/resources")
+        assets.srcDir("schemas")
+        assets.srcDir(rootProject.layout.projectDirectory.dir("tools/evaluation/fixtures"))
+    }
 
     defaultConfig {
+        // Kept opt-in until the frozen A/B corpus demonstrates stable goal-level benefit.
+        buildConfigField("boolean", "MATRIX_FAILURE_REFLECTION",
+                providers.gradleProperty("matrix.failureReflection").map(String::toBoolean).orElse(false).get().toString())
         applicationId = "com.matrix.agent"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
@@ -280,3 +410,37 @@ tasks.register("connectedOnDeviceCertificationAndroidTest") {
         }
     }
 }
+
+// Reuse AGP's mockable Android/JVM test runtime. Real-model calls are opt-in and never part of check.
+fun registerEvaluationTask(taskName: String, mode: String) = tasks.register<Test>(taskName) {
+    group = "verification"
+    description = if (mode == "offline") "Run the versioned deterministic Agent corpus without network access."
+        else "Measure explicitly configured real models against fixed synthetic providers."
+    val unitTests = tasks.named<Test>("testDebugUnitTest")
+    dependsOn(unitTests)
+    testClassesDirs = files(unitTests.map { it.testClassesDirs })
+    classpath = files(unitTests.map { it.classpath })
+    filter.includeTestsMatching("com.matrix.agent.evaluation.EvaluationRunnerTest")
+    maxParallelForks = 1
+    workingDir = projectDir
+    systemProperty("evaluation.mode", mode)
+    systemProperty("evaluation.projectDir", projectDir.absolutePath)
+    systemProperty("evaluation.outputDir", layout.buildDirectory.dir("reports/evaluations/$mode").get().asFile.absolutePath)
+    inputs.dir("src/test/resources/evaluation")
+    inputs.dir("src/main/assets/skills")
+    // A requested measurement must execute again, even when code and corpus are unchanged.
+    outputs.upToDateWhen { false }
+    outputs.doNotCacheIf("Measurements must be sampled on every explicit invocation") { true }
+    outputs.dir(layout.buildDirectory.dir("reports/evaluations/$mode"))
+    if (mode == "model") {
+        doFirst {
+            val config = providers.gradleProperty("model.config").orNull
+                ?: throw GradleException("Provide -Pmodel.config=/absolute/path/to/profiles.json (see docs/evaluation.md)")
+            val configFile = rootProject.file(config)
+            check(configFile.isFile) { "Model configuration file is missing" }
+            systemProperty("evaluation.modelConfig", configFile.absolutePath)
+        }
+    }
+}
+registerEvaluationTask("runEvaluations", "offline")
+registerEvaluationTask("runModelEvaluations", "model")

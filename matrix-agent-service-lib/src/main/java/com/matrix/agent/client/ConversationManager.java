@@ -290,6 +290,10 @@ public final class ConversationManager extends MatrixManagerBase {
                 eventHandler().post(() -> listener.onRuntimeStageChanged(stage));
             }
 
+            @Override public void onAssistantStream(com.matrix.agent.api.conversation.ConversationAssistantStream snapshot) {
+                eventHandler().post(() -> listener.onAssistantStream(snapshot));
+            }
+
             @Override public void onConversationError(String convId, int errorCode) {
                 eventHandler().post(() -> listener.onConversationError(convId, errorCode));
             }
@@ -327,6 +331,7 @@ public final class ConversationManager extends MatrixManagerBase {
         default void onTransientTranscript(String conversationId, String voiceSessionId,
                 String text, boolean isFinal) { }
         default void onRuntimeStageChanged(ConversationRuntimeStage stage) { }
+        default void onAssistantStream(com.matrix.agent.api.conversation.ConversationAssistantStream snapshot) { }
         default void onConversationError(String conversationId, int errorCode) { }
     }
 

@@ -1,0 +1,33 @@
+{
+  "ondevice": {
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-service": {
+    "tests": 1497,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 2
+  },
+  "matrix-agent-service-lib": {
+    "tests": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "matrix-agent-launcher": {
+    "tests": 71,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "totals": {
+    "tests": 1596,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 2
+  },
+  "runnerNotes": "Two ordinary-unit-test eval methods intentionally skip; deterministicCorpus executes separately in runEvaluations, realModelCorpus is explicit and evidenced by the device report."
+}

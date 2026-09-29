@@ -1,0 +1,28 @@
+{
+  "installedAtApprox": "2026-09-28T01:20+08:00",
+  "source": "assembled debug APK, installed with adb install -r",
+  "apkSha256": "a7be1acd67ee434e35ceb8c6d33b2dd2f647a0cdd725fce7ab6990b2af34fa00",
+  "bytes": 115878209,
+  "appliesTo": [
+    "memory-answer-evidence-v2.json",
+    "reflection-device.json"
+  ],
+  "baseCommit": "690adee",
+  "dirtyWorktree": true,
+  "configurationObservation": {
+    "observedAt": "2026-09-28T01:29:25.057+08:00",
+    "source": "debug engineConfig log, read from unchanged saved ModelConfig after serial probes completed",
+    "model": "glm-5.3",
+    "protocol": "OPENAI_CHAT",
+    "savedPlannerMode": "STRUCTURED_JSON_COMPATIBILITY",
+    "reflectionPlannerMode": "STRUCTURED_JSON_COMPATIBILITY",
+    "memoryAnswerPlannerMode": "NATIVE_TOOL_CALLING",
+    "memoryModeSource": "ModelFeatureDeviceProbe explicitly creates NATIVE_TOOL_CALLING config without persisting it",
+    "followUpEngineTask": {
+      "input": "Explain_RAG_briefly_without_using_tools",
+      "state": "SUCCEEDED",
+      "toolCalls": 0,
+      "elapsedMillis": 8217
+    }
+  }
+}

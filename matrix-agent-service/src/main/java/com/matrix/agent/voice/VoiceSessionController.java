@@ -53,6 +53,8 @@ public final class VoiceSessionController {
     private final AgentRunner runner;
     /** 对话桥（阶段 B）：非 null 时 consumeFinal 走统一提交点而非直连 runner。 */
     private volatile VoiceConversationBridge conversationBridge;
+    private volatile com.matrix.agent.identity.InteractiveOrigin interactiveOrigin;
+    public void setInteractiveOrigin(com.matrix.agent.identity.InteractiveOrigin origin) { interactiveOrigin = origin; }
     /** 绑定的 conversationId（PTT 绑定命中时非 null；唤醒路径为 null 由桥派生）。 */
     private volatile String boundConversationId;
     private final ResponsePresenter presenter;
@@ -397,12 +399,15 @@ public final class VoiceSessionController {
                     resolvedConv = wakeRouter.resolve();
                 }
                 final String targetConv = resolvedConv;
+                var owner = interactiveOrigin;
+                var origin = owner == null ? null : new com.matrix.agent.identity.InteractiveOrigin(
+                        owner.uid(), owner.androidUserId(), owner.packageName(), transcript.text());
                 try {
                     agentExecutor.execute(() -> bridge.submit(
                             new VoiceConversationBridge.SubmitRequest(
                                     transcript.text(), transcript.languageTag(),
                                     transcript.confidence(), transcript.confidenceAvailable(),
-                                    0, vrToken),
+                                    0, vrToken, origin),
                             targetConv));
                 } catch (RejectedExecutionException rejected) {
                     onSubmissionFailed(vrToken, "CONVERSATION_EXECUTOR_REJECTED");

@@ -33,6 +33,7 @@ import java.util.List;
 public final class ModelApiClient implements LlmClient {
     private static final String TAG = "MatrixAgent";
     private final JsonHttpTransport httpTransport;
+    private final SseHttpTransport streamTransport;
 
     /**
      * 重试策略——对 RateLimitException(429)/ ServerException(5xx)
@@ -47,11 +48,75 @@ public final class ModelApiClient implements LlmClient {
     public ModelApiClient(okhttp3.OkHttpClient client) {
         if (client == null) throw new IllegalArgumentException("client 不能为空");
         httpTransport = new JsonHttpTransport(client);
+        streamTransport = new SseHttpTransport(client);
     }
 
     /** Convenience factory for isolated JVM tests; production must receive the Host-owned client. */
     public static ModelApiClient forTesting() {
         return new ModelApiClient(new MatrixHttpClient().provider());
+    }
+
+    public ModelTurn streamTools(ModelConfig config, com.matrix.agent.contract.ModelTurnRequest turn,
+            com.matrix.agent.contract.ModelStreamSink sink) throws Exception {
+        config.validate();
+        JSONObject body = switch (config.protocol) {
+            case OPENAI_CHAT -> OpenAiToolProtocol.buildConversationRequest(config,
+                    turn.getSystemPrompt(), turn.getConversation(), turn.getTools());
+            case ANTHROPIC_MESSAGES -> AnthropicToolProtocol.buildRequest(config,
+                    turn.getSystemPrompt(), turn.getConversation(), turn.getTools());
+            case GEMINI_GENERATE_CONTENT -> GeminiToolProtocol.buildRequest(config,
+                    turn.getSystemPrompt(), turn.getConversation(), turn.getTools());
+            default -> throw new IllegalArgumentException("unsupported streaming protocol");
+        };
+        return stream(config, body, turn.getTools(), turn.getAgentRequest().getCancellationToken(),
+                turn.getAgentRequest().getDeadlineAtMillis(), sink);
+    }
+
+    @Override public String completeStreaming(ModelConfig config, String system, String user,
+            CancellationToken token, long deadline, java.util.function.Consumer<String> bodySink) throws Exception {
+        if (config.protocol == ApiProtocol.OLLAMA_CHAT || config.protocol == ApiProtocol.ON_DEVICE) {
+            return complete(config, system, user, token, deadline);
+        }
+        config.validate();
+        JSONObject body = switch (config.protocol) {
+            case ANTHROPIC_MESSAGES -> new JSONObject().put("model", config.model).put("max_tokens", 2048)
+                    .put("temperature", 0.1).put("system", system).put("messages", new JSONArray().put(message("user", user)));
+            case GEMINI_GENERATE_CONTENT -> new JSONObject().put("systemInstruction", new JSONObject()
+                    .put("parts", new JSONArray().put(new JSONObject().put("text", system))))
+                    .put("contents", new JSONArray().put(new JSONObject().put("role", "user")
+                            .put("parts", new JSONArray().put(new JSONObject().put("text", user)))))
+                    .put("generationConfig", new JSONObject().put("temperature", 0.1));
+            default -> new JSONObject().put("model", config.model).put("temperature", 0.1)
+                    .put("messages", new JSONArray().put(message("system", system)).put(message("user", user)));
+        };
+        ModelTurn turn = stream(config, body, List.of(), token, deadline, event -> {
+            if (event instanceof com.matrix.agent.contract.ModelStreamEvent.BodyDelta delta) bodySink.accept(delta.text());
+        });
+        if (turn.getFinishReason() != com.matrix.agent.contract.FinishReason.STOP || turn.hasToolCalls()) {
+            throw new IllegalStateException("incomplete structured completion");
+        }
+        return turn.getAssistantMessage().getContent();
+    }
+
+    private ModelTurn stream(ModelConfig config, JSONObject body, List<ToolDefinition> tools,
+            CancellationToken token, long deadline, com.matrix.agent.contract.ModelStreamSink sink) throws Exception {
+        String endpoint = config.endpoint;
+        java.util.Map<String, String> headers = new java.util.LinkedHashMap<>();
+        if (config.protocol == ApiProtocol.GEMINI_GENERATE_CONTENT) {
+            endpoint = endpoint.replace("{model}", config.model).replace(":generateContent", ":streamGenerateContent");
+            okhttp3.HttpUrl url = okhttp3.HttpUrl.get(endpoint).newBuilder().setQueryParameter("alt", "sse").build();
+            endpoint = url.toString();
+            headers.put("x-goog-api-key", config.apiKey);
+        } else {
+            body.put("stream", true);
+            if (config.protocol == ApiProtocol.ANTHROPIC_MESSAGES) {
+                headers.put("x-api-key", config.apiKey); headers.put("anthropic-version", "2023-06-01");
+            } else if (config.apiKey != null && !config.apiKey.isEmpty()) headers.put("Authorization", "Bearer " + config.apiKey);
+        }
+        StreamingToolProtocol protocol = StreamingToolProtocol.create(config.protocol, tools, sink);
+        // No transparent retry: once text is visible its identity cannot be silently reused.
+        streamTransport.post(endpoint, body, headers, token, deadline, protocol);
+        return protocol.result();
     }
 
     /** 测试可见——暴露当前 RetryPolicy(只读,不替换)。 */
@@ -100,14 +165,14 @@ public final class ModelApiClient implements LlmClient {
         return invokeWithRetry(() -> {
             switch (config.protocol) {
                 case ANTHROPIC_MESSAGES:
-                    return callAnthropic(config, systemPrompt, userPrompt);
+                    return callAnthropic(config, systemPrompt, userPrompt, token, deadlineAtMillis);
                 case GEMINI_GENERATE_CONTENT:
-                    return callGemini(config, systemPrompt, userPrompt);
+                    return callGemini(config, systemPrompt, userPrompt, token, deadlineAtMillis);
                 case OLLAMA_CHAT:
-                    return callOllama(config, systemPrompt, userPrompt);
+                    return callOllama(config, systemPrompt, userPrompt, token, deadlineAtMillis);
                 case OPENAI_CHAT:
                 default:
-                    return callOpenAiCompatible(config, systemPrompt, userPrompt);
+                    return callOpenAiCompatible(config, systemPrompt, userPrompt, token, deadlineAtMillis);
             }
         }, token, deadlineAtMillis);
     }
@@ -127,7 +192,7 @@ public final class ModelApiClient implements LlmClient {
             switch (config.protocol) {
                 case OPENAI_CHAT:
                 default:
-                    return callOpenAiCompatibleDetail(config, systemPrompt, userPrompt);
+                    return callOpenAiCompatibleDetail(config, systemPrompt, userPrompt, token, deadlineAtMillis);
             }
         }, token, deadlineAtMillis);
     }
@@ -185,7 +250,7 @@ public final class ModelApiClient implements LlmClient {
         return invokeWithRetry(() -> {
             JSONObject request = buildAnthropicToolRequest(config, system, conversation, tools);
             JSONObject response = post(config.endpoint, request, "x-api-key", config.apiKey,
-                    "anthropic-version", "2023-06-01", token);
+                    "anthropic-version", "2023-06-01", token, deadlineAtMillis);
             ModelTurn turn = parseAnthropicToolResponse(response, tools);
             Log.d(TAG, "[Http] anthropic turn hasToolCalls=" + turn.hasToolCalls()
                     + " toolCalls=" + (turn.hasToolCalls() ? turn.getToolCalls().size() : 0));
@@ -244,7 +309,7 @@ public final class ModelApiClient implements LlmClient {
         return invokeWithRetry(() -> {
             JSONObject request = buildOpenAiToolRequest(config, system, conversation, tools);
             JSONObject response = post(config.endpoint, request, "Authorization",
-                    config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null, token);
+                    config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null, token, deadlineAtMillis);
             emitProviderReasoning(config, response);
             ModelTurn turn = parseOpenAiToolResponse(response, tools);
             Log.d(TAG, "[Http] openai-native turn hasToolCalls=" + turn.hasToolCalls()
@@ -303,7 +368,7 @@ public final class ModelApiClient implements LlmClient {
             JSONObject request = buildGeminiToolRequest(config, system, conversation, tools);
             String endpoint = config.endpoint.replace("{model}", config.model);
             JSONObject response = post(endpoint, request, "x-goog-api-key", config.apiKey,
-                    null, null, token);
+                    null, null, token, deadlineAtMillis);
             ModelTurn turn = parseGeminiToolResponse(response, tools);
             Log.d(TAG, "[Http] gemini-native turn hasToolCalls=" + turn.hasToolCalls()
                     + " toolCalls=" + (turn.hasToolCalls() ? turn.getToolCalls().size() : 0));
@@ -393,13 +458,14 @@ public final class ModelApiClient implements LlmClient {
         return AnthropicToolProtocol.parseResponse(response, tools);
     }
 
-    private String callOpenAiCompatible(ModelConfig config, String system, String user) throws Exception {
-        return callOpenAiCompatibleDetail(config, system, user).text();
+    private String callOpenAiCompatible(ModelConfig config, String system, String user,
+            CancellationToken token, long deadlineAtMillis) throws Exception {
+        return callOpenAiCompatibleDetail(config, system, user, token, deadlineAtMillis).text();
     }
 
     /** 详情版：捕获 OpenAI 兼容协议的 {@code reasoning_content}（GLM 思考字段）。 */
     private com.matrix.agent.contract.CompletionDetail callOpenAiCompatibleDetail(
-            ModelConfig config, String system, String user) throws Exception {
+            ModelConfig config, String system, String user, CancellationToken token, long deadlineAtMillis) throws Exception {
         JSONObject body = new JSONObject()
                 .put("model", config.model)
                 .put("stream", false)
@@ -408,7 +474,7 @@ public final class ModelApiClient implements LlmClient {
                         .put(message("system", system))
                         .put(message("user", user)));
         JSONObject response = post(config.endpoint, body, "Authorization",
-                config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null);
+                config.apiKey.isEmpty() ? null : "Bearer " + config.apiKey, null, null, token, deadlineAtMillis);
         JSONObject message = response.getJSONArray("choices").getJSONObject(0)
                 .getJSONObject("message");
         String text = message.optString("content", "");
@@ -444,18 +510,31 @@ public final class ModelApiClient implements LlmClient {
                 reasoning == null ? "reasoning unavailable" : reasoning);
     }
 
-    private String callAnthropic(ModelConfig config, String system, String user) throws Exception {
+    private String callAnthropic(ModelConfig config, String system, String user,
+            CancellationToken token, long deadlineAtMillis) throws Exception {
         JSONObject body = new JSONObject()
                 .put("model", config.model)
                 .put("max_tokens", 2048)
                 .put("system", system)
                 .put("messages", new JSONArray().put(message("user", user)));
         JSONObject response = post(config.endpoint, body, "x-api-key", config.apiKey,
-                "anthropic-version", "2023-06-01");
-        return response.getJSONArray("content").getJSONObject(0).optString("text", "");
+                "anthropic-version", "2023-06-01", token, deadlineAtMillis);
+        return parseAnthropicTextResponse(response);
     }
 
-    private String callGemini(ModelConfig config, String system, String user) throws Exception {
+    static String parseAnthropicTextResponse(JSONObject response) throws Exception {
+        // Reasoning models can return a thinking block before the user-visible text. Keep the
+        // non-streaming path consistent with the native tool and streaming Anthropic parsers.
+        String text = AnthropicToolProtocol.parseResponse(response, java.util.List.of())
+                .getAssistantMessage().getContent();
+        if (text == null || text.isBlank()) {
+            throw new IllegalStateException("Anthropic 响应未包含可用文本");
+        }
+        return text;
+    }
+
+    private String callGemini(ModelConfig config, String system, String user,
+            CancellationToken token, long deadlineAtMillis) throws Exception {
         String endpoint = config.endpoint.replace("{model}", config.model);
         JSONObject body = new JSONObject()
                 .put("systemInstruction", new JSONObject()
@@ -464,20 +543,22 @@ public final class ModelApiClient implements LlmClient {
                         .put("role", "user")
                         .put("parts", new JSONArray().put(new JSONObject().put("text", user)))))
                 .put("generationConfig", new JSONObject().put("temperature", 0.1));
-        JSONObject response = post(endpoint, body, "x-goog-api-key", config.apiKey, null, null);
+        JSONObject response = post(endpoint, body, "x-goog-api-key", config.apiKey, null, null,
+                token, deadlineAtMillis);
         return response.getJSONArray("candidates").getJSONObject(0)
                 .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
                 .optString("text", "");
     }
 
-    private String callOllama(ModelConfig config, String system, String user) throws Exception {
+    private String callOllama(ModelConfig config, String system, String user,
+            CancellationToken token, long deadlineAtMillis) throws Exception {
         JSONObject body = new JSONObject()
                 .put("model", config.model)
                 .put("stream", false)
                 .put("messages", new JSONArray()
                         .put(message("system", system))
                         .put(message("user", user)));
-        JSONObject response = post(config.endpoint, body, null, null, null, null);
+        JSONObject response = post(config.endpoint, body, null, null, null, null, token, deadlineAtMillis);
         return response.getJSONObject("message").optString("content", "");
     }
 
@@ -501,7 +582,12 @@ public final class ModelApiClient implements LlmClient {
     JSONObject post(String endpoint, JSONObject body,
             String header1, String value1, String header2, String value2,
             com.matrix.agent.identity.CancellationToken token) throws Exception {
-        return httpTransport.post(endpoint, body, header1, value1, header2, value2, token);
+        return post(endpoint, body, header1, value1, header2, value2, token, Long.MAX_VALUE);
+    }
+
+    JSONObject post(String endpoint, JSONObject body, String header1, String value1,
+            String header2, String value2, CancellationToken token, long deadlineAtMillis) throws Exception {
+        return httpTransport.post(endpoint, body, header1, value1, header2, value2, token, deadlineAtMillis);
     }
 
 }

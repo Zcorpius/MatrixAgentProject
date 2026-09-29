@@ -29,7 +29,21 @@ public final class MatrixServiceConstants {
      * 受控附件 staging 发现键 → IConversationAttachmentService（输入交互增强 I6，v8）。
      * 刻意不复用对话域键：附件是窄能力，老 Host 不通告时客户端按位独立降级。
      */
+    public static final String HANDOFF_SERVICE = "matrix.service.HANDOFF";
+    public static final String OVERLAY_INTERACTION_SERVICE = "matrix.service.OVERLAY_INTERACTION";
+    public static final int FEATURE_OVERLAY_INTERACTION = 1 << 13;
+    public static final int FEATURE_HANDOFF_DOMAIN = 1 << 7;
+
     public static final String ATTACHMENT_SERVICE = "matrix.service.ATTACHMENT";
+    public static final String SCHEDULE_SERVICE = "matrix.service.SCHEDULE";
+    public static final int FEATURE_SCHEDULE_DOMAIN = 1 << 8;
+    public static final int FEATURE_CALENDAR_DOMAIN = 1 << 9;
+    public static final int FEATURE_CLOCK_DELEGATION = 1 << 10;
+    public static final int FEATURE_SCHEDULE_AGENT = 1 << 11;
+    public static final int FEATURE_SCHEDULE_WORKFLOW = 1 << 12;
+    public static final String ACTION_OPEN_SCHEDULE = "com.matrix.agent.action.OPEN_SCHEDULE";
+    public static final String EXTRA_SCHEDULE_ID = "schedule_id";
+    public static final String EXTRA_SCHEDULE_RUN_ID = "schedule_run_id";
 
     /** Host notification → Launcher download page deep-link contract. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.matrix.agent.action.OPEN_DOWNLOADS";

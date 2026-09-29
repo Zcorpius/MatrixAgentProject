@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="matrix_paper" format="color" />
+    <attr name="matrix_paper_high" format="color" />
+    <attr name="matrix_ink" format="color" />
+    <attr name="matrix_ink_muted" format="color" />
+    <attr name="matrix_ink_faint" format="color" />
+    <attr name="matrix_accent" format="color" />
+    <attr name="matrix_accent_deep" format="color" />
+    <attr name="matrix_on_accent" format="color" />
+    <attr name="matrix_moss" format="color" />
+    <attr name="matrix_selected" format="color" />
+    <attr name="matrix_divider" format="color" />
+    <attr name="matrix_chrome" format="color" />
+    <attr name="matrix_chrome_ink" format="color" />
+    <attr name="matrix_chrome_muted" format="color" />
+    <attr name="matrix_scrim" format="color" />
+    <attr name="matrix_gradient_start" format="color" />
+    <attr name="matrix_gradient_end" format="color" />
+    <attr name="matrix_user_bubble" format="color" />
+    <attr name="matrix_assistant_bubble" format="color" />
+    <attr name="matrix_system_bubble" format="color" />
+    <attr name="matrix_trace_guide" format="color" />
+    <attr name="matrix_success" format="color" />
+    <attr name="matrix_warning" format="color" />
+    <attr name="matrix_danger" format="color" />
+</resources>

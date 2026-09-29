@@ -1,0 +1,2236 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "syntheticOnly": true,
+  "createdAtUnix": 1790524498.005375,
+  "serial": "977d27c4",
+  "scope": "native embedding retrieval only; application/Room/answer accuracy measured separately",
+  "corpusSha256": "af6ad5ebd75e0011f2607a06546291639d850148bc1a65db08e51a659120d50e",
+  "manifestSha256": "a2a271d610a855f800f66c9073e8509fd3072a86de5dd30c934613ed5d612408",
+  "modelVersion": "7999e1d3-mnn3.2-int8-v1",
+  "librarySha256": "18445c10677f7cee3d99862c64e89d9048db8c3cd9c7a8e7ec636105833d8bb7",
+  "resource": {
+    "summary": true,
+    "dimension": 512,
+    "loadMillis": 474.639792,
+    "maxRssKiB": 66932
+  },
+  "latencyMillis": {
+    "p50": 53.021302000000006,
+    "p95": 61.586458,
+    "max": 70.654219,
+    "samples": 48
+  },
+  "metrics": [
+    {
+      "threshold": 0.5,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.5,
+      "recall@3": 0.5,
+      "recall@5": 0.5,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.5,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.6666666666666666,
+      "recall@3": 0.6666666666666666,
+      "recall@5": 0.6666666666666666,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.55,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.08333333333333333,
+      "recall@3": 0.08333333333333333,
+      "recall@5": 0.08333333333333333,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.55,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.25,
+      "recall@3": 0.25,
+      "recall@5": 0.25,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.6,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.6,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.65,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.65,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.7,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.7,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.75,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.75,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.8,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.8,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.85,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.85,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.9,
+      "split": "calibration",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    },
+    {
+      "threshold": 0.9,
+      "split": "holdout",
+      "positiveCount": 12,
+      "negativeCount": 6,
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "negativeFalseRecallRate": 0.0
+    }
+  ],
+  "queries": [
+    {
+      "text": "早餐饮品通常选啥？",
+      "expected": [
+        "fact.drink"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.drink",
+          "cosine": 0.48485012561768276
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.4698750096577941
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.37817027760836036
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3642359578972911
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.36052503982186057
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.34263326274281164
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.3364363110350496
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.31914314414776984
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.307606642128197
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2995448798174258
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2979121645908722
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2734421534904058
+        }
+      ]
+    },
+    {
+      "text": "清晨会喝哪种饮料？",
+      "expected": [
+        "fact.drink"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.drink",
+          "cosine": 0.5151050798800699
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.37483610623675034
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3721047053949264
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.36816982533966053
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.320874251255093
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.31502450104635576
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.29985250582375816
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2684796713688954
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.24989172115547598
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.24186576470444393
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.23552796060011622
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.19455078765765224
+        }
+      ]
+    },
+    {
+      "text": "通勤是怎么走的？",
+      "expected": [
+        "fact.commute"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.commute",
+          "cosine": 0.4567252498207091
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.41290587276082263
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.30370011000467756
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.3010627706444141
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.2939704871459949
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.2698583680070623
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.25693235342229304
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.25290083633754085
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.25094701312468387
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.22640153176315828
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2254227663535695
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.22535764715034953
+        }
+      ]
+    },
+    {
+      "text": "每天用什么交通方式到公司？",
+      "expected": [
+        "fact.commute"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.commute",
+          "cosine": 0.5382748632966835
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.37946541249051946
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3644869461933232
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.30891752611081047
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.27584546484994443
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.27162029761278056
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.26769704238361386
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2645018107439306
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.25983943459194686
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2366455096955541
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2154207054577928
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.13163724031203697
+        }
+      ]
+    },
+    {
+      "text": "休息日爱进行哪些户外活动？",
+      "expected": [
+        "fact.weekend"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.weekend",
+          "cosine": 0.4887666357916073
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.39300390398691754
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3656884684881985
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.36401599031348586
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.33803400015018137
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.32949779288877973
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.3288068498898099
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.31139046827861816
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.30368720102779123
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2719875545051449
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2593228138231714
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2355835757039694
+        }
+      ]
+    },
+    {
+      "text": "放假喜欢去哪儿运动？",
+      "expected": [
+        "fact.weekend"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.travel",
+          "cosine": 0.5040101375687264
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.48651456845110325
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3876115363512002
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.38124840435785345
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3706122394549414
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.34874585748772935
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.34514941942946964
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.2909798567052503
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.289314404503733
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2615660368047408
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2422087973880448
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.19798018951761326
+        }
+      ]
+    },
+    {
+      "text": "家中的小动物叫什么名字？",
+      "expected": [
+        "fact.pet"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.pet",
+          "cosine": 0.5264831620979908
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.34330691078652936
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.3143222981078703
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3008090538526346
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.3007583792168085
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.2934454658808279
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2717767803457336
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.23758579362836274
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.22972993765042724
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.21816137848735329
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.20843502388913326
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.19561780085728292
+        }
+      ]
+    },
+    {
+      "text": "我养的宠物是啥？",
+      "expected": [
+        "fact.pet"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.pet",
+          "cosine": 0.568357478985814
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3627607839969503
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3379601652115758
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.33790417771857373
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.32222641433878496
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.3033179048683589
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2982817021178812
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.2749202107377161
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2728052484388836
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.2624252571087307
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2387021911440992
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2160342343252575
+        }
+      ]
+    },
+    {
+      "text": "每天的锻炼安排是什么？",
+      "expected": [
+        "fact.exercise"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.weekend",
+          "cosine": 0.4507125712243306
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.4143425785015723
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.4025350547674027
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3796258071502773
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.37268426370885827
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3705537177378499
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.31164427855940974
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3051097572182327
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.29967552039988604
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.28424012702474694
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2552935570393963
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.17973373132853493
+        }
+      ]
+    },
+    {
+      "text": "我一般何时进行有氧运动？",
+      "expected": [
+        "fact.exercise"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.exercise",
+          "cosine": 0.4841587659715046
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3857832553011133
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.38536390286952565
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3751361636201587
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.36904458928932915
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.36619298886624
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.33695092016895295
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.3251347309565573
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.29245113898915964
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2709462482649704
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2625255361400662
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2343198977483642
+        }
+      ]
+    },
+    {
+      "text": "爱看哪类文学作品？",
+      "expected": [
+        "fact.reading"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.reading",
+          "cosine": 0.5446835048750056
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.41646292246893457
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.34882744581230535
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2784074890412275
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2744428971950584
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.23515618940238744
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.22523321767894533
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.2125662294220973
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2068031680980844
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.20425258920333034
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.20223424543407154
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.18235144229753464
+        }
+      ]
+    },
+    {
+      "text": "书架上通常是哪种故事？",
+      "expected": [
+        "fact.reading"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.reading",
+          "cosine": 0.47445349952579424
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.4323359388358226
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.360958162710944
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.34732829156178613
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.30302522826275746
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2902102310320891
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2664225153896739
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.25424418629810214
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.24044053046499794
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2224657333082755
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2204762577882267
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2082776428616614
+        }
+      ]
+    },
+    {
+      "text": "天冷时我的保暖外套是什么颜色？",
+      "expected": [
+        "fact.clothes"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.clothes",
+          "cosine": 0.5045809122769904
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.36769639566465134
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3155163106662136
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.30842861082718676
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.27485700648160843
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.27419380826535433
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2722848127459097
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.26288344953269505
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.26071658932156927
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2457906128817835
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.24036898609315116
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.22958133612968595
+        }
+      ]
+    },
+    {
+      "text": "寒季通常穿哪种衣服？",
+      "expected": [
+        "fact.clothes"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.clothes",
+          "cosine": 0.5243830472500355
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3953955152697684
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.32742145005593715
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3272652860890118
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.302919436677179
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.25469791311120454
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2511887868847603
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.22929906281024612
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2273831845439615
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.22130527686470006
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.20439679041963332
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.20151928473703648
+        }
+      ]
+    },
+    {
+      "text": "作息时间一般是怎样的？",
+      "expected": [
+        "fact.sleep"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.sleep",
+          "cosine": 0.4217687069224429
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.40043613502641756
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.38982686449437304
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3737144010009017
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3637773174252322
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.34028249283559747
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.32341645134533903
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.306613181611297
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.29506087598764413
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2858176109660788
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.26061433447472815
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2576355501519799
+        }
+      ]
+    },
+    {
+      "text": "通常几点上床休息？",
+      "expected": [
+        "fact.sleep"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.sleep",
+          "cosine": 0.5750757408799752
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.42910890479559727
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.38839329284549545
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3876785852870116
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3644826464936833
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.3025472334397117
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.3015331412944626
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3002684293956888
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.27435599036547387
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.27318343574092147
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.26282817985834217
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.22467836893621515
+        }
+      ]
+    },
+    {
+      "text": "我会演奏什么乐器？",
+      "expected": [
+        "fact.instrument"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.instrument",
+          "cosine": 0.5387288208924765
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.33435758229634305
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3131436754197208
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.2945390287754821
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.27909588537626157
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2779152900269855
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2706084737775383
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.24933945882623132
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.22808403092030283
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.21817612700382
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.20922323282969676
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.20457096731867214
+        }
+      ]
+    },
+    {
+      "text": "平时练的是哪位作曲家的曲子？",
+      "expected": [
+        "fact.instrument"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.instrument",
+          "cosine": 0.5383069546902388
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.29266392958647475
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2742843924978532
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.2599584315753198
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2593978888943558
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.2500587968320111
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.24044407131455323
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.23380833878702237
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.22839916223880075
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2185580505329232
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.1786231475697311
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.15971244658598024
+        }
+      ]
+    },
+    {
+      "text": "我在收集哪种纪念品？",
+      "expected": [
+        "fact.hobby"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.hobby",
+          "cosine": 0.47034784567815163
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.45358447379573025
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3973920304651471
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.36565394577524124
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.29297640650277323
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.26919289391440787
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.26191568883704786
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2555098253306931
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2549558117405591
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2504816868675517
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.241574277336018
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2297165752996026
+        }
+      ]
+    },
+    {
+      "text": "有什么长期收藏爱好？",
+      "expected": [
+        "fact.hobby"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.instrument",
+          "cosine": 0.4578436491996344
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.43584863614322666
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.43377280995264966
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3901457743183302
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.3069380997734758
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.29926470255139676
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.2851228967201164
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.26519608008745127
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.24979429727094618
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.24787522859841568
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.24178052723233337
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2367674849608927
+        }
+      ]
+    },
+    {
+      "text": "擅长做什么菜肴？",
+      "expected": [
+        "fact.cooking"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.cooking",
+          "cosine": 0.5618573351823959
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.43187780677468096
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.351674723698947
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3200501378662358
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2863760094653873
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2772503621538224
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.2712455812260835
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.25314871273304507
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.24909186759089103
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.23864758039260342
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2237977052386123
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.18972354565405722
+        }
+      ]
+    },
+    {
+      "text": "我的做饭风格偏清淡吗？",
+      "expected": [
+        "fact.cooking"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.cooking",
+          "cosine": 0.5807026279734566
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.38612461330655384
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.35234314321032245
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.340213353679508
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3388156096926824
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.3300210809470911
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.3250724740626115
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.309693729044466
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.28837788876384735
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.28159364157877476
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2325161112860338
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.20094637381018948
+        }
+      ]
+    },
+    {
+      "text": "下趟旅行目的地是哪儿？",
+      "expected": [
+        "fact.travel"
+      ],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.travel",
+          "cosine": 0.5038177021409843
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.38309928247336866
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.33731624483783845
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3289526222425806
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.32769826777325994
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2562089273823969
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.2457741158801349
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.22602485284029927
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.21201173884589947
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.1749617968893717
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.1722958056046799
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.1344835480343758
+        }
+      ]
+    },
+    {
+      "text": "放年假准备去哪国游玩？",
+      "expected": [
+        "fact.travel"
+      ],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.travel",
+          "cosine": 0.5320260192446908
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.46469262412001133
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.3759793638180455
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3368450574922505
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.32320205737348984
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.31834009214576064
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.30762200640285026
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.2966253599436929
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.26167647232315283
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.25349486139939686
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2420044578918672
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.23207331818730523
+        }
+      ]
+    },
+    {
+      "text": "明天南京会下雨吗？",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.commute",
+          "cosine": 0.3367413008843589
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.33538312388202324
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3282461812744857
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.32579683706152535
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.31208940292056414
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3098883045649239
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.29047427728854247
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2852215035773659
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.22743499116670277
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.21713494284952337
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.21215408514196168
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.20847466320180735
+        }
+      ]
+    },
+    {
+      "text": "火星表面的重力有多大？",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.reading",
+          "cosine": 0.3720979621958826
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3424163000260791
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.3229447206913256
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3101652159796872
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.28804078512301384
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.28735777183608185
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2741031804500904
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.25273747703532784
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2342355798083488
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.21324634625909059
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.21185508957773716
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.17067821641578462
+        }
+      ]
+    },
+    {
+      "text": "请解释矩阵求逆的步骤。",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3508489244370826
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3413979495509281
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3134863542953996
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.29526981782754963
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.27350168216820686
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2689553658508071
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.267493535319475
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.24046691909547493
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.23291179887029972
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2328666256797644
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.22919615451736197
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.16689571393621805
+        }
+      ]
+    },
+    {
+      "text": "北京到广州的机票价格是多少？",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.hobby",
+          "cosine": 0.390228373663753
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3665590927907174
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3625123853499048
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2912343098280866
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.28353269049715346
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.24585757472215825
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.24577558459044388
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.21408183919210616
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.20812443670277658
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.16899786919617768
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.16759451998217895
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.16100027239456471
+        }
+      ]
+    },
+    {
+      "text": "铂金催化剂的熔点是多少？",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.sleep",
+          "cosine": 0.288554329201465
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.281310699780589
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.2765788861665489
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.25776804887270716
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2576243937421589
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2461731014157527
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.24243372423296244
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.23888982036879047
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.1978003387956586
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.1887823341360419
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.18563565280344657
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.15608517409546244
+        }
+      ]
+    },
+    {
+      "text": "帮我打开空调。",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.commute",
+          "cosine": 0.35512317517614367
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.34345886125341474
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.3175327151656478
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.307781238117325
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.30452545633952244
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.29878208887040175
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2952466892980373
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.2803938120583489
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.25209445490823534
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.23374090985397977
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.21685420047064755
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.20246574907858192
+        }
+      ]
+    },
+    {
+      "text": "播放周杰伦的音乐。",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.instrument",
+          "cosine": 0.47649068079496304
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.410900679832
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.34815241799934543
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3236598319558514
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.32357367738340215
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2811051604162321
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.28055699412962054
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.256706811851274
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.2566174827386056
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.24656919291556995
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.24328642798626976
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.22484368507664843
+        }
+      ]
+    },
+    {
+      "text": "今年世界杯的赛程是什么？",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3418613526486618
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3197475049142748
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3189489854436457
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.31231239074045225
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.3113613395585256
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.295161753694027
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.2831879034801908
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.2507381072989208
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.24530781750738476
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.24347231972458627
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2412492403798726
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.19812644871404436
+        }
+      ]
+    },
+    {
+      "text": "请查询此时的电池电量。",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.travel",
+          "cosine": 0.3614156897627266
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.33978362089791697
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.33914739706947766
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3307900960957169
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.31429941304638814
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.3122417819602887
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.3095813950841722
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.3092697612815549
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.28738260992321724
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.279675825753084
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.2664869017413206
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.23450501245254338
+        }
+      ]
+    },
+    {
+      "text": "世界上最深的海沟在哪里？",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.travel",
+          "cosine": 0.3738731233320774
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.32620564899423043
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.29577314723512016
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.27816730296030423
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.2663368062099373
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2533856110067538
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.22144779084800842
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.22023857649880252
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2031342344526539
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.19648959638326302
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.18078870058118182
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.16916290588659436
+        }
+      ]
+    },
+    {
+      "text": "写一个快速排序算法。",
+      "expected": [],
+      "split": "calibration",
+      "scores": [
+        {
+          "key": "fact.exercise",
+          "cosine": 0.3755344173206729
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.33143476954758927
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.31281676700916644
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.3093467232802173
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.3007300833688901
+        },
+        {
+          "key": "fact.instrument",
+          "cosine": 0.29963404514892367
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.290618626736825
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.28836788451289963
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.2867444249539706
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.2632775137946962
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.2567172332220659
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.1783556429921435
+        }
+      ]
+    },
+    {
+      "text": "介绍光合作用的基本原理。",
+      "expected": [],
+      "split": "holdout",
+      "scores": [
+        {
+          "key": "fact.instrument",
+          "cosine": 0.33629047168418025
+        },
+        {
+          "key": "fact.cooking",
+          "cosine": 0.27955986234969027
+        },
+        {
+          "key": "fact.reading",
+          "cosine": 0.25177631098545705
+        },
+        {
+          "key": "fact.travel",
+          "cosine": 0.25022774212184135
+        },
+        {
+          "key": "fact.commute",
+          "cosine": 0.2417404659392307
+        },
+        {
+          "key": "fact.hobby",
+          "cosine": 0.23190609961943798
+        },
+        {
+          "key": "fact.pet",
+          "cosine": 0.19882475720884982
+        },
+        {
+          "key": "fact.sleep",
+          "cosine": 0.18933015575846618
+        },
+        {
+          "key": "fact.exercise",
+          "cosine": 0.1847179136606617
+        },
+        {
+          "key": "fact.weekend",
+          "cosine": 0.17953531082511273
+        },
+        {
+          "key": "fact.drink",
+          "cosine": 0.1691194374575661
+        },
+        {
+          "key": "fact.clothes",
+          "cosine": 0.12644775408502856
+        }
+      ]
+    }
+  ]
+}

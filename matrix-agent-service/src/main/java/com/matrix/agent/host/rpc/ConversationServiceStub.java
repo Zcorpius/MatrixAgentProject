@@ -273,7 +273,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
 
     @Override
     public ConversationSubmission sendText(SendTextRequest request, String clientOperationId) {
-        callerResolver.caller();
+        CallerContext originCaller = callerResolver.caller();
         String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
         if (request == null || request.schemaVersion > ParcelSchema.CURRENT
                 || request.conversationId == null) {
@@ -292,7 +292,9 @@ public final class ConversationServiceStub extends IConversationService.Stub
                             safeOperation, Actor.DRIVER,
                             ConversationIds.agentSessionId(request.conversationId,
                                     Actor.DRIVER.name(), CALLER_ZONE),
-                            ARBITRATION_KEY, null, null, request.quotedMessageId));
+                            ARBITRATION_KEY, ConversationCoordinator.InputMetadata.text(request.conversationId, safeOperation,
+                                    new com.matrix.agent.identity.InteractiveOrigin(originCaller.uid, originCaller.userId,
+                                            originCaller.packageName, request.text)), null, request.quotedMessageId));
             return new ConversationSubmission(MatrixErrorCode.SUCCESS, request.conversationId,
                     accepted.userMessageId(), accepted.conversationTaskId(),
                     accepted.sequenceNo(), accepted.replay());
@@ -335,7 +337,7 @@ public final class ConversationServiceStub extends IConversationService.Stub
     public ConversationSubmission submitTextOrAppend(String conversationId, String text,
             List<String> contextAttachmentIds, String draftInstanceId, long draftRevision,
             String clientOperationId) {
-        callerResolver.caller();
+        CallerContext originCaller = callerResolver.caller();
         String safeOperation = HostInputValidator.requireOperationId(clientOperationId);
         ConversationIds.requireLowerUuid(conversationId, "conversationId");
         if (draftInstanceId != null && !ConversationIds.isLowerUuid(draftInstanceId)) {
@@ -362,7 +364,9 @@ public final class ConversationServiceStub extends IConversationService.Stub
                             conversationId, text, null, safeOperation, Actor.DRIVER,
                             ConversationIds.agentSessionId(conversationId,
                                     Actor.DRIVER.name(), CALLER_ZONE),
-                            ARBITRATION_KEY, null, null, null, draftInstanceId,
+                            ARBITRATION_KEY, ConversationCoordinator.InputMetadata.text(conversationId, safeOperation,
+                                    new com.matrix.agent.identity.InteractiveOrigin(originCaller.uid, originCaller.userId,
+                                            originCaller.packageName, text)), null, null, draftInstanceId,
                             contextAttachmentIds));
             int code = outcome.outcome()
                     == ConversationSubmission.OUTCOME_STEER_DELIVERY_FAILED
@@ -695,6 +699,12 @@ public final class ConversationServiceStub extends IConversationService.Stub
         return new ConversationPage(ParcelSchema.CURRENT, messages,
                 window.hasBefore(), window.hasBefore(), window.hasAfter(),
                 window.anchorExists());
+    }
+
+    @Override public void onAssistantStream(com.matrix.agent.conversation.AssistantStreamEvent event) {
+        var dto = new com.matrix.agent.api.conversation.ConversationAssistantStream(event.conversationId(),
+                event.taskId(), event.requestId(), event.turn(), event.sequence(), event.text(), event.cleared());
+        registryOf(event.conversationId(), registry -> registry.dispatch(callback -> callback.onAssistantStream(dto)));
     }
 
     private static ConversationRuntimeStage toStageDto(

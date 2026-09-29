@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey;
 
 /**
  * 受控上下文附件（输入交互增强 I6 §9.2）：用户显式选择的资料经 Host 摄取后，
- * 以受限文本形式并入模型上下文。extracted_text 与全部元数据驻留 SQLCipher——
+ * 以检索片段形式并入模型上下文。attachment_chunk 与全部元数据驻留 SQLCipher——
  * 无文件系统 blob、无孤儿二进制回收问题，天然随 clearUserData / 备份规则覆盖。
  *
  * <p>生命周期：stage 时以草稿态落行（linked_message_id = null，仅归属会话）；
@@ -72,9 +72,13 @@ public final class ConversationAttachmentEntity {
     @ColumnInfo(name = "error_code")
     public int errorCode;
 
-    /** 提取的受限文本（≤16k 字符）；FAILED 行为 null。 */
+    /** 旧版文本（≤16k 字符）；新摄取的全文只存入 attachment_chunk，避免大 CursorWindow 行。 */
     @ColumnInfo(name = "extracted_text")
     public String extractedText;
+
+    /** Frozen retrieval evidence (IDs, source spans and version), never instructions. */
+    @ColumnInfo(name = "retrieval_manifest")
+    public String retrievalManifest;
 
     @ColumnInfo(name = "extracted_chars")
     public int extractedChars;

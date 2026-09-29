@@ -1,0 +1,4 @@
+1a4603261a546cded8d975244e5ab0db5b207382e2671f08b48aacb96ea3c744  matrix-agent-service/build/outputs/apk/debug/matrix-agent-service-debug.apk
+bd6f3a358f0b4841f86b20ea55153304820f312241754fda7f3a0a718d2117ae  matrix-agent-launcher/build/outputs/apk/debug/matrix-agent-launcher-debug.apk
+1a21f3338bfc8d8920d25f0fc5ac5ac959607e46ddcb02383abec142261469a4  matrix-agent-test/build/outputs/apk/trusted/release/matrix-agent-test-trusted-release.apk
+42834d9fe3fb9050cab064693491cd361cb99894f597d25e62eb68db0d8ca7de  matrix-agent-test/build/outputs/apk/androidTest/trusted/release/matrix-agent-test-trusted-release-androidTest.apk

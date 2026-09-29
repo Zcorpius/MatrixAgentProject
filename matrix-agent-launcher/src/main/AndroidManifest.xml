@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="com.matrix.agent.permission.ACCESS_AGENT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <application
         android:name=".LauncherApplication"
-        android:icon="@drawable/ic_launcher_matrix"
+        android:icon="@mipmap/ic_launcher_matrix"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_matrix"
         android:supportsRtl="true"
         android:theme="@style/Theme.MatrixLauncher">
         <activity
             android:name=".LauncherActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -17,6 +20,7 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="com.matrix.agent.action.OPEN_DOWNLOADS" />
+                <action android:name="com.matrix.agent.action.OPEN_SCHEDULE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

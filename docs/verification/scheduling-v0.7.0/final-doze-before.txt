@@ -1,0 +1,4 @@
+Final build 0.7.0 / Android user 0 / Host UID 1000
+active schedule alarm count=1
+mCharging=false
+mState=IDLE mLightState=OVERRIDE

@@ -47,9 +47,35 @@ final class MemoryRuntimeGraph {
 
     MemoryRuntimeGraph(@NonNull Context context, MatrixDatabase database,
             @NonNull SessionManager sessions, Executor databaseExecutor) {
+        this(database, sessions, initializeStore(context, database, databaseExecutor));
+    }
+
+    MemoryRuntimeGraph(PersistenceRuntimeGraph.Admission admission, SessionManager sessions) {
+        this(admission, sessions, com.matrix.agent.embedding.SemanticVectorRecall.NONE);
+    }
+
+    MemoryRuntimeGraph(PersistenceRuntimeGraph.Admission admission, SessionManager sessions,
+            com.matrix.agent.embedding.SemanticVectorRecall vectors) {
+        this(admission.database(), sessions, new StoreInitialization(admission.memory(), !admission.available()), vectors);
+    }
+
+    private static StoreInitialization initializeStore(Context context, MatrixDatabase database,
+            Executor databaseExecutor) {
         AtomicBoolean degradedRef = new AtomicBoolean(false);
-        store = createStoreSafely(context, database, degradedRef, databaseExecutor);
-        degraded = degradedRef.get();
+        MemoryStore memory = createStoreSafely(context, database, degradedRef, databaseExecutor);
+        return new StoreInitialization(memory, degradedRef.get());
+    }
+
+    private record StoreInitialization(MemoryStore store, boolean degraded) { }
+
+    private MemoryRuntimeGraph(MatrixDatabase database, SessionManager sessions, StoreInitialization result) {
+        this(database, sessions, result, com.matrix.agent.embedding.SemanticVectorRecall.NONE);
+    }
+
+    private MemoryRuntimeGraph(MatrixDatabase database, SessionManager sessions, StoreInitialization result,
+            com.matrix.agent.embedding.SemanticVectorRecall vectors) {
+        store = result.store();
+        degraded = result.degraded();
 
         EpisodicMemorySourceImpl episodicImpl = degraded
                 ? null : new EpisodicMemorySourceImpl(database.sessionHistoryDao());
@@ -57,7 +83,7 @@ final class MemoryRuntimeGraph {
                 ? new EmptyEpisodicMemorySource() : episodicImpl;
         SemanticMemorySource semantic = degraded
                 ? new EmptySemanticMemorySource()
-                : new SemanticMemorySourceImpl(database.memoryRecordDao());
+                : new SemanticMemorySourceImpl(database.memoryRecordDao(), 5, vectors, SemanticMemorySourceImpl.Mode.HYBRID);
         writer = degraded ? MemoryWriter.NOOP : new RoomMemoryWriter(
                 database.sessionHistoryDao(), database.memoryRecordDao(), episodicImpl,
                 database::runInTransaction);

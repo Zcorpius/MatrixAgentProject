@@ -14,6 +14,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -27,6 +28,7 @@ import com.matrix.agent.api.model.ModelInfo;
 import com.matrix.agent.api.model.ModelRuntimeStatus;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 import java.util.Arrays;
 import java.util.List;
@@ -89,14 +91,27 @@ public final class ModelFragment extends Fragment {
             @Override public void afterTextChanged(Editable s) { }
         });
         root.<ImageButton>findViewById(R.id.model_key_visibility).setOnClickListener(v -> toggleKeyVisibility());
-        save.setOnClickListener(v -> provision()); test.setOnClickListener(v -> viewModel.testConnection(currentProvider().id)); refresh.setOnClickListener(v -> viewModel.refresh());
+        save.setOnClickListener(v -> provision());
+        test.setOnClickListener(v -> viewModel.testActiveConnection());
+        refresh.setOnClickListener(v -> viewModel.refresh());
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
-        new ViewModelProvider(requireActivity(), activity().viewModelFactory()).get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> { connected = viewModel.isHostConnected(); renderControls(); if (connected) viewModel.refresh(); });
+        new ViewModelProvider(requireActivity(), activity().viewModelFactory())
+                .get(LauncherViewModel.class).connectionState().observe(getViewLifecycleOwner(), v -> {
+                    boolean wasConnected = connected;
+                    connected = viewModel.isHostConnected();
+                    renderControls();
+                    // A retained model snapshot can render before the new view observes Host
+                    // connectivity. The card buttons must follow that change as well.
+                    if (connected != wasConnected && rendered != null) renderModelCards(rendered);
+                    if (connected) viewModel.refresh();
+                });
         return root;
     }
     private List<ProviderOption> providerOptions() {
         return Arrays.asList(
-                cloud("glm", R.string.model_provider_glm, "glm-5.2"), cloud("deepseek", R.string.model_provider_deepseek, "deepseek-v4-flash"),
+                cloud("glm", R.string.model_provider_glm, "glm-5.2"),
+                cloud("glm_anthropic", R.string.model_provider_glm_anthropic, "glm-5.3"),
+                cloud("deepseek", R.string.model_provider_deepseek, "deepseek-v4-flash"),
                 cloud("qwen", R.string.model_provider_qwen, "qwen3.7-plus"), cloud("kimi", R.string.model_provider_kimi, "kimi-k2.5"),
                 cloud("doubao", R.string.model_provider_doubao, "Endpoint ID"), cloud("anthropic", R.string.model_provider_anthropic, "claude-sonnet-4-5"),
                 cloud("gemini", R.string.model_provider_gemini, "gemini-3.5-flash"),
@@ -115,8 +130,12 @@ public final class ModelFragment extends Fragment {
         setCredentialSaved(false);
         idLabel.setText(p.onDevice ? R.string.model_installed_id_label : R.string.model_id_label); modelId.setHint(p.onDevice ? R.string.model_on_device_id_hint : p.id.equals("doubao") ? R.string.model_doubao_id_hint : R.string.model_id_hint);
         keyLabel.setText(p.apiKeyRequired ? R.string.model_key_required : R.string.model_key_optional);
-        detail.setText(p.onDevice ? R.string.model_on_device_guidance
-                : p.endpointEditable ? R.string.model_endpoint_lan_guidance : R.string.model_guidance);
+        detail.setText(guidanceFor(p));
+    }
+    private static int guidanceFor(ProviderOption provider) {
+        if (provider.onDevice) return R.string.model_on_device_guidance;
+        if (provider.id.equals("glm_anthropic")) return R.string.model_glm_anthropic_guidance;
+        return provider.endpointEditable ? R.string.model_endpoint_lan_guidance : R.string.model_guidance;
     }
     private void provision() {
         ProviderOption p=currentProvider(); String model=modelId.getText().toString().trim();
@@ -129,10 +148,52 @@ public final class ModelFragment extends Fragment {
         viewModel.provision(p.id,model,endpoint.getText().toString().trim(),p.apiKeyRequired,secret);
     }
     private void toggleKeyVisibility() { keyVisible=!keyVisible; int at=key.getSelectionEnd(); key.setInputType(InputType.TYPE_CLASS_TEXT | (keyVisible ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD)); key.setTypeface(key.getTypeface()); if(at>=0&&at<=key.length())key.setSelection(at); requireView().<ImageButton>findViewById(R.id.model_key_visibility).setImageResource(keyVisible?R.drawable.ic_eye_visible:R.drawable.ic_eye_hidden); }
-    private void render(@NonNull ModelViewModel.State v) { rendered=v; if(v.savedForm!=null)saveDraft(v.savedForm); restoreActiveModel(v.models); renderStatus(v); models.removeAllViews(); if(v.models.isEmpty()) models.addView(muted(getString(R.string.model_empty_with_download_hint))); else for(ModelInfo m:v.models)addModelCard(m,v.busy); renderControls(); }
+    private void render(@NonNull ModelViewModel.State state) {
+        rendered = state;
+        if (state.savedForm != null) saveDraft(state.savedForm);
+        restoreActiveModel(state.models);
+        renderStatus(state);
+        renderModelCards(state);
+        renderControls();
+    }
+    private void renderModelCards(@NonNull ModelViewModel.State state) {
+        models.removeAllViews();
+        if (state.models.isEmpty()) {
+            models.addView(muted(getString(R.string.model_empty_with_download_hint)));
+            return;
+        }
+        for (ModelInfo model : state.models) addModelCard(model, state);
+    }
     private void renderStatus(ModelViewModel.State v) {
-        if(v.notice==ModelViewModel.Notice.RUNTIME&&v.runtime!=null){ ModelRuntimeStatus r=v.runtime; int backend=r.backend==ModelRuntimeStatus.BACKEND_ON_DEVICE?R.string.model_backend_device:r.backend==ModelRuntimeStatus.BACKEND_CLOUD?R.string.model_backend_cloud:R.string.model_backend_none; String error=r.lastErrorCode==0?"":getString(R.string.model_runtime_error,r.lastErrorCode); status.setText(getString(R.string.model_runtime,getString(backend),r.activeModelId==null?getString(R.string.none):r.activeModelId,r.ready,error)); return; }
-        switch(v.notice){case MISSING_KEY:status.setText(R.string.model_missing_key);break;case MISSING_MODEL_ID:status.setText(R.string.model_missing_model_id);break;case INVALID_MODEL_ID:status.setText(R.string.model_invalid_model_id);break;case PROVISIONING:status.setText(R.string.model_provisioning);break;case SAVED:status.setText(R.string.model_saved_active);break;case SAVE_FAILED:status.setText(getString(R.string.model_save_failed,v.code));break;case TESTING:status.setText(R.string.model_testing);break;case TEST_SUCCEEDED:status.setText(getString(R.string.model_test_success,v.code));break;case TEST_FAILED:status.setText(getString(R.string.model_test_failed_code,v.code));break;case SWITCHING:status.setText(R.string.model_switching);break;case SWITCH_FAILED:status.setText(getString(R.string.model_switch_failed,v.code));break;case HOST_UNAVAILABLE:status.setText(R.string.host_not_connected);break;default:if(v.runtime==null)status.setText(R.string.model_waiting);}
+        if (v.notice == ModelViewModel.Notice.RUNTIME && v.runtime != null) {
+            ModelRuntimeStatus runtime = v.runtime;
+            int backend = runtime.backend == ModelRuntimeStatus.BACKEND_ON_DEVICE
+                    ? R.string.model_backend_device
+                    : runtime.backend == ModelRuntimeStatus.BACKEND_CLOUD
+                            ? R.string.model_backend_cloud : R.string.model_backend_none;
+            String error = runtime.lastErrorCode == 0 ? ""
+                    : getString(R.string.model_runtime_error, runtime.lastErrorCode);
+            status.setText(getString(R.string.model_runtime, getString(backend),
+                    runtime.activeModelId == null ? getString(R.string.none)
+                            : runtime.activeModelId, runtime.ready, error));
+            return;
+        }
+        switch (v.notice) {
+            case MISSING_KEY -> status.setText(R.string.model_missing_key);
+            case MISSING_MODEL_ID -> status.setText(R.string.model_missing_model_id);
+            case INVALID_MODEL_ID -> status.setText(R.string.model_invalid_model_id);
+            case PROVISIONING -> status.setText(R.string.model_provisioning);
+            case SAVED -> status.setText(R.string.model_saved_active);
+            case SAVE_FAILED -> status.setText(getString(R.string.model_save_failed, v.code));
+            case TESTING -> status.setText(R.string.model_testing);
+            case TEST_SUCCEEDED -> status.setText(getString(R.string.model_test_success, v.code));
+            case TEST_FAILED -> status.setText(getString(R.string.model_test_failed_code, v.code));
+            case SWITCHING -> status.setText(R.string.model_switching);
+            case SWITCH_FAILED -> status.setText(getString(R.string.model_switch_failed, v.code));
+            case HOST_UNAVAILABLE -> status.setText(R.string.host_not_connected);
+            case NO_ACTIVE_CLOUD_MODEL -> status.setText(R.string.model_no_active_cloud_model);
+            default -> { if (v.runtime == null) status.setText(R.string.model_waiting); }
+        }
     }
     private void restoreDraft() {
         ModelFormDraftStore.Draft draft = draftStore.load();
@@ -172,8 +233,52 @@ public final class ModelFragment extends Fragment {
         credentialSavedForProvider = saved;
         key.setHint(saved ? R.string.model_key_saved_hint : R.string.model_key_transient_hint);
     }
-    private void addModelCard(ModelInfo m, boolean busy) { LinearLayout c=new LinearLayout(requireContext());c.setOrientation(LinearLayout.VERTICAL);c.setBackgroundResource(R.drawable.bg_card);c.setPadding(dp(15),dp(13),dp(15),dp(13)); TextView t=new TextView(requireContext());t.setText(getString(R.string.model_card_title,m.active?getString(R.string.model_active_prefix):getString(R.string.model_inactive_prefix),m.displayName));t.setTextSize(16);t.setTypeface(Typeface.DEFAULT_BOLD);t.setTextColor(color(R.color.matrix_text));c.addView(t);c.addView(muted(getString(R.string.model_card_detail,m.modelId,m.providerId,m.available?"":getString(R.string.model_unavailable_suffix))),top(4));Button b=new Button(requireContext());b.setText(m.active?R.string.model_current:R.string.model_select);b.setEnabled(connected&&!busy&&!m.active&&m.available);b.setBackgroundResource(m.active?R.drawable.bg_outline:R.drawable.bg_primary);b.setTextColor(color(m.active?R.color.matrix_primary_dark:android.R.color.white));b.setOnClickListener(v->viewModel.select(m));c.addView(b,top(9));models.addView(c,space()); }
-    private void renderControls() { boolean busy=rendered!=null&&rendered.busy; save.setEnabled(connected&&!busy); test.setEnabled(connected&&!busy&&!currentProvider().onDevice); refresh.setEnabled(connected&&!busy); }
-    private TextView muted(String s){TextView v=new TextView(requireContext());v.setText(s);v.setTextColor(color(R.color.matrix_muted));v.setTextSize(13);return v;} private LinearLayout.LayoutParams top(int n){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);p.topMargin=dp(n);return p;} private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=top(0);p.bottomMargin=dp(9);return p;} private int color(int r){return ContextCompat.getColor(requireContext(),r);} private int dp(int v){return activity().dp(v);} private LauncherActivity activity(){return (LauncherActivity)requireActivity();}
+    private void addModelCard(ModelInfo model, ModelViewModel.State state) {
+        LinearLayout card = new LinearLayout(requireContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(dp(15), dp(13), dp(15), dp(13));
+
+        TextView title = new TextView(requireContext());
+        title.setText(getString(R.string.model_card_title,
+                model.active ? getString(R.string.model_active_prefix)
+                        : getString(R.string.model_inactive_prefix), model.displayName));
+        title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(color(R.color.matrix_text));
+        card.addView(title);
+        card.addView(muted(getString(R.string.model_card_detail, model.modelId,
+                model.providerId, model.available ? "" : getString(R.string.model_unavailable_suffix))), top(4));
+
+        boolean loading = state.busy && state.switchingModelId != null
+                && state.switchingModelId.equals(model.modelId);
+        if (loading) {
+            ProgressBar progress = new ProgressBar(requireContext(), null,
+                    android.R.attr.progressBarStyleHorizontal);
+            progress.setIndeterminate(true);
+            LinearLayout.LayoutParams progressParams = top(8);
+            progressParams.height = dp(3);
+            card.addView(progress, progressParams);
+        }
+
+        Button action = new Button(requireContext());
+        action.setText(loading ? R.string.model_switch_loading
+                : model.active ? R.string.model_current : R.string.model_select);
+        action.setEnabled(connected && !state.busy && !model.active && model.available);
+        action.setBackgroundResource(model.active ? R.drawable.bg_outline : R.drawable.bg_primary);
+        action.setTextColor(model.active ? color(R.color.matrix_primary_dark)
+                : LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent));
+        action.setOnClickListener(v -> viewModel.select(model));
+        card.addView(action, top(9));
+        models.addView(card, space());
+    }
+    private void renderControls() {
+        boolean busy = rendered != null && rendered.busy;
+        save.setEnabled(connected && !busy);
+        test.setEnabled(connected && !busy
+                && ModelViewModel.activeCloudModel(rendered) != null);
+        refresh.setEnabled(connected && !busy);
+    }
+    private TextView muted(String s){TextView v=new TextView(requireContext());v.setText(s);v.setTextColor(color(R.color.matrix_muted));v.setTextSize(13);return v;} private LinearLayout.LayoutParams top(int n){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);p.topMargin=dp(n);return p;} private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=top(0);p.bottomMargin=dp(9);return p;} private int color(int r){return LauncherThemePreferences.colorResource(requireContext(),r);} private int dp(int v){return activity().dp(v);} private LauncherActivity activity(){return (LauncherActivity)requireActivity();}
     private static final class ProviderOption { final String id,label,defaultModel,defaultEndpoint; final boolean apiKeyRequired,endpointEditable,onDevice; ProviderOption(String i,String l,String m,String e,boolean key,boolean endpoint,boolean device){id=i;label=l;defaultModel=m;defaultEndpoint=e;apiKeyRequired=key;endpointEditable=endpoint;onDevice=device;} }
 }

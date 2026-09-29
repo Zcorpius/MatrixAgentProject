@@ -43,6 +43,9 @@ public interface ConversationAttachmentDao {
             + " AND linked_message_id IS NULL")
     int linkToMessage(String attachmentId, String messageId, int ordinal);
 
+    @Query("UPDATE conversation_attachment SET retrieval_manifest=:manifest WHERE attachment_id=:id AND linked_message_id=:message")
+    int freezeManifest(String id, String message, String manifest);
+
     @Query("DELETE FROM conversation_attachment WHERE attachment_id = :attachmentId"
             + " AND owner_user_id = :ownerUserId AND vehicle_zone = :vehicleZone"
             + " AND linked_message_id IS NULL")

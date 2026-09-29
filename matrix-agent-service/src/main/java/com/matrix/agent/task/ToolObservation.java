@@ -82,6 +82,9 @@ public final class ToolObservation {
     }
 
     public AgentMessage toToolMessage() {
+        if ("web.search".equals(capabilityName) && result != null && result.getStatus() == ToolResult.Status.SUCCESS && result.isVerified()) {
+            return AgentMessage.verifiedReadTool(toolCallId, capabilityName, toToolContent());
+        }
         return AgentMessage.tool(toolCallId, capabilityName, toToolContent());
     }
 }

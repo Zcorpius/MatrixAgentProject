@@ -1,0 +1,69 @@
+{
+  "date": "2026-09-28",
+  "timezone": "Asia/Shanghai",
+  "capture_window": "23:31–23:34",
+  "device": "Mi 9 SE (grus)",
+  "os": "LineageOS 22.2 / Android 15 (API 35)",
+  "launcher_version": "0.7.1 (7001)",
+  "launcher_last_update": "2026-09-28 23:03:09 CST",
+  "installed_apk_sha256": "561a14003580b762922ca8fb03f3ca6f8d901f86144292acc7c19922ce827b92",
+  "source": "adb exec-out screencap -p; manual navigation in the installed Launcher",
+  "images": [
+    {
+      "file": "conversation.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "2ad89157c8049e9fa0fa314817d2219206d8ab9bf4d11b2d524aff51c7708c5e",
+      "description": "对话交互；既有媒体测试会话和输入区"
+    },
+    {
+      "file": "tasks-templates.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "a0ef1c9e1e782799522a9120c8074f4f55df503eae37859880eb5dd938aa1b17",
+      "description": "任务中心；模板页签和两个内置模板"
+    },
+    {
+      "file": "voice.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "2aa13b00816e4c614b91d9e9fc1078b02ce678a2110cb13e75a3555544011893",
+      "description": "语音功能；等待开始和播报配置入口"
+    },
+    {
+      "file": "models.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "d60e7765bb223e115cdfbfa9ae4cc66bcb0156e11df38a5f15d2e4efad0da340",
+      "description": "模型接入；当前云端运行时及安全配置表单"
+    },
+    {
+      "file": "market.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "edecdde424e990c4aec4a2fb7093976dea3a015015007bbbdb3b437d1f0a33cf",
+      "description": "模型市场；下载区和已安装的端侧模型"
+    },
+    {
+      "file": "settings-pets.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "c4511b27ec203bcaadb4ba9bef4647b3e00d29e24d2e0affb45455d1e5805e7a",
+      "description": "设置；颜色主题末尾与四个悬浮形象"
+    },
+    {
+      "file": "settings-theme.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "d2666278186efbe19398b534a638ff108427396f3752d24c246f2255951fdbc9",
+      "description": "设置；外观模式和颜色主题"
+    },
+    {
+      "file": "navigation.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "76975ed43a62e48d8b5e4e9a3d05b2dcd8791a9ca232512e0a8cfc4c89e4b843",
+      "description": "导航抽屉；六个页面入口和版本"
+    }
+  ]
+}

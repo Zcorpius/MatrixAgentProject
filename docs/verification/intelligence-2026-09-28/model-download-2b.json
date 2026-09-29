@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-09-28",
+  "device": "Mi 9 SE / LineageOS / Android 15",
+  "modelId": "Qwen3.5-2B-MNN",
+  "beforeUiFix": {
+    "hostShownOnline": true,
+    "downloadButtonEnabled": false,
+    "tapReachedHost": false
+  },
+  "afterUiFixBeforeNetworkFix": {
+    "downloadButtonEnabled": true,
+    "hostQueuedTask": true,
+    "wifiCapabilities": ["INTERNET", "PARTIAL_CONNECTIVITY"],
+    "wifiValidated": false,
+    "jobSchedulerUnsatisfiedConstraint": "CONNECTIVITY",
+    "jobSchedulerRequiredNetworkCapabilities": ["INTERNET", "TRUSTED", "VALIDATED"]
+  },
+  "afterFix": {
+    "downloadButtonEnabled": true,
+    "hostQueuedTask": true,
+    "foregroundTransferStarted": true,
+    "modelScopeFileResponses": "HTTP 200 observed",
+    "uiProgressObservedPercent": 61,
+    "finalUiState": "INSTALLED",
+    "visibleInLocalLibrary": true,
+    "activeModelChanged": false
+  },
+  "verification": {
+    "architectureAndBuild": "passed",
+    "serviceReleaseLint": "passed",
+    "launcherUnitTests": "passed"
+  }
+}

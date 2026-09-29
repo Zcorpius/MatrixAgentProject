@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "complete": true,
+  "wallSecondsFromStartCommand": 193.392,
+  "verifiedProcessOutageSeconds": 90,
+  "activeLedgerMillis": 183282,
+  "exceedsFormer120SecondLedger": true,
+  "logicalModelCalls": 4,
+  "toolCalls": 5,
+  "deliveryStatus": 2,
+  "state": 4,
+  "reason": "OPTIONAL_OR_DELIVERY_PARTIAL",
+  "checkpoints": [
+    {
+      "source": "arxiv",
+      "sameCheckpoint": true,
+      "attemptBefore": 1,
+      "attemptFinal": 1
+    },
+    {
+      "source": "crossref",
+      "sameCheckpoint": true,
+      "attemptBefore": 1,
+      "attemptFinal": 1
+    }
+  ]
+}

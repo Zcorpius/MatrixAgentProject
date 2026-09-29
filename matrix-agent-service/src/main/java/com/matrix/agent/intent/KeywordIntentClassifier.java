@@ -31,6 +31,7 @@ public final class KeywordIntentClassifier implements IntentClassifier {
     private static final Set<String> WRITE_KEYWORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "设", "设置", "调", "调整", "调到", "打开", "开启", "关闭", "关掉", "启动",
             "导航", "导航到", "记住", "保存", "存一下", "切换", "更改", "改",
+            "播放", "暂停", "继续看", "切歌", "下一首", "上一首", "快进", "快退",
             "set", "open", "close", "toggle", "start", "save", "remember", "navigate"
     )));
 

@@ -9,6 +9,9 @@ import java.util.Locale;
 public final class AgentMessage {
     public enum Role { SYSTEM, USER, ASSISTANT, TOOL }
 
+    public record ReadReceipt(String callId, String capability, String argumentsDigest) { }
+    private final boolean verifiedRead;
+    private final List<ReadReceipt> readReceipts;
     private final Role role;
     private final String content;
     private final List<ToolCall> toolCalls;
@@ -17,6 +20,11 @@ public final class AgentMessage {
 
     private AgentMessage(Role role, String content, List<ToolCall> toolCalls,
             String toolCallId, String toolName) {
+        this(role, content, toolCalls, toolCallId, toolName, false, List.of());
+    }
+    private AgentMessage(Role role, String content, List<ToolCall> toolCalls,
+            String toolCallId, String toolName, boolean verifiedRead, List<ReadReceipt> receipts) {
+        this.verifiedRead = verifiedRead; this.readReceipts = List.copyOf(receipts);
         this.role = role;
         this.content = content == null ? "" : content;
         this.toolCalls = Collections.unmodifiableList(new ArrayList<>(toolCalls));
@@ -47,6 +55,25 @@ public final class AgentMessage {
             throw new IllegalArgumentException("tool 消息必须带 toolCallId");
         }
         return new AgentMessage(Role.TOOL, content, Collections.emptyList(), toolCallId, toolName);
+    }
+
+    /** Host-only metadata; never inferred from model-authored or provider-authored text. */
+    public static AgentMessage verifiedReadTool(String callId, String name, String content) {
+        if (!"web.search".equals(name)) throw new IllegalArgumentException("unsupported compactable read");
+        if (callId == null || callId.isBlank()) throw new IllegalArgumentException("read call ID required");
+        return new AgentMessage(Role.TOOL, content, List.of(), callId, name, true, List.of());
+    }
+    public boolean isVerifiedRead() { return verifiedRead; }
+    public List<ReadReceipt> getReadReceipts() { return readReceipts; }
+    public static AgentMessage readReceipts(List<ReadReceipt> receipts) {
+        if (receipts.isEmpty() || receipts.size() > 40) throw new IllegalArgumentException("receipt bound");
+        List<ReadReceipt> frozen = List.copyOf(receipts);
+        String content = PREFIX_SUMMARY + "只读检索回执：SUCCESS verified=true 仅表示响应格式与来源通过检查，不代表第三方断言已证实。"
+                + "历史参数与正文已省略；需要引用或事实时必须重新检索。不得根据回执推断内容。\n" + frozen;
+        return new AgentMessage(Role.SYSTEM, content, List.of(), null, null, false, frozen);
+    }
+    public AgentMessage withContent(String replacement) {
+        return new AgentMessage(role, replacement, toolCalls, toolCallId, toolName, verifiedRead, readReceipts);
     }
 
     /**

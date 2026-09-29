@@ -1,0 +1,4 @@
+09-27 16:03:33.668  1601  1768 I ActivityManager: Start proc 13155:com.matrix.agent/1000 for broadcast {com.matrix.agent/com.matrix.agent.schedule.android.ScheduleWakeReceiver}
+09-27 16:03:42.607  1601  1768 I ActivityManager: Start proc 13198:com.matrix.agent.launcher/u0a187 for next-top-activity {com.matrix.agent.launcher/com.matrix.agent.launcher.LauncherActivity}
+09-27 16:03:43.410 13155 13155 I MatrixAgent: [App] AppContainer init start
+09-27 16:03:48.548 13155 13155 I MatrixAgent: [App] AppContainer init done capabilities=47 durationMs=5137

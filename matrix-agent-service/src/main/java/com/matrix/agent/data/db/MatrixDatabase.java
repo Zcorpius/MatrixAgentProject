@@ -22,8 +22,8 @@ import java.util.Arrays;
 /**
  * Room + SQLCipher 加密数据库入口。
  *
- * <p>Current schema version is 14. Migration 13→14 normalizes memory zones and removes
- * historical raw episodic trajectories before the data can be recalled.
+ * <p>Current schema version is 20. Migration 14→15 adds the encrypted scheduling domain;
+ * migration 13→14 normalizes memory zones and removes historical raw episodic trajectories.
  *
  * <p>SQLCipher Android SupportOpenHelperFactory 注入 byte[] passphrase——passphrase 由 MasterKeyProvider
  * 提供(从 AndroidKeyStore 取主密钥解密本地缓存)。
@@ -54,6 +54,8 @@ import java.util.Arrays;
                 TrajectoryEntity.class,
                 SessionHistoryEntity.class,
                 MemoryRecordEntity.class,
+                com.matrix.agent.data.embedding.MemoryVectorEntity.class,
+                com.matrix.agent.data.failure.FailureLessonEntity.class,
                 AuditEventEntity.class,
                 ModelDownloadEntity.class,
                 AgentTaskEntity.class,
@@ -68,9 +70,19 @@ import java.util.Arrays;
                 com.matrix.agent.data.conversation.ConversationDraftEntity.class,
                 com.matrix.agent.data.conversation.ConversationConsumedDraftEntity.class,
                 com.matrix.agent.data.conversation.ConversationAttachmentEntity.class,
-                com.matrix.agent.data.debugtrace.DebugTraceEventEntity.class
+                com.matrix.agent.data.conversation.AttachmentChunkEntity.class,
+                com.matrix.agent.data.debugtrace.DebugTraceEventEntity.class,
+                com.matrix.agent.data.schedule.ScheduleDefinitionEntity.class,
+                com.matrix.agent.data.schedule.ScheduleRunEntity.class,
+                com.matrix.agent.data.schedule.ScheduleOutboxEntity.class,
+                com.matrix.agent.data.schedule.ScheduleEventEntity.class,
+                com.matrix.agent.data.schedule.ScheduleControlEntity.class,
+                com.matrix.agent.data.schedule.ScheduleArmEntity.class,
+                com.matrix.agent.data.schedule.ScheduleStepEntity.class,
+                com.matrix.agent.data.schedule.ScheduleAcceptanceEntity.class,
+                com.matrix.agent.data.schedule.ScheduleBindingEntity.class
         },
-        version = 14,
+        version = 20,
         exportSchema = true
 )
 public abstract class MatrixDatabase extends RoomDatabase {
@@ -81,6 +93,9 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract TrajectoryDao trajectoryDao();
     public abstract SessionHistoryDao sessionHistoryDao();
     public abstract MemoryRecordDao memoryRecordDao();
+    public abstract com.matrix.agent.data.failure.FailureLessonDao failureLessonDao();
+    public abstract com.matrix.agent.data.embedding.MemoryVectorDao memoryVectorDao();
+    public abstract com.matrix.agent.data.conversation.AttachmentChunkDao attachmentChunkDao();
     public abstract AuditEventDao auditEventDao();
     public abstract ModelDownloadDao modelDownloadDao();
     public abstract AgentTaskDao agentTaskDao();
@@ -93,6 +108,8 @@ public abstract class MatrixDatabase extends RoomDatabase {
     public abstract com.matrix.agent.data.conversation.ConversationDraftDao conversationDraftDao();
     public abstract com.matrix.agent.data.conversation.ConversationAttachmentDao conversationAttachmentDao();
     public abstract com.matrix.agent.data.debugtrace.DebugTraceEventDao debugTraceEventDao();
+
+    public abstract com.matrix.agent.data.schedule.ScheduleDao scheduleDao();
 
     /**
      * schema v1 → v2 迁移——audit_event 加 userId 列 + idx_audit_user_zone 索引。
@@ -552,12 +569,17 @@ public abstract class MatrixDatabase extends RoomDatabase {
             builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
                     MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
-                    MIGRATION_13_14);
+                    MIGRATION_13_14, new com.matrix.agent.data.schedule.ScheduleMigration(),
+                    new com.matrix.agent.data.schedule.ScheduleDeliveryMigration(),
+                    new com.matrix.agent.data.failure.FailureLessonMigration(),
+                    new com.matrix.agent.data.embedding.MemoryVectorMigration(),
+                    new com.matrix.agent.data.conversation.AttachmentRetrievalMigration(),
+                    new com.matrix.agent.data.schedule.ResearchBudgetMigration());
             // 显式 WAL——锁定并发读写语义,避免 OEM ROM 关闭 SQLite WAL。
             builder.setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING);
             instance = builder.build();
             Log.i(TAG, "[MatrixDatabase] init encrypted=true alias=" + keyProvider.alias()
-                    + " version=14 entities=18 journalMode=WAL");
+                    + " version=20 journalMode=WAL");
             return instance;
         } catch (Exception ex) {
             Log.e(TAG, "[MatrixDatabase] init FAILED cause="

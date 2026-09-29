@@ -19,7 +19,7 @@ package com.matrix.agent.contract.schema;
  *   <li>{@link #CONST_MISMATCH}——const 不匹配</li>
  *   <li>{@link #LENGTH_VIOLATION}——minLength / maxLength 越界</li>
  *   <li>{@link #PATTERN_MISMATCH}——pattern 不匹配</li>
- *   <li>{@link #EMPTY_STRING}——空白字符串(quirk:trim 后空字符串拒绝)</li>
+ *   <li>{@link #EMPTY_STRING}——空白字符串（默认拒绝；仅显式 minLength=0 可放行）</li>
  *   <li>{@link #COMPOSITION_FAILED}——allOf/oneOf/anyOf 校验未通过</li>
  *   <li>{@link #NOT_NULL}——非 nullable 节点收到 null</li>
  * </ul>

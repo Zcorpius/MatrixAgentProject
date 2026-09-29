@@ -44,13 +44,26 @@ public final class PolicyEngine {
     private static final String MEMORY_PREFERENCE_SAVE = "memory.preference.save";
 
     private final CapabilityRegistry registry;
+    private final MediaUsagePolicy mediaUsagePolicy;
+    private final MediaSelectionPolicy mediaSelectionPolicy = new MediaSelectionPolicy();
+    private final MediaTargetPolicy mediaTargetPolicy = new MediaTargetPolicy();
+    private final BilibiliVideoIntentPolicy bilibiliVideoIntentPolicy =
+            new BilibiliVideoIntentPolicy();
 
     public PolicyEngine(CapabilityRegistry registry) {
         this.registry = registry;
+        this.mediaUsagePolicy = new MediaUsagePolicy(registry);
     }
 
     public PolicyDecision evaluate(AgentRequest request, ToolCall call) {
         String cap = call.getCapabilityName();
+        if (!request.getExecutionScope().allows(cap)) return PolicyDecision.denyCapability("计划未授权此能力");
+        if (com.matrix.agent.task.capability.WebCapabilities.SEARCH.equals(cap)
+                && (!request.getExecutionScope().automatic() || !request.getExecutionScope().networkAllowed())) {
+            return PolicyDecision.denyCapability("只读联网检索需要计划的显式网络授权");
+        }
+        String revoked = request.getExecutionScope().rejection();
+        if (!revoked.isEmpty()) return PolicyDecision.denyCapability(revoked);
         // Tool 参数含 destination / home_address / preferred_temperature 等业务敏感字段,
         // 不能整段进 logcat。这里只暴露 capability 名 + 元数据(actor / occupantZone)。
         Log.d(TAG, "[Policy] evaluate cap=" + cap
@@ -97,6 +110,15 @@ public final class PolicyEngine {
             return PolicyDecision.denyCapability(
                     "任务被标记为只读(readOnlyHint=true),禁止执行写操作");
         }
+
+        PolicyDecision mediaDecision = mediaTargetPolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = bilibiliVideoIntentPolicy.evaluate(request, call);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = mediaSelectionPolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
+        mediaDecision = mediaUsagePolicy.evaluate(request, cap);
+        if (mediaDecision != null) return mediaDecision;
 
         // capability 前置车辆状态约束(AND 语义)。
         // 不满足时归 CAPABILITY 拒绝(不可上诉)——vehicle state 是车辆物理事实,
@@ -190,7 +212,7 @@ public final class PolicyEngine {
         }
         if ("memory.semantic.delete".equals(cap) || "memory.preference.delete".equals(cap)
                 || "memory.episodic.delete".equals(cap)) {
-            return MemoryKeyCatalog.explicitDeleteIntent(request.getText()) ? null
+            return MemoryKeyCatalog.explicitDeleteIntent(request.getUserInstructionText()) ? null
                     : PolicyDecision.denyCapability("删除记忆需要用户显式要求");
         }
         return null;
@@ -202,7 +224,7 @@ public final class PolicyEngine {
         if ("memory.episodic.delete".equals(capability)) {
             Object eventId = call.argument("event_id");
             return eventId instanceof String && MemoryKeyCatalog.episodicDeleteAuthorized(
-                    (String) eventId, request.getText()) ? null
+                    (String) eventId, request.getUserInstructionText()) ? null
                     : PolicyDecision.denyCapability("请先查询历史事件，再明确指定要删除的事件编号");
         }
         boolean preference = capability.startsWith("memory.preference.");
@@ -220,11 +242,11 @@ public final class PolicyEngine {
         if (capability.endsWith(".save")) {
             Object value = call.argument("value");
             if (!(value instanceof String)
-                    || !MemoryKeyCatalog.saveAuthorized(key, (String) value, request.getText())) {
+                    || !MemoryKeyCatalog.saveAuthorized(key, (String) value, request.getUserInstructionText())) {
                 return PolicyDecision.denyCapability("记忆内容与本轮用户请求不匹配");
             }
         } else if (capability.endsWith(".delete")
-                && !MemoryKeyCatalog.deleteAuthorized(key, request.getText())) {
+                && !MemoryKeyCatalog.deleteAuthorized(key, request.getUserInstructionText())) {
             return PolicyDecision.denyCapability("删除目标与本轮用户请求不匹配");
         }
         return null;

@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "fault": "exhaust_active",
+  "observationLatencyUpperBoundMillis": 2742,
+  "before": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "f1a02479-8381-420e-bc21-1675dba8ca83",
+    "startedAt": "2026-09-27T17:10:57.193704Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:11:02.958897Z",
+    "runId": "fffd654d-9728-4f8f-901c-53eed88e5a13",
+    "state": 2,
+    "reason": "",
+    "result": "",
+    "activeMillis": 23,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529062159,
+    "startedAtMillis": 1790529062433,
+    "expiresAt": 1790531462159,
+    "deliveryStatus": 1,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529062507
+      },
+      {
+        "id": "crossref",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529062529
+      },
+      {
+        "id": "deliver",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_arxiv",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_crossref",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "summary",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "wikipedia",
+        "state": 1,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      }
+    ],
+    "complete": false
+  },
+  "injection": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "f1a02479-8381-420e-bc21-1675dba8ca83",
+    "startedAt": "2026-09-27T17:10:57.193704Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:11:03.218060Z",
+    "runId": "fffd654d-9728-4f8f-901c-53eed88e5a13",
+    "state": 2,
+    "reason": "",
+    "result": "",
+    "activeMillis": 1800000,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529062159,
+    "startedAtMillis": 1790529062433,
+    "expiresAt": 1790531462159,
+    "deliveryStatus": 1,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529062507
+      },
+      {
+        "id": "crossref",
+        "state": 2,
+        "attempt": 1,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {},
+        "startedAt": 1790529062529
+      },
+      {
+        "id": "deliver",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_arxiv",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_crossref",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "summary",
+        "state": 13,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      },
+      {
+        "id": "wikipedia",
+        "state": 1,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "",
+        "result": "",
+        "checkpoint": {}
+      }
+    ],
+    "complete": false,
+    "fault": "exhaust_active",
+    "faultInjectedAt": "2026-09-27T17:11:03.184443Z"
+  },
+  "terminal": {
+    "schemaVersion": 1,
+    "synthetic": true,
+    "scheduleId": "f1a02479-8381-420e-bc21-1675dba8ca83",
+    "startedAt": "2026-09-27T17:10:57.193704Z",
+    "model": "glm-5.3",
+    "profile": "RESEARCH",
+    "query": "large language model reasoning evaluation",
+    "lastObservedAt": "2026-09-27T17:11:05.696445Z",
+    "runId": "fffd654d-9728-4f8f-901c-53eed88e5a13",
+    "state": 5,
+    "reason": "REQUIRED_STEP_FAILED",
+    "result": "",
+    "activeMillis": 1801805,
+    "modelCalls": 0,
+    "toolCalls": 2,
+    "scheduledAt": 1790529062159,
+    "startedAtMillis": 1790529062433,
+    "expiresAt": 1790531462159,
+    "deliveryStatus": 6,
+    "deliveryFacts": {},
+    "steps": [
+      {
+        "id": "arxiv",
+        "state": 5,
+        "attempt": 1,
+        "activeMillis": 715,
+        "reason": "TIMED_OUT",
+        "result": "只读查询未完成",
+        "checkpoint": {},
+        "startedAt": 1790529062507,
+        "completedAt": 1790529063221
+      },
+      {
+        "id": "crossref",
+        "state": 5,
+        "attempt": 1,
+        "activeMillis": 1805,
+        "reason": "TIMED_OUT",
+        "result": "只读查询未完成",
+        "checkpoint": {},
+        "startedAt": 1790529062529,
+        "completedAt": 1790529064334
+      },
+      {
+        "id": "deliver",
+        "state": 9,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "REQUIRED_DEPENDENCY_FAILED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529064548
+      },
+      {
+        "id": "review_arxiv",
+        "state": 5,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "BUDGET_OR_EXPIRY_EXHAUSTED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529063338
+      },
+      {
+        "id": "review_crossref",
+        "state": 5,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "BUDGET_OR_EXPIRY_EXHAUSTED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529064412
+      },
+      {
+        "id": "review_wikipedia",
+        "state": 5,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "BUDGET_OR_EXPIRY_EXHAUSTED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529063377
+      },
+      {
+        "id": "summary",
+        "state": 5,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "BUDGET_OR_EXPIRY_EXHAUSTED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529064489
+      },
+      {
+        "id": "wikipedia",
+        "state": 5,
+        "attempt": 0,
+        "activeMillis": 0,
+        "reason": "BUDGET_OR_EXPIRY_EXHAUSTED",
+        "result": "",
+        "checkpoint": {},
+        "completedAt": 1790529063276
+      }
+    ],
+    "complete": true,
+    "fault": "exhaust_active",
+    "faultInjectedAt": "2026-09-27T17:11:03.184443Z",
+    "completedAtMillis": 1790529065589
+  }
+}

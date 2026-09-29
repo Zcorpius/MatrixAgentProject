@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-27",
+  "timezone": "Asia/Shanghai",
+  "device": "Mi 9 SE (grus)",
+  "os": "LineageOS 22.2 / Android 15 (API 35)",
+  "app_version": "0.7.1 (7001)",
+  "images": [
+    {
+      "file": "launcher-conversation.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "b3ee83d74b2e8bfc080a18371e1679762a0c0ce3967a2acc4745f8fb9db58847",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-downloads.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "971a01eaa06902c4fa09c166c65ad9af6c1918f1ba3047558ea47ba625216d2b",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-drawer.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "8c29f0e2149598230f4f8fc2f0af595e2e5b17ffd11effd79cb29133c7637648",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-models.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "0849100df87d2981184971e2c7eba49aa070ac72d42244c9f6756594b26addc3",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-plans.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "a0999ccc053586cff6c0c662c1a430e095a3197cabe600f22c991757fc1fe7cd",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-voice.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "b4606b1cd7771846dd3c631d8d1f03cb7081861d12da46037ffc0934c83c4dd8",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "launcher-workflows.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "ac3202c9c5003c00887ba5b51c55887381a7e3560f86a1f7783896c21e259089",
+      "source": "adb exec-out screencap -p; manual Launcher navigation",
+      "capture_batch": "README workspace capture"
+    },
+    {
+      "file": "overlay-conversation.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "b9a32745ec26eb6b0f1f871f0c7da5f73653f41b7c5a74d19784f1df28e5494f",
+      "source": "/sdcard/Android/data/com.matrix.agent.launcher/files/overlay-verification/02-panel.png",
+      "capture_batch": "Launcher 47-test suite"
+    },
+    {
+      "file": "overlay-editing.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "e37342fe89485c77f29044a07f671b9b58ca86c4061a5f3578ccda7559ff560d",
+      "source": "/sdcard/Android/data/com.matrix.agent.launcher/files/overlay-verification/03-editing.png",
+      "capture_batch": "Launcher 47-test suite"
+    },
+    {
+      "file": "overlay-process.png",
+      "width": 1080,
+      "height": 2340,
+      "sha256": "4076571c260168c58746af12c44df11facafc4c0ba28234a2f39150a4c17b540",
+      "source": "/sdcard/Android/data/com.matrix.agent.launcher/files/overlay-verification/03e-process-expanded.png",
+      "capture_batch": "Launcher 47-test suite"
+    }
+  ]
+}

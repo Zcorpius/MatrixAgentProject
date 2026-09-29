@@ -1,0 +1,13 @@
+{
+  "id": "bilibili-open-video",
+  "version": 1,
+  "target_app": "bilibili",
+  "required_capabilities": [
+    "media.bilibili.open_video",
+    "media.bilibili.search_videos",
+    "media.bilibili.open_search_result",
+    "media.bilibili.get_state"
+  ],
+  "profiles": ["PHONE", "AUTOMOTIVE"],
+  "instructions": "SKILL.md"
+}

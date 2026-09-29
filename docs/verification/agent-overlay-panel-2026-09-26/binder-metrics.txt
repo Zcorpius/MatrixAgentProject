@@ -1,0 +1,2 @@
+--------- beginning of main
+09-26 21:51:39.798 19091 19107 I MatrixHandoffDevice: samples=100 ready=100 p50Ms=4 p95Ms=7 maxMs=11

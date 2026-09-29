@@ -56,4 +56,9 @@ public interface ModelGateway {
             }
         };
     }
+
+    /** Explicit non-streaming fallback preserves cancellation and local-session leases. */
+    default CancellableModelCall prepareStreaming(ModelTurnRequest request, ModelStreamSink sink) {
+        return prepare(request);
+    }
 }

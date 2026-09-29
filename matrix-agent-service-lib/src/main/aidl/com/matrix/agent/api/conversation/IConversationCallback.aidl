@@ -3,6 +3,7 @@ package com.matrix.agent.api.conversation;
 import com.matrix.agent.api.conversation.ConversationMessage;
 import com.matrix.agent.api.conversation.ConversationInfo;
 import com.matrix.agent.api.conversation.ConversationRuntimeStage;
+import com.matrix.agent.api.conversation.ConversationAssistantStream;
 
 /**
  * 对话事件回调。注册后 Host 先回放一个有界快照（最近 N 条 onMessageUpsert），
@@ -31,4 +32,7 @@ oneway interface IConversationCallback {
     void onRuntimeStageChanged(in ConversationRuntimeStage stage);
 
     void onConversationError(String conversationId, int errorCode);
+
+    /** v14 append-only: replaceable generation snapshots; never voice transcripts. */
+    void onAssistantStream(in ConversationAssistantStream snapshot);
 }

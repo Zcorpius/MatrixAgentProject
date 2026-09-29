@@ -1,0 +1,3 @@
+package=com.tencent.qqmusic
+state=PlaybackState {state=PLAYING(3), position=0, buffered position=0, speed=1.0, updated=11278685, actions=1911, custom actions=[], active item id=-1, error=null}
+metadata: size=20, description=消失的月光, 李健, 李健

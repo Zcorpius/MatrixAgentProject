@@ -207,6 +207,18 @@ public final class SchemaValidatorTest {
         assertEquals(SchemaErrorCode.EMPTY_STRING, r.firstErrorCode());
     }
 
+    @Test public void explicitZeroMinimumAllowsEmptyEntitiesWithoutRelaxingRequiredQuery() {
+        CanonicalSchema schema = CanonicalSchema.object()
+                .property("query", CanonicalSchema.string().minLength(1).build())
+                .property("artist", CanonicalSchema.string().minLength(0).maxLength(64).build())
+                .property("title", CanonicalSchema.string().minLength(0).maxLength(64).build())
+                .required("query").additionalProperties(false).build();
+        assertTrue(validate(schema, args("query", "林舟", "artist", "林舟", "title", "")).isOk());
+        assertTrue(validate(schema, args("query", "晨光", "artist", "", "title", "晨光")).isOk());
+        assertFalse(validate(schema, args("query", " ", "artist", "", "title", "")).isOk());
+        assertFalse(validate(schema, args("query", "晨光", "artist", "x".repeat(65))).isOk());
+    }
+
     @Test
     public void nestedArrayItemsRecursive() {
         CanonicalSchema schema = CanonicalSchema.object()

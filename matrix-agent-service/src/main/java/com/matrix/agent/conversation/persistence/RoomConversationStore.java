@@ -268,9 +268,18 @@ public final class RoomConversationStore implements ConversationStore {
             if (attachments != null && command.contextAttachmentIds() != null) {
                 int ordinal = 0;
                 for (String attachmentId : command.contextAttachmentIds()) {
-                    if (attachments.linkToMessage(attachmentId, command.messageId(), ordinal++)
-                            != 1) {
+                    var attachment = attachments.getById(attachmentId);
+                    if (attachment == null || !attachment.ownerUserId.equals(conversation.ownerUserId)
+                            || !attachment.vehicleZone.equals(conversation.vehicleZone)
+                            || !attachment.conversationId.equals(command.conversationId())
+                            || attachment.state != com.matrix.agent.data.conversation.ConversationAttachmentEntity.STATE_READY
+                            || attachments.linkToMessage(attachmentId, command.messageId(), ordinal++) != 1) {
                         throw new IllegalStateException("附件在提交时已失效: " + attachmentId);
+                    }
+                    String manifest = command.attachmentManifests().get(attachmentId);
+                    if (manifest != null && (manifest.length() > 16_384
+                            || attachments.freezeManifest(attachmentId, command.messageId(), manifest) != 1)) {
+                        throw new IllegalStateException("附件来源冻结失败");
                     }
                 }
             }
@@ -346,9 +355,18 @@ public final class RoomConversationStore implements ConversationStore {
             if (attachments != null && command.contextAttachmentIds() != null) {
                 int ordinal = 0;
                 for (String attachmentId : command.contextAttachmentIds()) {
-                    if (attachments.linkToMessage(attachmentId, command.messageId(), ordinal++)
-                            != 1) {
+                    var attachment = attachments.getById(attachmentId);
+                    if (attachment == null || !attachment.ownerUserId.equals(conversation.ownerUserId)
+                            || !attachment.vehicleZone.equals(conversation.vehicleZone)
+                            || !attachment.conversationId.equals(command.conversationId())
+                            || attachment.state != com.matrix.agent.data.conversation.ConversationAttachmentEntity.STATE_READY
+                            || attachments.linkToMessage(attachmentId, command.messageId(), ordinal++) != 1) {
                         throw new IllegalStateException("附件在提交时已失效: " + attachmentId);
+                    }
+                    String manifest = command.attachmentManifests().get(attachmentId);
+                    if (manifest != null && (manifest.length() > 16_384
+                            || attachments.freezeManifest(attachmentId, command.messageId(), manifest) != 1)) {
+                        throw new IllegalStateException("附件来源冻结失败");
                     }
                 }
             }

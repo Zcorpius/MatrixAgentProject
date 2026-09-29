@@ -22,8 +22,15 @@ public final class LauncherExecutorRegistry {
     private final ExecutorService sdkCalls = new ThreadPoolExecutor(2, 2, 0L,
             TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(16), daemonFactory("matrix-launcher-sdk"),
             new ThreadPoolExecutor.AbortPolicy());
+    private final ExecutorService handoffCalls = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(32), daemonFactory("matrix-launcher-handoff"),
+            new ThreadPoolExecutor.AbortPolicy());
     private final ScheduledThreadPoolExecutor polling = new ScheduledThreadPoolExecutor(1,
             daemonFactory("matrix-launcher-poll"), new ThreadPoolExecutor.AbortPolicy());
+    // Sprite IO must not occupy either the RPC lane or the deadline-sensitive handoff lane.
+    private final ExecutorService petDecoding = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), daemonFactory("matrix-launcher-pet"),
+            new ThreadPoolExecutor.AbortPolicy());
     /**
      * 草稿命令后端（输入交互增强 §7.2）：DraftCommandLane 在此之上按 conversation
      * 实现 FIFO，不同 conversation 可并行。使用无界队列避免“用户输入保存”被一个很小
@@ -40,14 +47,24 @@ public final class LauncherExecutorRegistry {
         polling.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
     }
 
+    public ExecutorService handoffCalls() { return handoffCalls; }
+
     public ExecutorService sdkCalls() { return sdkCalls; }
     public ScheduledExecutorService polling() { return polling; }
     public ExecutorService draftCommands() { return draftCommands; }
+    public ExecutorService petDecoding() { return petDecoding; }
+    private final ExecutorService petInteractions = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), daemonFactory("matrix-launcher-pointer"),
+            new ThreadPoolExecutor.AbortPolicy());
+    public ExecutorService petInteractions() { return petInteractions; }
 
     public void shutdown() {
+        handoffCalls.shutdownNow();
         sdkCalls.shutdownNow();
         polling.shutdownNow();
         draftCommands.shutdownNow();
+        petDecoding.shutdownNow();
+        petInteractions.shutdownNow();
     }
 
     private static ThreadFactory daemonFactory(String prefix) {

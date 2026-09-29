@@ -1,0 +1,44 @@
+{
+  "matrix-agent-service/build/outputs/apk/debug/matrix-agent-service-debug.apk": {
+    "sha256": "a7be1acd67ee434e35ceb8c6d33b2dd2f647a0cdd725fce7ab6990b2af34fa00",
+    "bytes": 115878209,
+    "debugProbeInDex": true,
+    "reflectionProbeInDex": true,
+    "embeddingFiles": [
+      "assets/embedding/bge-small-zh-v1.5/config.json",
+      "assets/embedding/bge-small-zh-v1.5/embeddings_bf16.bin",
+      "assets/embedding/bge-small-zh-v1.5/llm.mnn",
+      "assets/embedding/bge-small-zh-v1.5/llm.mnn.weight",
+      "assets/embedding/bge-small-zh-v1.5/llm_config.json",
+      "assets/embedding/bge-small-zh-v1.5/tokenizer.txt"
+    ]
+  },
+  "matrix-agent-service/build/outputs/apk/release/matrix-agent-service-release.apk": {
+    "sha256": "389e8855749d8af30793f018cccec6af52bd00b4ba1b196f061c94282ab5e1ae",
+    "bytes": 92191986,
+    "debugProbeInDex": false,
+    "reflectionProbeInDex": false,
+    "embeddingFiles": [
+      "assets/embedding/bge-small-zh-v1.5/config.json",
+      "assets/embedding/bge-small-zh-v1.5/embeddings_bf16.bin",
+      "assets/embedding/bge-small-zh-v1.5/llm.mnn",
+      "assets/embedding/bge-small-zh-v1.5/llm.mnn.weight",
+      "assets/embedding/bge-small-zh-v1.5/llm_config.json",
+      "assets/embedding/bge-small-zh-v1.5/tokenizer.txt"
+    ]
+  },
+  "matrix-agent-launcher/build/outputs/apk/debug/matrix-agent-launcher-debug.apk": {
+    "sha256": "51f386ecd966e4010ab9f137d05aa3a8f93b170a6f23bfcd6a0186cc9d2e03fc",
+    "bytes": 15415194,
+    "debugProbeInDex": false,
+    "reflectionProbeInDex": false,
+    "embeddingFiles": []
+  },
+  "matrix-agent-launcher/build/outputs/apk/release/matrix-agent-launcher-release.apk": {
+    "sha256": "344cc8ff0ba92bcb1283f8a9cdb984bf1b7765080dd3c41b8b6c94549e838f6f",
+    "bytes": 12662892,
+    "debugProbeInDex": false,
+    "reflectionProbeInDex": false,
+    "embeddingFiles": []
+  }
+}

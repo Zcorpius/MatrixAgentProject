@@ -16,12 +16,18 @@ public final class ModelProviderPresetTest {
         Map<String, ModelProviderPreset> presets = new HashMap<>();
         for (ModelProviderPreset preset : ModelProviderPreset.all()) presets.put(preset.id, preset);
 
-        for (String id : new String[] {"glm", "deepseek", "qwen", "kimi", "doubao",
+        for (String id : new String[] {"glm", "glm_anthropic", "deepseek", "qwen", "kimi", "doubao",
                 "anthropic", "gemini", "ollama", "lmstudio", "vllm", "custom", "ondevice"}) {
             assertTrue("missing provider " + id, presets.containsKey(id));
         }
         assertEquals(ApiProtocol.ON_DEVICE, presets.get("ondevice").protocol);
         assertEquals(ApiProtocol.OLLAMA_CHAT, presets.get("ollama").protocol);
+        assertEquals("https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                presets.get("glm").endpoint);
+        assertEquals(ApiProtocol.ANTHROPIC_MESSAGES, presets.get("glm_anthropic").protocol);
+        assertEquals("https://open.bigmodel.cn/api/anthropic/v1/messages",
+                presets.get("glm_anthropic").endpoint);
+        presets.get("glm_anthropic").toConfig("test-key").validate();
     }
 
     @Test public void openAiCompatibleLanPresetsUseConcreteCompletionRoutes() {

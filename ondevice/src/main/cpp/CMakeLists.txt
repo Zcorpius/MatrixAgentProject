@@ -41,7 +41,7 @@ set(MNN_BUILD_TRAIN OFF CACHE BOOL "Build train" FORCE)
 add_subdirectory(${MNN_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/MNN)
 
 # 只编 LLM JNI wrapper（去掉 Operit 的 net/module，本模块不需要通用推理网络）
-add_library(MNNWrapper SHARED mnnllmnative.cpp)
+add_library(MNNWrapper SHARED mnnllmnative.cpp mnnembeddingnative.cpp)
 
 target_include_directories(MNNWrapper PRIVATE
     ${MNN_SOURCE_DIR}/include

@@ -1,1 +1,1 @@
-<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/matrix_badge"/><corners android:radius="20dp"/></shape>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="?attr/matrix_selected"/><corners android:radius="20dp"/></shape>

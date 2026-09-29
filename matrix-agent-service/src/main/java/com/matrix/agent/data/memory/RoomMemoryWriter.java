@@ -290,7 +290,7 @@ public final class RoomMemoryWriter implements MemoryWriter {
     public MemoryDeleteOutcome deleteEpisodic(AgentRequest request, String eventId) {
         if (!hasMemoryIdentity(request)) return MemoryDeleteOutcome.INVALID_REQUEST;
         if (!EpisodicFactCodec.validEventId(eventId)) return MemoryDeleteOutcome.INVALID_KEY;
-        if (!MemoryKeyCatalog.episodicDeleteAuthorized(eventId, request.getText())) {
+        if (!MemoryKeyCatalog.episodicDeleteAuthorized(eventId, request.getUserInstructionText())) {
             return MemoryDeleteOutcome.TARGET_NOT_AUTHORIZED;
         }
         if (transactionRunner == null || sessionHistoryDao == null) return MemoryDeleteOutcome.STORAGE_FAILURE;

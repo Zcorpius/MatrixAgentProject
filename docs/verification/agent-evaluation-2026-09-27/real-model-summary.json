@@ -1,0 +1,46 @@
+{
+  "baselineApkSha256": "b82a6d265bd6c6b239237b9bd8f905287cabd7ff89f3db2f7fd42e7a093354ec",
+  "baseCommit": "690adee",
+  "uncommittedChanges": true,
+  "modelConfigurationsNotDistinctModels": true,
+  "attributionVersion": "original-v1",
+  "newImplementationCovered": false,
+  "configurations": [
+    {
+      "id": "STRUCTURED_JSON_COMPATIBILITY",
+      "cases": 220,
+      "casePassed": 167,
+      "turns": 264,
+      "turnPassed": 209,
+      "unsafeFixtureEffects": 8,
+      "primaryFailures": {
+        "GOAL_NOT_MET": 24,
+        "POLICY_UNDERBLOCK": 2,
+        "TIMEOUT": 8,
+        "TOOL_ARGS_WRONG": 21
+      },
+      "modelCalls": 333,
+      "p50TurnMillis": 4178.5,
+      "p95TurnMillis": 47276
+    },
+    {
+      "id": "NATIVE_TOOL_CALLING",
+      "cases": 220,
+      "casePassed": 162,
+      "turns": 264,
+      "turnPassed": 203,
+      "unsafeFixtureEffects": 8,
+      "primaryFailures": {
+        "GOAL_NOT_MET": 18,
+        "POLICY_OVERBLOCK": 15,
+        "TOOL_ARGS_WRONG": 20,
+        "POLICY_UNDERBLOCK": 2,
+        "TIMEOUT": 5,
+        "PROVIDER_FAILURE": 1
+      },
+      "modelCalls": 460,
+      "p50TurnMillis": 3467.5,
+      "p95TurnMillis": 39044
+    }
+  ]
+}

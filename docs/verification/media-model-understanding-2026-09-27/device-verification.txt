@@ -1,0 +1,37 @@
+09-27 19:10:43.490 30865 30918 D MatrixAgent: [LlmGateway] decide req=fa78f2b1-723b-4a77-a620-217ca15e59f7 zone=DRIVER tools=47 route=structured-json-compatibility conversationMsgs=2
+09-27 19:10:51.358 30865 30913 D MatrixAgent: [Tool] <- cap=media.qqmusic.search_songs id=b1653e59-3370-4d4a-816d-93a8d34617b7 status=SUCCESS verified=true durationMs=2607
+09-27 19:10:51.501 30865 30912 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=true elapsedMs=10128
+09-27 19:10:51.501 30865 30912 I MatrixMediaProbe: engineSearch tool=media.qqmusic.search_songs status=SUCCESS error=null confirmableIndex=1
+09-27 19:11:15.385 30865 31121 I MatrixMediaProbe: engineReject state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=0 answerReady=true elapsedMs=99
+09-27 19:11:15.519 30865 30935 D MatrixAgent: [LlmGateway] decide req=302a2691-f4ba-43a8-ae16-11a5654276a6 zone=DRIVER tools=47 route=structured-json-compatibility conversationMsgs=2
+09-27 19:11:27.810 30865 30913 D MatrixAgent: [Tool] <- cap=media.qqmusic.search_songs id=040184ac-3f4f-404e-a50e-9e0c2ee96b22 status=SUCCESS verified=true durationMs=1740
+09-27 19:11:27.893 30865 30913 I MatrixAgent: [Engine] END req=302a2691-f4ba-43a8-ae16-11a5654276a6 finalState=SUCCEEDED stopReason=NO_TOOL_CALL iterations=2 totalToolCalls=1 successToolCalls=1 durationMs=12417 msg="模型选择直接答复用户"
+09-27 19:11:27.912 30865 31132 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=true elapsedMs=12439
+09-27 19:11:27.912 30865 31132 I MatrixMediaProbe: engineSearch tool=media.qqmusic.search_songs status=SUCCESS error=null confirmableIndex=1
+09-27 19:11:43.672 30865 31122 I MatrixAgent: [Engine] BEGIN req=bade6743-541a-412a-8626-a5a7f924b2b3 session=probe-qq-search actor=DRIVER zone=DRIVER input=TOUCH remainingMs=59999 text=[user-input-redacted] textChars=8
+09-27 19:11:43.717 30865 30935 D MatrixAgent: [LlmGateway] decide req=bade6743-541a-412a-8626-a5a7f924b2b3 zone=DRIVER tools=47 route=structured-json-compatibility conversationMsgs=2
+09-27 19:11:47.203 30865 31122 D MatrixAgent: [Tool] submit cap=media.qqmusic.search_songs id=e19e1088-f5d3-445e-9bbe-c494002d3737 budgetMs=12000 (capability=12000 request=56469)
+09-27 19:11:49.153 30865 31122 D MatrixAgent: [Tool] <- cap=media.qqmusic.search_songs id=e19e1088-f5d3-445e-9bbe-c494002d3737 status=SUCCESS verified=true durationMs=1949
+09-27 19:11:49.243 30865 31122 I MatrixAgent: [Engine] END req=bade6743-541a-412a-8626-a5a7f924b2b3 finalState=SUCCEEDED stopReason=NO_TOOL_CALL iterations=2 totalToolCalls=1 successToolCalls=1 durationMs=5570 msg="模型选择直接答复用户"
+09-27 19:11:49.283 30865 31209 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=true elapsedMs=5614
+09-27 19:11:49.283 30865 31209 I MatrixMediaProbe: engineSearch tool=media.qqmusic.search_songs status=SUCCESS error=null confirmableIndex=1
+09-27 19:12:13.246 30865 30913 I MatrixAgent: [Engine] BEGIN req=c0a8ec19-d047-4a37-8fc8-f53bc58a12b9 session=probe-qq-search actor=DRIVER zone=DRIVER input=TOUCH remainingMs=59999 text=[user-input-redacted] textChars=15
+09-27 19:12:13.286 30865 30935 D MatrixAgent: [LlmGateway] decide req=c0a8ec19-d047-4a37-8fc8-f53bc58a12b9 zone=DRIVER tools=47 route=structured-json-compatibility conversationMsgs=2
+09-27 19:12:15.870 30865 30913 D MatrixAgent: [Tool] submit cap=media.bilibili.search_videos id=cbc6fa62-85d9-486e-b542-d7474fc139d0 budgetMs=15000 (capability=15000 request=57375)
+09-27 19:12:21.906 30865 30913 D MatrixAgent: [Tool] <- cap=media.bilibili.search_videos id=cbc6fa62-85d9-486e-b542-d7474fc139d0 status=SUCCESS verified=true durationMs=6034
+09-27 19:12:21.986 30865 30913 I MatrixAgent: [Engine] END req=c0a8ec19-d047-4a37-8fc8-f53bc58a12b9 finalState=SUCCEEDED stopReason=NO_TOOL_CALL iterations=2 totalToolCalls=1 successToolCalls=1 durationMs=8739 msg="模型选择直接答复用户"
+09-27 19:12:22.005 30865 31296 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=false elapsedMs=8761
+09-27 19:12:22.005 30865 31296 I MatrixMediaProbe: engineSearch tool=media.bilibili.search_videos status=SUCCESS error=null confirmableIndex=null
+09-27 19:12:54.114 30865 31122 I MatrixAgent: [Engine] BEGIN req=7552f135-472d-4329-9832-5b1e2b5410d4 session=probe-qq-search actor=DRIVER zone=DRIVER input=TOUCH remainingMs=59999 text=[user-input-redacted] textChars=10
+09-27 19:12:54.164 30865 30935 D MatrixAgent: [LlmGateway] decide req=7552f135-472d-4329-9832-5b1e2b5410d4 zone=DRIVER tools=47 route=structured-json-compatibility conversationMsgs=2
+09-27 19:12:57.246 30865 31122 D MatrixAgent: [Tool] submit cap=media.qqmusic.search_songs id=2a55cf47-93cd-4ffb-908b-29c1104effc6 budgetMs=12000 (capability=12000 request=56868)
+09-27 19:12:59.215 30865 31122 D MatrixAgent: [Tool] <- cap=media.qqmusic.search_songs id=2a55cf47-93cd-4ffb-908b-29c1104effc6 status=SUCCESS verified=true durationMs=1968
+09-27 19:12:59.305 30865 31122 I MatrixAgent: [Engine] END req=7552f135-472d-4329-9832-5b1e2b5410d4 finalState=SUCCEEDED stopReason=NO_TOOL_CALL iterations=2 totalToolCalls=1 successToolCalls=1 durationMs=5191 msg="模型选择直接答复用户"
+09-27 19:12:59.324 30865   705 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=true elapsedMs=5214
+09-27 19:12:59.325 30865   705 I MatrixMediaProbe: engineSearch tool=media.qqmusic.search_songs status=SUCCESS error=null confirmableIndex=1
+09-27 19:13:29.928 30865 30913 I MatrixAgent: [Engine] BEGIN req=112633e5-6247-46d1-85f8-0465a1357138 session=probe-qq-search actor=DRIVER zone=DRIVER input=TOUCH remainingMs=59999 text=[user-input-redacted] textChars=1
+09-27 19:13:29.964 30865 30913 D MatrixAgent: [Tool] submit cap=media.qqmusic.play_search_result id=66d79a81-c261-4db0-b609-a19be6c0df26 budgetMs=15000 (capability=15000 request=59963)
+09-27 19:13:34.134 30865 30913 D MatrixAgent: [Tool] <- cap=media.qqmusic.play_search_result id=66d79a81-c261-4db0-b609-a19be6c0df26 status=SUCCESS verified=true durationMs=4169
+09-27 19:13:34.225 30865 30913 I MatrixAgent: [Engine] END req=112633e5-6247-46d1-85f8-0465a1357138 finalState=SUCCEEDED stopReason=NO_TOOL_CALL iterations=2 totalToolCalls=1 successToolCalls=1 durationMs=4297 msg="模型选择直接答复用户"
+09-27 19:13:34.255 30865  1235 I MatrixMediaProbe: engineSearch state=SUCCEEDED stop=NO_TOOL_CALL toolCalls=1 answerReady=true asksConfirmation=false elapsedMs=4331
+09-27 19:13:34.255 30865  1235 I MatrixMediaProbe: engineSearch tool=media.qqmusic.play_search_result status=SUCCESS error=null confirmableIndex=null

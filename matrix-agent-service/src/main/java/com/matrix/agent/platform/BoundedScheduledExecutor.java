@@ -16,12 +16,12 @@ import java.util.concurrent.Semaphore;
  * <p>{@link java.util.concurrent.ScheduledThreadPoolExecutor}'s delayed queue is deliberately
  * unbounded. That is unsuitable for Host retry/watchdog paths where a faulty caller could keep
  * scheduling faster than the worker can drain. This class fails fast instead of hiding memory
- * growth. It is intentionally package-private; the registry is the only owner.
+ * growth. The registry or a narrow process graph explicitly owns and closes each instance.
  */
-final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
+public final class BoundedScheduledExecutor extends ScheduledThreadPoolExecutor {
     private final Semaphore permits;
 
-    BoundedScheduledExecutor(String name, int maxPending) {
+    public BoundedScheduledExecutor(String name, int maxPending) {
         super(1, daemonFactory(name), new AbortPolicy());
         if (maxPending <= 0) throw new IllegalArgumentException("maxPending must be positive");
         permits = new Semaphore(maxPending);

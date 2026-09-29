@@ -1,0 +1,15 @@
+{
+  "id": "media-source-switch",
+  "version": 1,
+  "target_app": "both",
+  "required_capabilities": [
+    "media.qqmusic.get_state",
+    "media.bilibili.get_state",
+    "media.qqmusic.pause",
+    "media.qqmusic.play",
+    "media.bilibili.pause",
+    "media.bilibili.resume"
+  ],
+  "profiles": ["PHONE", "AUTOMOTIVE"],
+  "instructions": "SKILL.md"
+}

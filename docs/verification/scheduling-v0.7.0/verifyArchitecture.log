@@ -1,0 +1,349 @@
+> Task :matrix-agent-test:preBuild UP-TO-DATE
+> Task :matrix-agent-launcher:preBuild UP-TO-DATE
+> Task :matrix-agent-service:preBuild UP-TO-DATE
+> Task :matrix-agent-service:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-test:preTrustedReleaseBuild UP-TO-DATE
+> Task :matrix-agent-launcher:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:generateContractHash UP-TO-DATE
+> Task :matrix-agent-service-lib:preBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugBuildConfig UP-TO-DATE
+> Task :matrix-agent-service:generateDebugBuildConfig UP-TO-DATE
+> Task :matrix-agent-test:generateTrustedReleaseResources UP-TO-DATE
+> Task :matrix-agent-service:generateDebugResources UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:checkDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-test:packageTrustedReleaseResources UP-TO-DATE
+> Task :matrix-agent-launcher:packageDebugResources UP-TO-DATE
+> Task :matrix-agent-test:javaPreCompileTrustedRelease UP-TO-DATE
+> Task :matrix-agent-launcher:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugAidl UP-TO-DATE
+> Task :matrix-agent-test:createTrustedReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :matrix-agent-launcher:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :matrix-agent-service:packageDebugResources UP-TO-DATE
+> Task :matrix-agent-test:extractDeepLinksTrustedRelease UP-TO-DATE
+> Task :matrix-agent-test:preTrustedReleaseAndroidTestBuild SKIPPED
+> Task :matrix-agent-launcher:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugJniLibFolders UP-TO-DATE
+> Task :matrix-agent-launcher:preDebugAndroidTestBuild SKIPPED
+> Task :matrix-agent-test:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-test:preTrustedReleaseUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-test:javaPreCompileTrustedReleaseUnitTest UP-TO-DATE
+> Task :matrix-agent-test:preUntrustedReleaseBuild UP-TO-DATE
+> Task :matrix-agent-launcher:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-launcher:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugNativeLibs NO-SOURCE
+> Task :matrix-agent-test:generateUntrustedReleaseResources UP-TO-DATE
+> Task :ondevice:downloadSherpaOnnxAar UP-TO-DATE
+> Task :ondevice:preBuild UP-TO-DATE
+> Task :ondevice:preDebugBuild UP-TO-DATE
+> Task :matrix-agent-test:packageUntrustedReleaseResources UP-TO-DATE
+> Task :matrix-agent-service-lib:stripDebugDebugSymbols NO-SOURCE
+> Task :matrix-agent-launcher:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-test:javaPreCompileUntrustedRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :matrix-agent-test:createUntrustedReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :matrix-agent-test:extractDeepLinksUntrustedRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugResources UP-TO-DATE
+> Task :matrix-agent-test:preUntrustedReleaseUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:packageDebugResources UP-TO-DATE
+> Task :matrix-agent-test:javaPreCompileUntrustedReleaseUnitTest UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugNavigationResources UP-TO-DATE
+> Task :ondevice:checkDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:parseDebugLocalResources UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-service:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-service:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :matrix-agent-service:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-service:preDebugAndroidTestBuild SKIPPED
+> Task :matrix-agent-service:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDebugAnnotations UP-TO-DATE
+> Task :matrix-agent-service:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :matrix-agent-service:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugAssets UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :matrix-agent-service:generateDebugAssets UP-TO-DATE
+> Task :ondevice:configureCMakeDebug[arm64-v8a]
+> Task :matrix-agent-service-lib:mergeDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-service-lib:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-launcher:mapDebugSourceSetPaths UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugNavigationResources UP-TO-DATE
+> Task :matrix-agent-service:desugarDebugFileDependencies UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-launcher:parseDebugLocalResources UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugNavigationResources UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:prepareDebugArtProfile UP-TO-DATE
+> Task :matrix-agent-service-lib:prepareLintJarForPublish UP-TO-DATE
+> Task :matrix-agent-launcher:mergeDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugManifest UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugJavaRes NO-SOURCE
+> Task :matrix-agent-service-lib:mergeDebugJavaResource UP-TO-DATE
+> Task :matrix-agent-service:checkDebugDuplicateClasses UP-TO-DATE
+> Task :matrix-agent-service-lib:syncDebugLibJars UP-TO-DATE
+> Task :matrix-agent-service-lib:writeDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleDebugLocalLintAar UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :matrix-agent-launcher:checkDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugLibraryResources UP-TO-DATE
+> Task :matrix-agent-service:mergeExtDexDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugJniLibFolders UP-TO-DATE
+> Task :matrix-agent-service-lib:createFullJarDebug UP-TO-DATE
+> Task :matrix-agent-service:validateSigningDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:writeDebugLintModelMetadata UP-TO-DATE
+> Task :matrix-agent-service:writeDebugAppMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-service:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-service-lib:lintAnalyzeDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugAndroidTestBuild UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugMainManifest UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugManifest UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :matrix-agent-service-lib:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugManifestForPackage UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :matrix-agent-launcher:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-service-lib:generateDebugLintReportModel UP-TO-DATE
+> Task :matrix-agent-service-lib:lintReportDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:lintDebug
+> Task :matrix-agent-service-lib:lint
+> Task :matrix-agent-service-lib:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :ondevice:buildCMakeDebug[arm64-v8a]
+> Task :ondevice:mergeDebugJniLibFolders UP-TO-DATE
+> Task :ondevice:mergeDebugNativeLibs UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :ondevice:stripDebugDebugSymbols UP-TO-DATE
+> Task :ondevice:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :ondevice:generateDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugUnitTestKotlin NO-SOURCE
+> Task :ondevice:packageDebugResources UP-TO-DATE
+> Task :matrix-agent-service-lib:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :ondevice:processDebugNavigationResources UP-TO-DATE
+> Task :ondevice:parseDebugLocalResources UP-TO-DATE
+> Task :ondevice:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-service:mapDebugSourceSetPaths UP-TO-DATE
+> Task :matrix-agent-service-lib:compileDebugUnitTestJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-service-lib:processDebugUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-launcher:generateDebugLintReportModel UP-TO-DATE
+> Task :matrix-agent-service:processDebugNavigationResources UP-TO-DATE
+> Task :matrix-agent-service:parseDebugLocalResources UP-TO-DATE
+> Task :matrix-agent-service:generateDebugRFile UP-TO-DATE
+> Task :matrix-agent-service-lib:testDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-service:compileDebugNavigationResources UP-TO-DATE
+> Task :ondevice:extractDebugAnnotations UP-TO-DATE
+> Task :matrix-agent-service-lib:test UP-TO-DATE
+> Task :ondevice:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :ondevice:generateDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:check
+> Task :matrix-agent-service-lib:preReleaseBuild UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugResources UP-TO-DATE
+> Task :ondevice:mergeDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:checkReleaseAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:compileReleaseAidl UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :matrix-agent-service:compressDebugAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeReleaseNativeLibs NO-SOURCE
+> Task :matrix-agent-service-lib:stripReleaseDebugSymbols NO-SOURCE
+> Task :matrix-agent-service-lib:copyReleaseJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksForAarRelease UP-TO-DATE
+> Task :matrix-agent-launcher:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :ondevice:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-service-lib:generateReleaseResources UP-TO-DATE
+> Task :ondevice:javaPreCompileDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:packageReleaseResources UP-TO-DATE
+> Task :matrix-agent-service-lib:processReleaseNavigationResources UP-TO-DATE
+> Task :matrix-agent-service-lib:parseReleaseLocalResources UP-TO-DATE
+> Task :matrix-agent-service-lib:generateReleaseRFile UP-TO-DATE
+> Task :matrix-agent-test:mapTrustedReleaseSourceSetPaths UP-TO-DATE
+> Task :matrix-agent-test:processTrustedReleaseNavigationResources UP-TO-DATE
+> Task :matrix-agent-service-lib:extractReleaseAnnotations UP-TO-DATE
+> Task :matrix-agent-service-lib:generateReleaseAssets UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeReleaseAssets UP-TO-DATE
+> Task :ondevice:compileDebugJavaWithJavac UP-TO-DATE
+> Task :ondevice:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :matrix-agent-test:parseTrustedReleaseLocalResources UP-TO-DATE
+> Task :ondevice:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :matrix-agent-test:generateTrustedReleaseRFile UP-TO-DATE
+> Task :ondevice:prepareDebugArtProfile UP-TO-DATE
+> Task :matrix-agent-test:compileTrustedReleaseNavigationResources UP-TO-DATE
+> Task :ondevice:prepareLintJarForPublish UP-TO-DATE
+> Task :matrix-agent-test:mergeTrustedReleaseResources UP-TO-DATE
+> Task :ondevice:processDebugManifest UP-TO-DATE
+> Task :ondevice:processDebugJavaRes NO-SOURCE
+> Task :matrix-agent-test:processUntrustedReleaseNavigationResources UP-TO-DATE
+> Task :ondevice:mergeDebugJavaResource UP-TO-DATE
+> Task :matrix-agent-test:parseUntrustedReleaseLocalResources UP-TO-DATE
+> Task :ondevice:syncDebugLibJars UP-TO-DATE
+> Task :ondevice:writeDebugAarMetadata UP-TO-DATE
+> Task :matrix-agent-test:generateUntrustedReleaseRFile UP-TO-DATE
+> Task :matrix-agent-test:compileUntrustedReleaseNavigationResources UP-TO-DATE
+> Task :matrix-agent-service-lib:compileReleaseKotlin NO-SOURCE
+> Task :matrix-agent-test:mapUntrustedReleaseSourceSetPaths UP-TO-DATE
+> Task :ondevice:bundleDebugLocalLintAar UP-TO-DATE
+> Task :ondevice:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :matrix-agent-test:mergeUntrustedReleaseResources UP-TO-DATE
+> Task :ondevice:extractDeepLinksDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:javaPreCompileRelease UP-TO-DATE
+> Task :matrix-agent-launcher:lintAnalyzeDebug UP-TO-DATE
+> Task :ondevice:compileDebugLibraryResources UP-TO-DATE
+> Task :matrix-agent-service:checkDebugAarMetadata UP-TO-DATE
+> Task :ondevice:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :ondevice:createFullJarDebug UP-TO-DATE
+> Task :ondevice:writeDebugLintModelMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :ondevice:extractProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :matrix-agent-service-lib:mergeReleaseConsumerProguardFiles UP-TO-DATE
+> Task :matrix-agent-launcher:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :matrix-agent-service-lib:prepareReleaseArtProfile UP-TO-DATE
+> Task :matrix-agent-service-lib:processReleaseManifest UP-TO-DATE
+> Task :ondevice:generateDebugLintModel UP-TO-DATE
+> Task :matrix-agent-service-lib:processReleaseJavaRes NO-SOURCE
+> Task :matrix-agent-service-lib:mergeReleaseJavaResource UP-TO-DATE
+> Task :matrix-agent-service-lib:syncReleaseLibJars UP-TO-DATE
+> Task :matrix-agent-service-lib:writeReleaseAarMetadata UP-TO-DATE
+> Task :matrix-agent-launcher:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-test:checkTrustedReleaseAarMetadata UP-TO-DATE
+> Task :matrix-agent-test:checkUntrustedReleaseAarMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleReleaseAar UP-TO-DATE
+> Task :ondevice:lintAnalyzeDebug UP-TO-DATE
+> Task :ondevice:preDebugAndroidTestBuild UP-TO-DATE
+> Task :matrix-agent-launcher:lintReportDebug UP-TO-DATE
+> Task :matrix-agent-launcher:lintDebug
+> Task :matrix-agent-launcher:lint
+> Task :matrix-agent-service-lib:sourceReleaseJar UP-TO-DATE
+> Task :ondevice:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:bundleDebugClassesToRuntimeJar UP-TO-DATE
+> Task :ondevice:preDebugUnitTestBuild UP-TO-DATE
+> Task :matrix-agent-service-lib:generateMetadataFileForReleasePublication
+> Task :matrix-agent-service-lib:generatePomFileForReleasePublication
+> Task :matrix-agent-launcher:compileDebugUnitTestKotlin NO-SOURCE
+> Task :ondevice:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :matrix-agent-launcher:compileDebugUnitTestJavaWithJavac UP-TO-DATE
+> Task :ondevice:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :matrix-agent-launcher:processDebugJavaRes NO-SOURCE
+> Task :matrix-agent-launcher:processDebugUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-service-lib:publishReleasePublicationToMavenLocal
+> Task :ondevice:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-service-lib:publishToMavenLocal
+
+> Task :matrix-agent-service-lib:verifyPublishedPom
+verifyPublishedPom: POM/.module 均无 Kotlin 依赖 ✓
+
+> Task :matrix-agent-service-lib:generateReleaseLintModel UP-TO-DATE
+> Task :ondevice:generateDebugLintReportModel UP-TO-DATE
+> Task :matrix-agent-launcher:testDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-launcher:test UP-TO-DATE
+> Task :matrix-agent-service-lib:lintAnalyzeRelease UP-TO-DATE
+> Task :ondevice:lintReportDebug UP-TO-DATE
+> Task :matrix-agent-launcher:check
+> Task :ondevice:lintDebug
+> Task :ondevice:lint
+> Task :matrix-agent-service-lib:bundleReleaseLocalLintAar UP-TO-DATE
+> Task :ondevice:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:createFullJarRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:writeReleaseLintModelMetadata UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:compileReleaseLibraryResources UP-TO-DATE
+> Task :matrix-agent-service-lib:extractDeepLinksRelease UP-TO-DATE
+> Task :matrix-agent-service-lib:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :matrix-agent-service-lib:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :matrix-agent-test:compileTrustedReleaseKotlin NO-SOURCE
+> Task :ondevice:compileDebugUnitTestKotlin NO-SOURCE
+> Task :matrix-agent-test:compileTrustedReleaseJavaWithJavac NO-SOURCE
+> Task :ondevice:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :matrix-agent-test:processTrustedReleaseMainManifest UP-TO-DATE
+> Task :matrix-agent-test:processTrustedReleaseManifest UP-TO-DATE
+> Task :ondevice:compileDebugUnitTestJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-test:processTrustedReleaseManifestForPackage UP-TO-DATE
+> Task :ondevice:processDebugUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-test:processTrustedReleaseResources UP-TO-DATE
+> Task :matrix-agent-test:bundleTrustedReleaseClassesToCompileJar UP-TO-DATE
+> Task :ondevice:testDebugUnitTest UP-TO-DATE
+> Task :ondevice:test UP-TO-DATE
+> Task :ondevice:check
+> Task :ondevice:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :ondevice:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :matrix-agent-test:generateTrustedReleaseAndroidTestLintModel UP-TO-DATE
+> Task :matrix-agent-test:generateTrustedReleaseLintReportModel UP-TO-DATE
+> Task :matrix-agent-test:generateTrustedReleaseUnitTestLintModel UP-TO-DATE
+> Task :matrix-agent-service:compileDebugKotlin NO-SOURCE
+> Task :matrix-agent-test:lintAnalyzeTrustedRelease UP-TO-DATE
+> Task :matrix-agent-test:lintAnalyzeTrustedReleaseAndroidTest UP-TO-DATE
+> Task :matrix-agent-test:lintAnalyzeTrustedReleaseUnitTest UP-TO-DATE
+> Task :matrix-agent-test:lintReportTrustedRelease UP-TO-DATE
+> Task :matrix-agent-test:lintTrustedRelease
+> Task :matrix-agent-test:lint
+> Task :matrix-agent-test:bundleTrustedReleaseClassesToRuntimeJar UP-TO-DATE
+> Task :matrix-agent-test:compileTrustedReleaseUnitTestKotlin NO-SOURCE
+> Task :matrix-agent-test:compileTrustedReleaseUnitTestJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-test:processTrustedReleaseJavaRes NO-SOURCE
+> Task :matrix-agent-test:processTrustedReleaseUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-test:testTrustedReleaseUnitTest UP-TO-DATE
+> Task :matrix-agent-test:compileUntrustedReleaseKotlin NO-SOURCE
+> Task :matrix-agent-test:compileUntrustedReleaseJavaWithJavac NO-SOURCE
+> Task :matrix-agent-test:processUntrustedReleaseMainManifest UP-TO-DATE
+> Task :matrix-agent-test:processUntrustedReleaseManifest UP-TO-DATE
+> Task :matrix-agent-test:processUntrustedReleaseManifestForPackage UP-TO-DATE
+> Task :matrix-agent-test:processUntrustedReleaseResources UP-TO-DATE
+> Task :matrix-agent-test:bundleUntrustedReleaseClassesToRuntimeJar UP-TO-DATE
+> Task :matrix-agent-test:bundleUntrustedReleaseClassesToCompileJar UP-TO-DATE
+> Task :matrix-agent-test:compileUntrustedReleaseUnitTestKotlin NO-SOURCE
+> Task :matrix-agent-test:compileUntrustedReleaseUnitTestJavaWithJavac UP-TO-DATE
+> Task :matrix-agent-test:processUntrustedReleaseJavaRes NO-SOURCE
+> Task :matrix-agent-test:processUntrustedReleaseUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-test:testUntrustedReleaseUnitTest UP-TO-DATE
+> Task :matrix-agent-test:test UP-TO-DATE
+> Task :matrix-agent-test:check
+> Task :matrix-agent-service:compileDebugJavaWithJavac
+> Task :matrix-agent-service:processDebugMainManifest UP-TO-DATE
+> Task :matrix-agent-service:processDebugManifest UP-TO-DATE
+> Task :matrix-agent-service:processDebugManifestForPackage UP-TO-DATE
+> Task :matrix-agent-service:processDebugResources UP-TO-DATE
+> Task :matrix-agent-service:generateDebugLintReportModel
+> Task :matrix-agent-service:processDebugJavaRes UP-TO-DATE
+> Task :matrix-agent-service:bundleDebugClassesToCompileJar
+> Task :matrix-agent-service:bundleDebugClassesToRuntimeJar
+> Task :matrix-agent-service:dexBuilderDebug
+> Task :matrix-agent-service:generateDebugAndroidTestLintModel
+> Task :matrix-agent-service:generateDebugUnitTestLintModel
+> Task :matrix-agent-service:compileDebugUnitTestKotlin NO-SOURCE
+> Task :matrix-agent-service:compileDebugUnitTestJavaWithJavac
+> Task :matrix-agent-service:processDebugUnitTestJavaRes NO-SOURCE
+> Task :matrix-agent-service:lintAnalyzeDebugAndroidTest
+> Task :matrix-agent-service:lintAnalyzeDebugUnitTest
+> Task :matrix-agent-service:lintAnalyzeDebug
+> Task :matrix-agent-service:testDebugUnitTest
+> Task :matrix-agent-service:lintReportDebug UP-TO-DATE
+> Task :matrix-agent-service:lintDebug
+> Task :matrix-agent-service:lint
+> Task :matrix-agent-service:test
+> Task :matrix-agent-service:check
+> Task :verifyArchitecture
+> Task :matrix-agent-service:mergeDebugJavaResource UP-TO-DATE
+> Task :matrix-agent-service:mergeLibDexDebug UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugNativeLibs UP-TO-DATE
+> Task :matrix-agent-service:stripDebugDebugSymbols UP-TO-DATE
+> Task :matrix-agent-service:mergeDebugGlobalSynthetics
+> Task :matrix-agent-service:mergeProjectDexDebug
+> Task :matrix-agent-service:packageDebug
+> Task :matrix-agent-service:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :matrix-agent-service:assembleDebug
+
+BUILD SUCCESSFUL in 33s
+265 actionable tasks: 26 executed, 239 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.1/userguide/configuration_cache_enabling.html

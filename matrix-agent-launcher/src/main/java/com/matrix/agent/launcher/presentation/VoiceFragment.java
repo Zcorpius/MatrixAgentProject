@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.api.common.MatrixErrorCode;
 import com.matrix.agent.api.download.ModelDownloadInfo;
 import com.matrix.agent.api.voice.TencentTtsConfig;
@@ -560,7 +561,8 @@ public final class VoiceFragment extends Fragment {
         value.setTextSize(14);
         value.setTypeface(Typeface.DEFAULT_BOLD);
         value.setBackgroundResource(primary ? R.drawable.bg_primary : R.drawable.bg_outline);
-        value.setTextColor(color(primary ? android.R.color.white : R.color.matrix_primary_dark));
+        value.setTextColor(primary ? LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent)
+                : color(R.color.matrix_primary_dark));
         value.setOnClickListener(listener);
         return value;
     }
@@ -582,7 +584,7 @@ public final class VoiceFragment extends Fragment {
         return value;
     }
 
-    private int color(int resource) { return ContextCompat.getColor(requireContext(), resource); }
+    private int color(int resource) { return LauncherThemePreferences.colorResource(requireContext(), resource); }
     private int dp(int value) { return activity().dp(value); }
     private LauncherActivity activity() { return (LauncherActivity) requireActivity(); }
 }

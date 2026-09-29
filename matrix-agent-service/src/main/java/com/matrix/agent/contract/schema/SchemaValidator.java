@@ -251,8 +251,11 @@ public final class SchemaValidator {
             }
             case STRING: {
                 String s = (String) instance;
-                // quirk:trim 后空字符串拒绝
-                if (s.trim().isEmpty()) return SchemaErrorCode.EMPTY_STRING;
+                // Preserve legacy nonblank validation unless a schema explicitly opts into empty text.
+                // Optional media entities use minLength(0); required queries and saved values do not.
+                if (s.trim().isEmpty() && !Integer.valueOf(0).equals(schema.getMinLength())) {
+                    return SchemaErrorCode.EMPTY_STRING;
+                }
                 if (schema.getMinLength() != null && s.length() < schema.getMinLength()) {
                     return SchemaErrorCode.LENGTH_VIOLATION;
                 }

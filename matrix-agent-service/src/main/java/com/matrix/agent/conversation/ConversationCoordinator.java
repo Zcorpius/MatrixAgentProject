@@ -46,6 +46,16 @@ import java.util.function.UnaryOperator;
  */
 public final class ConversationCoordinator {
 
+    private com.matrix.agent.diagnostics.HandoffDiagnostics handoffDiagnostics =
+            com.matrix.agent.diagnostics.HandoffDiagnostics.NONE;
+    public void setHandoffDiagnostics(com.matrix.agent.diagnostics.HandoffDiagnostics diagnostics) {
+        handoffDiagnostics = diagnostics;
+    }
+    private com.matrix.agent.handoff.HandoffContextRegistry handoffContexts;
+    public void setHandoffContexts(com.matrix.agent.handoff.HandoffContextRegistry contexts) {
+        this.handoffContexts = contexts;
+    }
+
     private static final String TAG = "MatrixAgent";
     /** Binder 正文上限与 AgentRequest.TEXT_MAX 对齐；Host 侧再校验，不信任客户端。 */
     public static final int TEXT_MAX_CHARS = 4096;
@@ -61,6 +71,7 @@ public final class ConversationCoordinator {
 
     /** 订阅事件端口；host/rpc 桥接 Binder callback，域内默认 no-op。 */
     public interface Listener {
+        default void onAssistantStream(AssistantStreamEvent event) { }
         default void onMessageUpsert(MessageRow row) { }
         default void onMessageStatusChanged(String conversationId, String messageId,
                 int statusWire, int failureCode) { }
@@ -99,6 +110,9 @@ public final class ConversationCoordinator {
      * 直接 IllegalArgumentException（stub 映射 INVALID_ARGUMENT）；装配后负责：
      * 提交前验证（READY/归属/数量）+ 受限文本投影并入 AgentRequest。
      */
+    public record AttachmentProjection(String context, java.util.Map<String, String> manifests) {
+        public AttachmentProjection { manifests = java.util.Map.copyOf(manifests); }
+    }
     public interface AttachmentPort {
         /** 验证提交附件集合：任一不存在/FAILED/越权/超量即抛 IllegalArgumentException。 */
         void validateForSubmission(String ownerUserId, String vehicleZone,
@@ -107,6 +121,10 @@ public final class ConversationCoordinator {
         /** READY 附件的受限文本投影（经 ModelSanitizer）；无可用附件返回空串。 */
         String projectContext(String ownerUserId, String vehicleZone,
                 String conversationId, List<String> attachmentIds);
+        default AttachmentProjection retrieve(String owner, String zone, String conversation,
+                List<String> ids, String question) {
+            return new AttachmentProjection(projectContext(owner, zone, conversation, ids), java.util.Map.of());
+        }
     }
     private volatile AttachmentPort attachmentPort;
     /**
@@ -162,6 +180,7 @@ public final class ConversationCoordinator {
             ConversationTaskProgressBridge bridge) {
         this.stageRegistry = registry;
         this.progressBridge = bridge;
+        if (bridge != null) bridge.setAssistantStreamSink(event -> listener.onAssistantStream(event));
     }
 
     public ConversationStore store() {
@@ -233,7 +252,8 @@ public final class ConversationCoordinator {
         // 都必须在创建任务前拒绝（§3.2：整次提交在创建任务前拒绝，不留半写）。
         // 验证通过后立即物化受限文本投影：此后模型看到的上下文即固定，附件删除
         // （被并发抢占）不影响已受理轮次。
-        String attachmentContext = projectAttachments(command, attachmentIds);
+        AttachmentProjection projection = projectAttachments(command, attachmentIds, text);
+        String attachmentContext = projection.context();
 
         // AgentRequest 文本 = 用户原文 + 附件投影（展示层/持久层仍是原文——
         // conversation_message.text 不被附件内容污染）。
@@ -248,7 +268,7 @@ public final class ConversationCoordinator {
                         conversationTaskId, runtimeRequestId, command.conversationId(), agentText,
                         command.actor(), command.agentSessionId(), command.arbitrationKey(),
                         metadata.inputSource(), languageTag, metadata.asrConfidence(),
-                        metadata.confidenceAvailable()));
+                        metadata.confidenceAvailable(), metadata.origin()));
 
         // 2) 原子事务：幂等判重 + sequence + 用户消息(ACCEPTED) + task link + 附件冻结。
         SubmittedUserMessage submitted = store.submitUserMessage(new UserSubmission(
@@ -257,7 +277,7 @@ public final class ConversationCoordinator {
                 conversationTaskId, runtimeRequestId,
                 prepared.classification().readOnlyHint(), idempotencyKey,
                 command.submittedDraftInstanceId(), command.quotedMessageId(),
-                quoted == null ? null : quoted.text(), attachmentIds));
+                quoted == null ? null : quoted.text(), attachmentIds, projection.manifests()));
         if (submitted.replay()) {
             // 幂等命中：返回既有消息的事实（messageId 以库中行为准，而非本次新生成的 id）。
             Log.i(TAG, "[Conversation] TEXT 幂等命中 conv=" + command.conversationId());
@@ -283,6 +303,12 @@ public final class ConversationCoordinator {
         activeTokens.put(conversationTaskId, token);
         // 运行阶段（I3）：受理事务已原子持久化 → 发布 QUEUED 并绑定 Engine 事件映射。
         // 在 lane 预约前发布：订阅者先看到“等待执行”，再看到 RUNNING 消息事件。
+        if (handoffContexts != null) {
+            var owner = store.findConversation(command.conversationId());
+            if (owner != null) handoffContexts.bind(new com.matrix.agent.handoff.HandoffContextRegistry.Binding(
+                    runtimeRequestId, command.conversationId(), conversationTaskId, userMessageId,
+                    submitted.sequenceNo(), owner.ownerUserId(), owner.vehicleZone()));
+        }
         beginStageTracking(command.conversationId(), conversationTaskId, runtimeRequestId);
         // 必须先回执再预约 lane：极快的本地执行也不能在 VoiceBridge 建立 token→task 映射前
         // 回来，从而丢失唯一一次 TTS 回注。
@@ -306,13 +332,23 @@ public final class ConversationCoordinator {
 
     /** 输入来源元数据。文字入口使用 TEXT/TOUCH；语音桥保留 PTT/WAKE 与 ASR 事实。 */
     public record InputMetadata(ConversationInputChannel channel, InputSource inputSource,
-            String idempotencyKey, Float asrConfidence, boolean confidenceAvailable) {
+            String idempotencyKey, Float asrConfidence, boolean confidenceAvailable,
+            com.matrix.agent.identity.InteractiveOrigin origin) {
+        public InputMetadata(ConversationInputChannel channel, InputSource inputSource, String idempotencyKey,
+                Float asrConfidence, boolean confidenceAvailable) {
+            this(channel, inputSource, idempotencyKey, asrConfidence, confidenceAvailable, null);
+        }
         public InputMetadata {
             Objects.requireNonNull(channel, "channel");
             Objects.requireNonNull(inputSource, "inputSource");
             if (idempotencyKey == null || idempotencyKey.isBlank()) {
                 throw new IllegalArgumentException("idempotencyKey 不能为空");
             }
+        }
+        public static InputMetadata text(String conversationId, String operationId,
+                com.matrix.agent.identity.InteractiveOrigin origin) {
+            return new InputMetadata(ConversationInputChannel.TEXT, InputSource.TOUCH,
+                    ConversationIds.textIdempotencyKey(conversationId, operationId), null, true, origin);
         }
         public static InputMetadata text(String conversationId, String clientOperationId) {
             return new InputMetadata(ConversationInputChannel.TEXT, InputSource.TOUCH,
@@ -414,6 +450,8 @@ public final class ConversationCoordinator {
 
         if (normalized.length() <= APPEND_MAX_CHARS) {
             String steerKey = command.metadata() == null
+                    || (command.metadata().channel() == ConversationInputChannel.TEXT
+                        && command.metadata().inputSource() == InputSource.TOUCH)
                     ? ConversationIds.steerIdempotencyKey(command.conversationId(),
                             command.clientOperationId())
                     : command.metadata().idempotencyKey();
@@ -495,7 +533,8 @@ public final class ConversationCoordinator {
         String steerText = normalizeText(text, APPEND_MAX_CHARS);
         // 附件的验证、净化投影发生在任何 steer 持久化前；Steer 只得到脱敏文本，
         // 用户消息正文仍保持原话，附件事实由同一事务冻结到 INPUT_STEER 行。
-        String attachmentContext = projectAttachments(command, attachmentIds);
+        AttachmentProjection projection = projectAttachments(command, attachmentIds, steerText);
+        String attachmentContext = projection.context();
         String agentSteerText = attachmentContext.isEmpty() ? steerText : steerText + attachmentContext;
         String messageId = ConversationIds.newMessageId();
 
@@ -507,7 +546,7 @@ public final class ConversationCoordinator {
         SubmittedSteerMessage submitted = store.appendSteerMessage(new SteerSubmission(
                 conversationId, messageId, ConversationMessage.CHANNEL_TEXT, steerText,
                 null, hostUserMessageId, idempotencyKey, command.submittedDraftInstanceId(),
-                attachmentIds));
+                attachmentIds, projection.manifests()));
         if (submitted.replay()) {
             Log.i(TAG, "[Conversation] STEER 幂等命中 conv=" + conversationId);
             MessageRow existing = store.findMessageByIdempotencyKey(idempotencyKey);
@@ -746,6 +785,7 @@ public final class ConversationCoordinator {
 
     private void endStageTracking(String conversationId, String conversationTaskId,
             String runtimeRequestId) {
+        if (handoffContexts != null) handoffContexts.unbind(runtimeRequestId);
         if (stageRegistry != null) {
             stageRegistry.clear(conversationId, conversationTaskId);
         }
@@ -774,6 +814,10 @@ public final class ConversationCoordinator {
                     + conversationTaskId);
             return;
         }
+        // Persisted task truth, recorded only after the terminal write succeeds.
+        handoffDiagnostics.record(com.matrix.agent.diagnostics.HandoffDiagnostics.Stage.TASK_TERMINAL,
+                0, status.wire(), 0, status == PersistedMessageStatus.COMPLETED,
+                android.os.SystemClock.elapsedRealtime(), -1, conversationTaskId, null);
         MessageRow assistant = store.findMessage(assistantMessageId);
         if (assistant != null) {
             notifyUpsert(assistant);
@@ -847,8 +891,8 @@ public final class ConversationCoordinator {
      * 任一附件无效同样在所有持久化动作之前抛出（§3.2 整次拒绝，不留半写）。
      * owner/zone 从会话行推导（与草稿消费同源），Launcher 不可指定。
      */
-    private String projectAttachments(TextCommand command, List<String> attachmentIds) {
-        if (attachmentIds.isEmpty()) return "";
+    private AttachmentProjection projectAttachments(TextCommand command, List<String> attachmentIds, String question) {
+        if (attachmentIds.isEmpty()) return new AttachmentProjection("", java.util.Map.of());
         AttachmentPort port = attachmentPort;
         if (port == null) {
             throw new IllegalArgumentException("附件能力不可用（Host 未装配附件域）");
@@ -861,8 +905,8 @@ public final class ConversationCoordinator {
         }
         port.validateForSubmission(conversation.ownerUserId(), conversation.vehicleZone(),
                 command.conversationId(), attachmentIds);
-        return port.projectContext(conversation.ownerUserId(),
-                conversation.vehicleZone(), command.conversationId(), attachmentIds);
+        return port.retrieve(conversation.ownerUserId(),
+                conversation.vehicleZone(), command.conversationId(), attachmentIds, question);
     }
 
     /** 附件端口只读暴露（Stub 的消息 DTO 投影用）。 */

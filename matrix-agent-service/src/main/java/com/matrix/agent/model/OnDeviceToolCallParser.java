@@ -78,6 +78,11 @@ final class OnDeviceToolCallParser {
     static ParseResult parse(String output, Map<String, String> modelToCapability) {
         if (output == null || output.trim().isEmpty()) return ParseResult.text("");
 
+        if (countStr(output, "<think>") != countStr(output, "</think>")
+                || countStr(output, "<analysis>") != countStr(output, "</analysis>")) return ParseResult.error("");
+        output = THINK_TAG.matcher(output).replaceAll("")
+                .replaceAll("(?s)<analysis>.*?</analysis>", "").trim();
+
         // 检测未闭合 <tool_call>（截断/畸形）→ 整轮 fail-closed，不当文本跳过让后续有效 call 执行
         // 开闭标签数量不匹配（含多余 </tool_call>）→ 整轮 fail-closed，不让有效 call 绕过校验
         if (countStr(output, "<tool_call>") != countStr(output, "</tool_call>")) {

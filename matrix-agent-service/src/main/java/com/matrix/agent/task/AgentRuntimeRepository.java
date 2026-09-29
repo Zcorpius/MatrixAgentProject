@@ -169,6 +169,18 @@ public final class AgentRuntimeRepository {
             ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
             TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
             IntentClassifier intentClassifier, AuditRepository auditRepository) {
+        this(engineFactory, sessionManager, memoryStore, initialGateway, initialDisplayName,
+                budget, scheduler, vehicleStateSource, registry, intentClassifier, auditRepository,
+                com.matrix.agent.identity.RuntimeProfileSource.UNKNOWN);
+    }
+
+    /** Production constructor: captures a trusted profile in both request-factory paths. */
+    public AgentRuntimeRepository(AgentEngineFactory engineFactory,
+            SessionManager sessionManager, MemoryStore memoryStore,
+            ModelGateway initialGateway, String initialDisplayName, AgentBudget budget,
+            TaskScheduler scheduler, VehicleStateSource vehicleStateSource, CapabilityRegistry registry,
+            IntentClassifier intentClassifier, AuditRepository auditRepository,
+            com.matrix.agent.identity.RuntimeProfileSource runtimeProfileSource) {
         if (scheduler == null) throw new IllegalArgumentException("scheduler 不能为空");
         if (vehicleStateSource == null) throw new IllegalArgumentException("vehicleStateSource 不能为空");
         if (registry == null) throw new IllegalArgumentException("registry 不能为空");
@@ -179,7 +191,7 @@ public final class AgentRuntimeRepository {
         this.scheduler = scheduler;
         this.vehicleStateSource = vehicleStateSource;
         this.requestFactory = new TaskRequestFactory(memoryStore, safeBudget, vehicleStateSource,
-                intentClassifier);
+                intentClassifier, runtimeProfileSource);
         this.userDataResetCoordinator = new UserDataResetCoordinator(memoryStore, sessionManager,
                 auditRepository, inFlightTasks);
         this.taskDispatchCoordinator = new TaskDispatchCoordinator(scheduler,
@@ -221,6 +233,23 @@ public final class AgentRuntimeRepository {
      * 本方法只做 request 构造与既有调度派发——deadline 从此处构造 request 起算，
      * 排队等待不消耗任务预算（设计文档 §4.3）。</p>
      */
+    public AgentRequest prepareAutomaticRequest(
+            com.matrix.agent.task.scheduler.PreparedAutomaticTask task, CancellationToken token) {
+        return requestFactory.newAutomaticRequestBuilder(task, token).build();
+    }
+
+    public AutoCloseable tryAutomaticLease(CancellationToken token, boolean readOnly) throws InterruptedException {
+        return scheduler.tryAutomaticLease(token, readOnly);
+    }
+    public AgentOutcome executeAutomatic(
+            com.matrix.agent.task.scheduler.PreparedAutomaticTask task, CancellationToken token) {
+        AgentEngine engine = modelRuntime.currentEngine();
+        if (task.scope().profile() == com.matrix.agent.identity.ExecutionProfile.RESEARCH) {
+            engine = engine.withBudget(AgentBudget.forProfile(task.scope().profile()));
+        }
+        return taskDispatchCoordinator.dispatchAutomatic(requestFactory.newAutomaticRequestBuilder(task, token).build(), token, engine);
+    }
+
     public AgentOutcome executePrepared(
             com.matrix.agent.task.conversation.ConversationTaskSubmitter.PreparedTask task,
             CancellationToken token) {

@@ -1,0 +1,5 @@
+{
+  "matrix-agent-service/build/outputs/apk/debug/matrix-agent-service-debug.apk": "7dc31e9a0688bba99561fad45bce772d5593154295c6b27ca6adccd6ebf79e3d",
+  "matrix-agent-launcher/build/outputs/apk/debug/matrix-agent-launcher-debug.apk": "7c3660a3b192294f692c81fed037abbe03b449bc4a7cddc4755cb043c5a0d377",
+  "matrix-agent-launcher/build/outputs/apk/androidTest/debug/matrix-agent-launcher-debug-androidTest.apk": "724e06435c300e5622d450d9557610babbd020024cb8163bd8199779d2e01a52"
+}

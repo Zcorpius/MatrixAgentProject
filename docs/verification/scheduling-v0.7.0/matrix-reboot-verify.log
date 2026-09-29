@@ -1,0 +1,25 @@
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleRecoveryHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.matrix.agent.test.ScheduleRecoveryHostInstrumentedTest:
+INSTRUMENTATION_STATUS: test=verifyAndCleanup
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: scheduleEvidence=count=1, maxReceiveDelayMillis=18
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.matrix.agent.test.ScheduleRecoveryHostInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=verifyAndCleanup
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 18.592
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1

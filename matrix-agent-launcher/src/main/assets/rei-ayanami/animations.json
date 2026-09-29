@@ -1,0 +1,982 @@
+{
+  "schema": "codex-v2-android-sprite-assets",
+  "schemaVersion": 1,
+  "petId": "rei-ayanami",
+  "displayName": "绫波丽",
+  "pathBase": "directory containing this JSON",
+  "atlas": {
+    "file": "spritesheet.webp",
+    "width": 1536,
+    "height": 2288,
+    "columns": 8,
+    "rows": 11,
+    "cellWidth": 192,
+    "cellHeight": 208,
+    "sourceSha256": "ccafb73db2ec0dc64deefc910de2da72390a8885c7f309805ef2cc2f395800fd",
+    "rectConvention": "LTRB, right and bottom exclusive"
+  },
+  "defaultAnimation": "idle",
+  "neutral": {
+    "file": "frames/neutral.png",
+    "row": 0,
+    "column": 6,
+    "sourceRectLTRB": [
+      1152,
+      0,
+      1344,
+      208
+    ]
+  },
+  "animations": {
+    "idle": {
+      "totalDurationMs": 1100,
+      "frames": [
+        {
+          "file": "frames/idle_00.png",
+          "row": 0,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            0,
+            192,
+            208
+          ],
+          "durationMs": 280
+        },
+        {
+          "file": "frames/idle_01.png",
+          "row": 0,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            0,
+            384,
+            208
+          ],
+          "durationMs": 110
+        },
+        {
+          "file": "frames/idle_02.png",
+          "row": 0,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            0,
+            576,
+            208
+          ],
+          "durationMs": 110
+        },
+        {
+          "file": "frames/idle_03.png",
+          "row": 0,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            0,
+            768,
+            208
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/idle_04.png",
+          "row": 0,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            0,
+            960,
+            208
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/idle_05.png",
+          "row": 0,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            0,
+            1152,
+            208
+          ],
+          "durationMs": 320
+        }
+      ]
+    },
+    "running-right": {
+      "totalDurationMs": 1060,
+      "frames": [
+        {
+          "file": "frames/running_right_00.png",
+          "row": 1,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            208,
+            192,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_01.png",
+          "row": 1,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            208,
+            384,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_02.png",
+          "row": 1,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            208,
+            576,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_03.png",
+          "row": 1,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            208,
+            768,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_04.png",
+          "row": 1,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            208,
+            960,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_05.png",
+          "row": 1,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            208,
+            1152,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_06.png",
+          "row": 1,
+          "column": 6,
+          "sourceRectLTRB": [
+            1152,
+            208,
+            1344,
+            416
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_right_07.png",
+          "row": 1,
+          "column": 7,
+          "sourceRectLTRB": [
+            1344,
+            208,
+            1536,
+            416
+          ],
+          "durationMs": 220
+        }
+      ]
+    },
+    "running-left": {
+      "totalDurationMs": 1060,
+      "frames": [
+        {
+          "file": "frames/running_left_00.png",
+          "row": 2,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            416,
+            192,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_01.png",
+          "row": 2,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            416,
+            384,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_02.png",
+          "row": 2,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            416,
+            576,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_03.png",
+          "row": 2,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            416,
+            768,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_04.png",
+          "row": 2,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            416,
+            960,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_05.png",
+          "row": 2,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            416,
+            1152,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_06.png",
+          "row": 2,
+          "column": 6,
+          "sourceRectLTRB": [
+            1152,
+            416,
+            1344,
+            624
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_left_07.png",
+          "row": 2,
+          "column": 7,
+          "sourceRectLTRB": [
+            1344,
+            416,
+            1536,
+            624
+          ],
+          "durationMs": 220
+        }
+      ]
+    },
+    "waving": {
+      "totalDurationMs": 700,
+      "frames": [
+        {
+          "file": "frames/waving_00.png",
+          "row": 3,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            624,
+            192,
+            832
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/waving_01.png",
+          "row": 3,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            624,
+            384,
+            832
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/waving_02.png",
+          "row": 3,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            624,
+            576,
+            832
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/waving_03.png",
+          "row": 3,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            624,
+            768,
+            832
+          ],
+          "durationMs": 280
+        }
+      ]
+    },
+    "jumping": {
+      "totalDurationMs": 840,
+      "frames": [
+        {
+          "file": "frames/jumping_00.png",
+          "row": 4,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            832,
+            192,
+            1040
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/jumping_01.png",
+          "row": 4,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            832,
+            384,
+            1040
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/jumping_02.png",
+          "row": 4,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            832,
+            576,
+            1040
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/jumping_03.png",
+          "row": 4,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            832,
+            768,
+            1040
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/jumping_04.png",
+          "row": 4,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            832,
+            960,
+            1040
+          ],
+          "durationMs": 280
+        }
+      ]
+    },
+    "failed": {
+      "totalDurationMs": 1220,
+      "frames": [
+        {
+          "file": "frames/failed_00.png",
+          "row": 5,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            1040,
+            192,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_01.png",
+          "row": 5,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            1040,
+            384,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_02.png",
+          "row": 5,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            1040,
+            576,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_03.png",
+          "row": 5,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            1040,
+            768,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_04.png",
+          "row": 5,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            1040,
+            960,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_05.png",
+          "row": 5,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            1040,
+            1152,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_06.png",
+          "row": 5,
+          "column": 6,
+          "sourceRectLTRB": [
+            1152,
+            1040,
+            1344,
+            1248
+          ],
+          "durationMs": 140
+        },
+        {
+          "file": "frames/failed_07.png",
+          "row": 5,
+          "column": 7,
+          "sourceRectLTRB": [
+            1344,
+            1040,
+            1536,
+            1248
+          ],
+          "durationMs": 240
+        }
+      ]
+    },
+    "waiting": {
+      "totalDurationMs": 1010,
+      "frames": [
+        {
+          "file": "frames/waiting_00.png",
+          "row": 6,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            1248,
+            192,
+            1456
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/waiting_01.png",
+          "row": 6,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            1248,
+            384,
+            1456
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/waiting_02.png",
+          "row": 6,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            1248,
+            576,
+            1456
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/waiting_03.png",
+          "row": 6,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            1248,
+            768,
+            1456
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/waiting_04.png",
+          "row": 6,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            1248,
+            960,
+            1456
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/waiting_05.png",
+          "row": 6,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            1248,
+            1152,
+            1456
+          ],
+          "durationMs": 260
+        }
+      ]
+    },
+    "running": {
+      "totalDurationMs": 820,
+      "frames": [
+        {
+          "file": "frames/running_00.png",
+          "row": 7,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            1456,
+            192,
+            1664
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_01.png",
+          "row": 7,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            1456,
+            384,
+            1664
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_02.png",
+          "row": 7,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            1456,
+            576,
+            1664
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_03.png",
+          "row": 7,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            1456,
+            768,
+            1664
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_04.png",
+          "row": 7,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            1456,
+            960,
+            1664
+          ],
+          "durationMs": 120
+        },
+        {
+          "file": "frames/running_05.png",
+          "row": 7,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            1456,
+            1152,
+            1664
+          ],
+          "durationMs": 220
+        }
+      ]
+    },
+    "review": {
+      "totalDurationMs": 1030,
+      "frames": [
+        {
+          "file": "frames/review_00.png",
+          "row": 8,
+          "column": 0,
+          "sourceRectLTRB": [
+            0,
+            1664,
+            192,
+            1872
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/review_01.png",
+          "row": 8,
+          "column": 1,
+          "sourceRectLTRB": [
+            192,
+            1664,
+            384,
+            1872
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/review_02.png",
+          "row": 8,
+          "column": 2,
+          "sourceRectLTRB": [
+            384,
+            1664,
+            576,
+            1872
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/review_03.png",
+          "row": 8,
+          "column": 3,
+          "sourceRectLTRB": [
+            576,
+            1664,
+            768,
+            1872
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/review_04.png",
+          "row": 8,
+          "column": 4,
+          "sourceRectLTRB": [
+            768,
+            1664,
+            960,
+            1872
+          ],
+          "durationMs": 150
+        },
+        {
+          "file": "frames/review_05.png",
+          "row": 8,
+          "column": 5,
+          "sourceRectLTRB": [
+            960,
+            1664,
+            1152,
+            1872
+          ],
+          "durationMs": 280
+        }
+      ]
+    }
+  },
+  "look": {
+    "coordinateSystem": "screen x-right y-down",
+    "angleConvention": "0=up, 90=right, 180=down, 270=left",
+    "frames": [
+      {
+        "file": "frames/look_000_0.png",
+        "row": 9,
+        "column": 0,
+        "sourceRectLTRB": [
+          0,
+          1872,
+          192,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 0.0,
+        "direction": "up"
+      },
+      {
+        "file": "frames/look_022_5.png",
+        "row": 9,
+        "column": 1,
+        "sourceRectLTRB": [
+          192,
+          1872,
+          384,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 22.5,
+        "direction": "up-right"
+      },
+      {
+        "file": "frames/look_045_0.png",
+        "row": 9,
+        "column": 2,
+        "sourceRectLTRB": [
+          384,
+          1872,
+          576,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 45.0,
+        "direction": "up-right"
+      },
+      {
+        "file": "frames/look_067_5.png",
+        "row": 9,
+        "column": 3,
+        "sourceRectLTRB": [
+          576,
+          1872,
+          768,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 67.5,
+        "direction": "up-right"
+      },
+      {
+        "file": "frames/look_090_0.png",
+        "row": 9,
+        "column": 4,
+        "sourceRectLTRB": [
+          768,
+          1872,
+          960,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 90.0,
+        "direction": "right"
+      },
+      {
+        "file": "frames/look_112_5.png",
+        "row": 9,
+        "column": 5,
+        "sourceRectLTRB": [
+          960,
+          1872,
+          1152,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 112.5,
+        "direction": "down-right"
+      },
+      {
+        "file": "frames/look_135_0.png",
+        "row": 9,
+        "column": 6,
+        "sourceRectLTRB": [
+          1152,
+          1872,
+          1344,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 135.0,
+        "direction": "down-right"
+      },
+      {
+        "file": "frames/look_157_5.png",
+        "row": 9,
+        "column": 7,
+        "sourceRectLTRB": [
+          1344,
+          1872,
+          1536,
+          2080
+        ],
+        "angleDegreesClockwiseFromUp": 157.5,
+        "direction": "down-right"
+      },
+      {
+        "file": "frames/look_180_0.png",
+        "row": 10,
+        "column": 0,
+        "sourceRectLTRB": [
+          0,
+          2080,
+          192,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 180.0,
+        "direction": "down"
+      },
+      {
+        "file": "frames/look_202_5.png",
+        "row": 10,
+        "column": 1,
+        "sourceRectLTRB": [
+          192,
+          2080,
+          384,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 202.5,
+        "direction": "down-left"
+      },
+      {
+        "file": "frames/look_225_0.png",
+        "row": 10,
+        "column": 2,
+        "sourceRectLTRB": [
+          384,
+          2080,
+          576,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 225.0,
+        "direction": "down-left"
+      },
+      {
+        "file": "frames/look_247_5.png",
+        "row": 10,
+        "column": 3,
+        "sourceRectLTRB": [
+          576,
+          2080,
+          768,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 247.5,
+        "direction": "down-left"
+      },
+      {
+        "file": "frames/look_270_0.png",
+        "row": 10,
+        "column": 4,
+        "sourceRectLTRB": [
+          768,
+          2080,
+          960,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 270.0,
+        "direction": "left"
+      },
+      {
+        "file": "frames/look_292_5.png",
+        "row": 10,
+        "column": 5,
+        "sourceRectLTRB": [
+          960,
+          2080,
+          1152,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 292.5,
+        "direction": "up-left"
+      },
+      {
+        "file": "frames/look_315_0.png",
+        "row": 10,
+        "column": 6,
+        "sourceRectLTRB": [
+          1152,
+          2080,
+          1344,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 315.0,
+        "direction": "up-left"
+      },
+      {
+        "file": "frames/look_337_5.png",
+        "row": 10,
+        "column": 7,
+        "sourceRectLTRB": [
+          1344,
+          2080,
+          1536,
+          2288
+        ],
+        "angleDegreesClockwiseFromUp": 337.5,
+        "direction": "up-left"
+      }
+    ],
+    "selection": "Select nearest 22.5-degree direction; in a center deadzone use neutral or idle."
+  },
+  "stateNotes": {
+    "running": "Active thinking/work, not locomotion",
+    "running-right": "Travel right",
+    "running-left": "Travel left"
+  },
+  "loopPolicy": "Application chooses repetition or one-shot; durations match source pet."
+}

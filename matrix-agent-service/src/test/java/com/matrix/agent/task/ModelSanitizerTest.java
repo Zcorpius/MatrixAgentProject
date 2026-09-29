@@ -55,11 +55,14 @@ public final class ModelSanitizerTest {
 
     @Test
     public void truncateHandlesSmallMaxCharsGracefully() {
-        // 极端小 maxChars:至少保留 1 char + 后缀,总长仍受 maxChars 约束(可能 keep=1 时略超)
-        ModelSanitizer sanitizer = new ModelSanitizer(15);
-        String result = sanitizer.sanitize("12345678901234567890");
-        assertTrue(result.contains("[truncated "));
-        assertTrue("prefix preserved, got: " + result, result.startsWith("1"));
+        // A truncation marker is optional when it cannot fit; the configured limit is always hard.
+        for (int limit = 1; limit <= 35; limit++) {
+            String result = new ModelSanitizer(limit).sanitize("1😀".repeat(30));
+            assertTrue(result.length() <= limit);
+            assertTrue(result.startsWith("1"));
+            assertTrue(!Character.isHighSurrogate(result.charAt(result.length()-1)));
+        }
+        org.junit.Assert.assertEquals("short", ModelSanitizer.truncateWithSuffix("short", 15));
     }
 
     /**

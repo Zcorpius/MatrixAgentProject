@@ -37,9 +37,20 @@ public final class RoomAttachmentStagingStore {
 
     private final ConversationAttachmentDao dao;
     private final TransactionRunner transaction;
+    private final com.matrix.agent.data.conversation.AttachmentChunkDao chunks;
+    public static final long MAX_SCOPE_BYTES = 64L * 1024 * 1024;
+    private static final int MAX_SCOPE_ATTACHMENTS = 128;
+    private record ActiveRead(String owner, InputStream input) { }
+    private final java.util.concurrent.ConcurrentHashMap<String, ActiveRead> activeReads = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RoomAttachmentStagingStore(ConversationAttachmentDao dao,
             TransactionRunner transaction) {
+        this(dao, null, transaction);
+    }
+
+    public RoomAttachmentStagingStore(ConversationAttachmentDao dao,
+            com.matrix.agent.data.conversation.AttachmentChunkDao chunks, TransactionRunner transaction) {
+        this.chunks = chunks;
         this.dao = Objects.requireNonNull(dao, "dao");
         this.transaction = Objects.requireNonNull(transaction, "transaction");
     }
@@ -64,6 +75,11 @@ public final class RoomAttachmentStagingStore {
             }
             ConversationAttachmentEntity entity = newStagingRow(ownerUserId, vehicleZone,
                     conversationId, declaredMime, displayName, clientOperationId);
+            if (chunks != null && chunks.attachmentCount(ownerUserId, vehicleZone) >= MAX_SCOPE_ATTACHMENTS) {
+                markFailed(entity, com.matrix.agent.api.common.MatrixErrorCode.OVERLOADED);
+                result[0] = entity;
+                return;
+            }
             dao.upsert(entity);
             result[0] = entity;
             created[0] = true;
@@ -81,30 +97,57 @@ public final class RoomAttachmentStagingStore {
                 || entity.linkedMessageId != null) {
             return;
         }
+        entity = copy(entity);
+        final ConversationAttachmentEntity completed = entity;
+        java.util.List<com.matrix.agent.attachment.retrieval.DocumentChunk> extractedChunks = List.of();
+        activeReads.put(attachmentId, new ActiveRead(entity.ownerUserId, input));
         try {
+            // Close the delete/clear-before-registration race before entering a possibly blocking read.
+            var registered = dao.getById(attachmentId);
+            if (registered == null || registered.state != ConversationAttachment.STATE_STAGING
+                    || registered.linkedMessageId != null) {
+                input.close();
+                return;
+            }
             AttachmentTextExtractor.Extraction extraction =
                     AttachmentTextExtractor.extract(input, declaredMime);
             entity.mimeType = extraction.sniffedMime();
             entity.state = ConversationAttachmentEntity.STATE_READY;
             entity.errorCode = 0;
-            entity.extractedText = extraction.text();
+            extractedChunks = com.matrix.agent.attachment.retrieval.DocumentChunker.split(attachmentId, extraction.text());
+            entity.extractedText = chunks == null ? extraction.text() : null;
             entity.extractedChars = extraction.text().codePointCount(0, extraction.text().length());
             entity.byteSize = extraction.sourceByteSize();
         } catch (AttachmentTextExtractor.RejectedException rejected) {
             // 不记录文件名；文件名本身也可能是敏感上下文。
             Log.i(TAG, "[Attachment] 摄取拒绝 type=" + rejected.errorCode);
             markFailed(entity, rejected.errorCode);
-        } catch (IOException transport) {
+        } catch (IOException | java.util.concurrent.CancellationException transport) {
             Log.w(TAG, "[Attachment] 读取失败 type="
                     + transport.getClass().getSimpleName());
             // 大小越界由 extractor 的 RejectedException 精确标记；这里是实际 IO 失败。
             markFailed(entity, com.matrix.agent.api.common.MatrixErrorCode.TASK_FAILED);
+        } finally { activeReads.remove(attachmentId); }
+        List<com.matrix.agent.data.conversation.AttachmentChunkEntity> pendingChunks = new ArrayList<>();
+        long size = 0;
+        if (entity.state == ConversationAttachmentEntity.STATE_READY && chunks != null) for (var chunk : extractedChunks) {
+            var row = new com.matrix.agent.data.conversation.AttachmentChunkEntity();
+            row.attachmentId = chunk.attachmentId(); row.ordinal = chunk.ordinal(); row.contentVersion = chunk.contentVersion();
+            row.startChar = chunk.startChar(); row.endChar = chunk.endChar(); row.text = chunk.text();
+            size += chunk.text().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            pendingChunks.add(row);
         }
+        final long addedBytes = size;
         transaction.runInTransaction(() -> {
             ConversationAttachmentEntity current = dao.getById(attachmentId);
             if (current != null && current.state == ConversationAttachment.STATE_STAGING
                     && current.linkedMessageId == null) {
-                dao.upsert(entity);
+                if (chunks != null && chunks.storageBytes(completed.ownerUserId, completed.vehicleZone) + addedBytes > MAX_SCOPE_BYTES) {
+                    markFailed(completed, ConversationAttachment.ERROR_TOO_LARGE);
+                    pendingChunks.clear();
+                }
+                dao.upsert(completed);
+                if (chunks != null && !pendingChunks.isEmpty()) chunks.insert(pendingChunks);
             }
         });
     }
@@ -175,12 +218,15 @@ public final class RoomAttachmentStagingStore {
 
     /** chip 删除：仅草稿可删；已冻结返回 false。 */
     public boolean deleteDraft(String ownerUserId, String vehicleZone, String attachmentId) {
-        return dao.deleteDraft(ownerUserId, vehicleZone, attachmentId) > 0;
+        boolean deleted = dao.deleteDraft(ownerUserId, vehicleZone, attachmentId) > 0;
+        if (deleted) closeRead(attachmentId);
+        return deleted;
     }
 
     public void clearForUsers(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) return;
         transaction.runInTransaction(() -> dao.deleteByUsers(userIds));
+        activeReads.forEach((id, read) -> { if (userIds.contains(read.owner())) closeRead(id); });
     }
 
     /** GC：回收超期草稿附件（best-effort；失败只影响存储上界）。 */
@@ -190,7 +236,12 @@ public final class RoomAttachmentStagingStore {
         if (expired.isEmpty()) return 0;
         transaction.runInTransaction(() -> {
             for (ConversationAttachmentEntity entity : expired) {
-                dao.deleteById(entity.attachmentId);
+                var current = dao.getById(entity.attachmentId);
+                if (current != null && current.linkedMessageId == null
+                        && current.createdAtMs < nowMs - DRAFT_RETENTION_MS) {
+                    dao.deleteById(entity.attachmentId);
+                    closeRead(entity.attachmentId);
+                }
             }
         });
         Log.i(TAG, "[Attachment] 草稿附件 GC removed=" + expired.size());
@@ -199,9 +250,10 @@ public final class RoomAttachmentStagingStore {
 
     /** DTO 投影（chip 元数据；正文不跨 Binder）。 */
     public static ConversationAttachment toDto(ConversationAttachmentEntity entity) {
-        return new ConversationAttachment(entity.attachmentId, entity.conversationId,
+        return new ConversationAttachment(com.matrix.agent.api.common.ParcelSchema.CURRENT, entity.attachmentId, entity.conversationId,
                 entity.mimeType, entity.safeDisplayName, entity.byteSize, entity.state,
-                entity.errorCode, entity.extractedChars, entity.createdAtMs);
+                entity.errorCode, entity.extractedChars, entity.createdAtMs,
+                com.matrix.agent.attachment.retrieval.AttachmentRetrievalProjector.describe(entity.retrievalManifest));
     }
 
     public static List<ConversationAttachment> toDtoList(
@@ -211,6 +263,22 @@ public final class RoomAttachmentStagingStore {
             result.add(toDto(entity));
         }
         return result;
+    }
+
+    private static ConversationAttachmentEntity copy(ConversationAttachmentEntity source) {
+        var copy = new ConversationAttachmentEntity();
+        copy.attachmentId = source.attachmentId; copy.ownerUserId = source.ownerUserId; copy.vehicleZone = source.vehicleZone;
+        copy.conversationId = source.conversationId; copy.sourceKind = source.sourceKind; copy.mimeType = source.mimeType;
+        copy.safeDisplayName = source.safeDisplayName; copy.byteSize = source.byteSize; copy.state = source.state;
+        copy.errorCode = source.errorCode; copy.extractedText = source.extractedText; copy.extractedChars = source.extractedChars;
+        copy.retrievalManifest = source.retrievalManifest; copy.linkedMessageId = source.linkedMessageId;
+        copy.ordinal = source.ordinal; copy.createdAtMs = source.createdAtMs; copy.clientOperationId = source.clientOperationId;
+        return copy;
+    }
+
+    private void closeRead(String id) {
+        ActiveRead read = activeReads.remove(id);
+        if (read != null) try { read.input().close(); } catch (IOException ignored) { }
     }
 
     private static String safeName(String displayName) {

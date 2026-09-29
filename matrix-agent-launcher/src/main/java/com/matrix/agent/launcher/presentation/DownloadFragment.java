@@ -21,6 +21,7 @@ import com.matrix.agent.api.download.ModelCatalogItem;
 import com.matrix.agent.api.download.ModelDownloadInfo;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -48,7 +49,15 @@ public final class DownloadFragment extends Fragment {
         viewModel.state().observe(getViewLifecycleOwner(), this::render);
         new ViewModelProvider(requireActivity(), activity.viewModelFactory()).get(LauncherViewModel.class)
                 .connectionState().observe(getViewLifecycleOwner(), value -> {
+                    boolean wasConnected = connected;
                     connected = viewModel.isHostConnected();
+                    // The activity-scoped ViewModel can already hold an unchanged catalog when
+                    // this view is recreated. Polling then skips emission, so action buttons
+                    // must be repainted when Host connectivity changes independently of data.
+                    if (connected != wasConnected) {
+                        DownloadViewModel.State snapshot = viewModel.state().getValue();
+                        if (snapshot != null) render(snapshot);
+                    }
                     if (connected) viewModel.refresh();
                 });
         return root;
@@ -111,11 +120,11 @@ public final class DownloadFragment extends Fragment {
         card.setPadding(dp(16), dp(14), dp(16), dp(14));
         TextView source = new TextView(requireContext());
         source.setText(item.installed ? R.string.download_source_local : R.string.download_source_market);
-        source.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_accent));
+        source.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_accent));
         source.setTextSize(10); source.setTypeface(Typeface.DEFAULT_BOLD); card.addView(source);
         TextView title = new TextView(requireContext());
         title.setText(item.displayName);
-        title.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_text));
+        title.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_text));
         title.setTextSize(17); title.setTypeface(Typeface.DEFAULT_BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         titleParams.topMargin = dp(3); card.addView(title, titleParams);
@@ -137,7 +146,7 @@ public final class DownloadFragment extends Fragment {
         LinearLayout actions = new LinearLayout(requireContext()); actions.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)); actionsParams.topMargin = dp(11);
         if (item.installed || state(download) == ModelDownloadInfo.DOWNLOAD_STATE_COMPLETED) {
-            Button use = new Button(requireContext()); use.setText(R.string.download_use_on_device); use.setBackgroundResource(R.drawable.bg_primary); use.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white)); use.setEnabled(connected); use.setOnClickListener(v -> activity().showOnDeviceModel(item.catalogModelId));
+            Button use = new Button(requireContext()); use.setText(R.string.download_use_on_device); use.setBackgroundResource(R.drawable.bg_primary); use.setTextColor(LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent)); use.setEnabled(connected); use.setOnClickListener(v -> activity().showOnDeviceModel(item.catalogModelId));
             actions.addView(use, new LinearLayout.LayoutParams(0, dp(44), 1));
             Button remove = action(item, download); LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(0, dp(44), 1); removeParams.setMarginStart(dp(8)); actions.addView(remove, removeParams);
         } else {
@@ -154,23 +163,23 @@ public final class DownloadFragment extends Fragment {
         if (installed) {
             action.setText(R.string.delete);
             action.setBackgroundResource(R.drawable.bg_outline);
-            action.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_primary_dark));
+            action.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_primary_dark));
             action.setOnClickListener(ignored -> confirmDelete(item));
         } else if (state == ModelDownloadInfo.DOWNLOAD_STATE_DOWNLOADING) {
             action.setText(R.string.download_pause);
             action.setBackgroundResource(R.drawable.bg_outline);
-            action.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_primary_dark));
+            action.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_primary_dark));
             action.setOnClickListener(ignored -> viewModel.pause(item));
         } else if (state == ModelDownloadInfo.DOWNLOAD_STATE_PAUSED
                 || state == ModelDownloadInfo.DOWNLOAD_STATE_FAILED) {
             action.setText(R.string.download_resume);
             action.setBackgroundResource(R.drawable.bg_primary);
-            action.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white));
+            action.setTextColor(LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent));
             action.setOnClickListener(ignored -> viewModel.resume(item));
         } else {
             action.setText(R.string.download_install);
             action.setBackgroundResource(R.drawable.bg_primary);
-            action.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white));
+            action.setTextColor(LauncherThemePreferences.color(requireContext(), R.attr.matrix_on_accent));
             action.setOnClickListener(ignored -> viewModel.install(item));
         }
         action.setEnabled(connected);
@@ -223,7 +232,7 @@ public final class DownloadFragment extends Fragment {
     private TextView empty(int message) { return muted(getString(message)); }
     private TextView muted(String text) {
         TextView value = new TextView(requireContext()); value.setText(text);
-        value.setTextColor(ContextCompat.getColor(requireContext(), R.color.matrix_muted));
+        value.setTextColor(LauncherThemePreferences.colorResource(requireContext(), R.color.matrix_muted));
         value.setTextSize(13); return value;
     }
     private LinearLayout.LayoutParams spacing() {

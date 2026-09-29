@@ -58,6 +58,13 @@ public final class ConversationCoordinatorAttachmentTest {
     /** 附件 DAO 桩：同域内查询按 owner 校验。 */
     private static final class StubAttachmentDao
             implements ConversationAttachmentDao {
+        @Override public int freezeManifest(String id, String message, String manifest) {
+            var row = getById(id);
+            if (row == null || !message.equals(row.linkedMessageId)) return 0;
+            row.retrievalManifest = manifest;
+            return 1;
+        }
+
         final Map<String, ConversationAttachmentEntity> rows = new HashMap<>();
 
         @Override public ConversationAttachmentEntity getById(String attachmentId) {
@@ -184,7 +191,7 @@ public final class ConversationCoordinatorAttachmentTest {
         // AgentRequest 文本含投影：模型看到附件内容。
         assertNotNull(executor.lastAgentText);
         assertTrue("Agent 文本必须含附件边界",
-                executor.lastAgentText.contains("<user_provided_document>"));
+                executor.lastAgentText.contains("<user_provided_document "));
         assertTrue("Agent 文本必须含附件正文",
                 executor.lastAgentText.contains("MEMORY=stored doc"));
         assertTrue("Agent 文本必须含用户原文", executor.lastAgentText.contains("总结附件"));

@@ -12,6 +12,22 @@ import okhttp3.mockwebserver.MockWebServer;
 
 /** Regression coverage for the provider-response memory boundary. */
 public final class JsonHttpTransportBoundaryTest {
+    @Test public void completionDeadlineIncludesSlowResponseBody() throws Exception {
+        try (var server = new MockWebServer()) {
+            server.start();
+            server.enqueue(new MockResponse().setBody("{\"choices\":[]}")
+                    .setBodyDelay(2, java.util.concurrent.TimeUnit.SECONDS));
+            var config = new com.matrix.agent.contract.ModelConfig("test", "test",
+                    com.matrix.agent.contract.ApiProtocol.OPENAI_CHAT, server.url("/").toString(),
+                    "test", "", false, com.matrix.agent.contract.PlannerMode.NATIVE_TOOL_CALLING);
+            long started = System.nanoTime();
+            org.junit.Assert.assertThrows(ModelApiException.TimeoutException.class, () ->
+                    ModelApiClient.forTesting().complete(config, "system", "user",
+                            new com.matrix.agent.identity.CancellationToken(), System.currentTimeMillis() + 200));
+            org.junit.Assert.assertTrue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 1500);
+            org.junit.Assert.assertEquals(1, server.getRequestCount());
+        }
+    }
 
     @Test
     public void rejectsChunkedResponsePastByteLimit() throws Exception {

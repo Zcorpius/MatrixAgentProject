@@ -7,7 +7,6 @@ import androidx.work.BackoffPolicy;
 import androidx.work.Constraints;
 import androidx.work.Data;
 import androidx.work.ExistingWorkPolicy;
-import androidx.work.NetworkType;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.OutOfQuotaPolicy;
 import androidx.work.WorkManager;
@@ -42,15 +41,16 @@ public final class ModelDownloadWorkScheduler {
                 .putDouble(KEY_SIZE_GB, entry.sizeGb)
                 .build();
         Constraints constraints = new Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
                 .setRequiresStorageNotLow(true)
                 .build();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(ModelDownloadStartWorker.class)
                 .setInputData(input)
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
-                // A user click should normally start promptly; quota exhaustion falls back to the
-                // same constrained work rather than bypassing Android's background policy.
+                // Android's CONNECTED constraint can require a VALIDATED network. Some usable
+                // networks are only PARTIAL_CONNECTIVITY (for example when validation probes
+                // are blocked), so the worker checks for an INTERNET-capable active network.
+                // The transfer itself still runs only in the foreground service.
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .addTag(uniqueWorkName(entry.modelName))
                 .build();

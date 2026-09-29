@@ -91,6 +91,10 @@ public final class LlmSummaryProvider implements SummaryProvider {
                     "remaining budget < " + MIN_REMAINING_MS + "ms remaining="
                             + request.remainingMillis());
         }
+        if (request != null && (!request.getExecutionScope().networkAllowed()
+                || !request.getExecutionScope().reserveModelCall())) {
+            throw new SummaryUnavailableException("summary authorization or model budget unavailable");
+        }
         String systemPrompt = buildSystemPrompt();
         String userPrompt = buildUserPrompt(turns);
         // cancel + deadline 透传——LlmClient 5 参重载把 token + deadline 转发给

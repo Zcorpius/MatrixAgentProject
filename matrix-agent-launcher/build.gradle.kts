@@ -94,6 +94,7 @@ dependencies {
     implementation(libs.androidx.drawerlayout)
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)

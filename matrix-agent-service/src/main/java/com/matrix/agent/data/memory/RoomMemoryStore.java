@@ -56,6 +56,7 @@ public final class RoomMemoryStore implements MemoryStore {
 
     private final MemoryRecordDao dao;
     private final SessionHistoryDao sessionHistoryDao;
+    private final com.matrix.agent.data.failure.FailureLessonDao failureLessonDao;
     private final TransactionRunner transactionRunner;
     private final AtomicLong epoch;
     private final CountDownLatch epochLoaded = new CountDownLatch(1);
@@ -64,7 +65,8 @@ public final class RoomMemoryStore implements MemoryStore {
 
     /** Production composition: both persistent memory tables share the epoch reset transaction. */
     public RoomMemoryStore(MatrixDatabase database, Executor executor) {
-        this(database.memoryRecordDao(), database.sessionHistoryDao(), database::runInTransaction, executor);
+        this(database.memoryRecordDao(), database.sessionHistoryDao(), database::runInTransaction, executor,
+                database.failureLessonDao());
     }
 
     /** Compatibility constructor for read-only callers; mutations requiring atomicity fail closed. */
@@ -83,14 +85,16 @@ public final class RoomMemoryStore implements MemoryStore {
      */
     public RoomMemoryStore(MemoryRecordDao dao, TransactionRunner transactionRunner,
             Executor databaseExecutor) {
-        this(dao, null, transactionRunner, databaseExecutor);
+        this(dao, null, transactionRunner, databaseExecutor, null);
     }
 
     private RoomMemoryStore(MemoryRecordDao dao,
             SessionHistoryDao sessionHistoryDao,
-            TransactionRunner transactionRunner, Executor databaseExecutor) {
+            TransactionRunner transactionRunner, Executor databaseExecutor,
+            com.matrix.agent.data.failure.FailureLessonDao failureLessonDao) {
         this.dao = dao;
         this.sessionHistoryDao = sessionHistoryDao;
+        this.failureLessonDao = failureLessonDao;
         this.transactionRunner = transactionRunner;
         this.epoch = new AtomicLong(0L);
         if (databaseExecutor == null) {
@@ -374,6 +378,7 @@ public final class RoomMemoryStore implements MemoryStore {
                     for (String userId : userIds) {
                         dao.deleteByUser(userId);
                         if (sessionHistoryDao != null) sessionHistoryDao.deleteByUser(userId);
+                        if (failureLessonDao != null) failureLessonDao.deleteOwner(userId);
                     }
                 };
                 requireTransactionRunner().runInTransaction(body);

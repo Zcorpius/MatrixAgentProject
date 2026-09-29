@@ -15,6 +15,7 @@
 #include <map>
 #include <mutex>
 #include <rapidjson/document.h>
+#include "utf8stream.hpp"
 
 // MNN LLM headers
 #include <MNN/expr/Expr.hpp>
@@ -65,14 +66,19 @@ void clearCancelFlag(jlong llmPtr) {
 
 std::string jstringToString(JNIEnv* env, jstring jstr) {
     if (jstr == nullptr) return "";
-    const char* cstr = env->GetStringUTFChars(jstr, nullptr);
-    std::string result(cstr);
-    env->ReleaseStringUTFChars(jstr, cstr);
-    return result;
+    const jchar* chars = env->GetStringChars(jstr, nullptr);
+    if (chars == nullptr) throw std::runtime_error("Unable to acquire Java string");
+    const auto release = [env, jstr](const jchar* value) { env->ReleaseStringChars(jstr, value); };
+    const std::unique_ptr<const jchar, decltype(release)> acquired(chars, release);
+    return matrix::utf8(std::u16string(reinterpret_cast<const char16_t*>(chars),
+            static_cast<size_t>(env->GetStringLength(jstr))));
 }
 
 jstring stringToJstring(JNIEnv* env, const std::string& str) {
-    return env->NewStringUTF(str.c_str());
+    try {
+        auto text = matrix::utf16(str);
+        return env->NewString(reinterpret_cast<const jchar*>(text.data()), static_cast<jsize>(text.size()));
+    } catch (const std::invalid_argument&) { return nullptr; }
 }
 
 #ifdef LLM_USE_MINJA
@@ -268,10 +274,9 @@ extern "C" JNIEXPORT jlong JNICALL
 Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeCreateLlm(
     JNIEnv* env, jclass clazz, jstring jconfigPath) {
     
-    std::string configPath = jstringToString(env, jconfigPath);
-    LOGD("Creating LLM from config: %s", configPath.c_str());
-    
     try {
+        std::string configPath = jstringToString(env, jconfigPath);
+        LOGD("Creating LLM from config: %s", configPath.c_str());
         // 使用 MNN LLM 引擎创建实例（但不加载）
         // 按照官方 llm_session.cpp 的做法，先创建实例
         Llm* llm = Llm::createLLM(configPath);
@@ -298,9 +303,8 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeCountTokens(
     if (llmPtr == 0) return 0;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string text = jstringToString(env, jtext);
-
     try {
+        std::string text = jstringToString(env, jtext);
         std::vector<int> tokens = llm->tokenizer_encode(text);
         return static_cast<jint>(tokens.size());
     } catch (const std::exception& e) {
@@ -363,9 +367,8 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeTokenize(
     if (llmPtr == 0) return nullptr;
     
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string text = jstringToString(env, jtext);
-    
     try {
+        std::string text = jstringToString(env, jtext);
         // 使用 LLM 的 tokenizer 编码
         std::vector<int> tokens = llm->tokenizer_encode(text);
         
@@ -417,9 +420,8 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeGenerate(
     if (llmPtr == 0) return nullptr;
     
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string prompt = jstringToString(env, jprompt);
-    
     try {
+        std::string prompt = jstringToString(env, jprompt);
         // 编码输入
         std::vector<int> inputTokens = llm->tokenizer_encode(prompt);
         LOGD("Input tokens: %zu", inputTokens.size());
@@ -450,6 +452,7 @@ struct StreamContext {
     jmethodID onTokenMethod;
     std::string buffer;
     bool shouldStop = false;
+    bool protocolFailed = false;
     jlong llmPtr = 0;  // 添加 llm 指针用于检查取消标志
 };
 
@@ -500,23 +503,13 @@ static jboolean runStreamGenerationWithInputIds(
         public:
             CallbackStream(StreamContext* ctx) : mContext(ctx) {}
 
-            void flushToCallback() {
+            void flushToCallback(bool final = false) {
                 if (mContext->buffer.empty() || mContext->shouldStop) {
                     return;
                 }
 
-                const std::string endMarker = "<eop>";
-                auto pos = mContext->buffer.find(endMarker);
-                std::string payload = mContext->buffer;
-                if (pos != std::string::npos) {
-                    payload = mContext->buffer.substr(0, pos);
-                    mContext->shouldStop = true;
-                }
-
-                if (payload.empty()) {
-                    mContext->buffer.clear();
-                    return;
-                }
+                std::string payload = matrix::takeBeforeEndMarker(mContext->buffer, "<eop>", final, mContext->shouldStop);
+                if (payload.empty()) return;
 
                 bool needDetach = false;
                 JNIEnv* env = nullptr;
@@ -525,16 +518,17 @@ static jboolean runStreamGenerationWithInputIds(
                 if (getEnvResult == JNI_EDETACHED) {
                     if (mContext->jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
                         __android_log_print(ANDROID_LOG_ERROR, TAG, "Failed to attach thread");
-                        return;
+                        mContext->protocolFailed = mContext->shouldStop = true; return;
                     }
                     needDetach = true;
                 } else if (getEnvResult != JNI_OK) {
                     __android_log_print(ANDROID_LOG_ERROR, TAG, "Failed to get JNIEnv: %d", getEnvResult);
-                    return;
+                    mContext->protocolFailed = mContext->shouldStop = true; return;
                 }
 
                 try {
-                    jstring jtoken = env->NewStringUTF(payload.c_str());
+                    auto utf16 = matrix::utf16(payload);
+                    jstring jtoken = env->NewString(reinterpret_cast<const jchar*>(utf16.data()), static_cast<jsize>(utf16.size()));
                     if (jtoken != nullptr) {
                         jboolean shouldContinue = env->CallBooleanMethod(
                             mContext->callbackGlobalRef,
@@ -546,24 +540,25 @@ static jboolean runStreamGenerationWithInputIds(
                         if (env->ExceptionCheck()) {
                             env->ExceptionDescribe();
                             env->ExceptionClear();
-                            mContext->shouldStop = true;
+                            mContext->protocolFailed = mContext->shouldStop = true;
                         } else if (!shouldContinue) {
                             mContext->shouldStop = true;
                             __android_log_print(ANDROID_LOG_DEBUG, TAG, "Stream stopped by callback");
                         }
                     } else {
                         __android_log_print(ANDROID_LOG_ERROR, TAG, "Failed to create jstring");
+                        mContext->protocolFailed = mContext->shouldStop = true;
                     }
                 } catch (...) {
                     __android_log_print(ANDROID_LOG_ERROR, TAG, "Exception in callback");
                     mContext->shouldStop = true;
+                    mContext->protocolFailed = true;
                 }
 
                 if (needDetach) {
                     mContext->jvm->DetachCurrentThread();
                 }
 
-                mContext->buffer.clear();
             }
 
         protected:
@@ -591,14 +586,6 @@ static jboolean runStreamGenerationWithInputIds(
             }
 
         private:
-            static int utf8CharLength(unsigned char byte) {
-                if ((byte & 0x80) == 0) return 1;
-                if ((byte & 0xE0) == 0xC0) return 2;
-                if ((byte & 0xF0) == 0xE0) return 3;
-                if ((byte & 0xF8) == 0xF0) return 4;
-                return 0;
-            }
-
             static bool containsFlushDelimiter(const std::string& text) {
                 return text.find('\n') != std::string::npos ||
                        text.find('.') != std::string::npos ||
@@ -611,25 +598,18 @@ static jboolean runStreamGenerationWithInputIds(
 
             std::string extractCompleteUtf8(const char* s, size_t n) {
                 mPendingUtf8Bytes.append(s, n);
-
-                size_t i = 0;
-                std::string completeChars;
-                while (i < mPendingUtf8Bytes.size()) {
-                    int length = utf8CharLength(static_cast<unsigned char>(mPendingUtf8Bytes[i]));
-                    if (length == 0 || i + static_cast<size_t>(length) > mPendingUtf8Bytes.size()) {
-                        break;
-                    }
-                    completeChars.append(mPendingUtf8Bytes, i, static_cast<size_t>(length));
-                    i += static_cast<size_t>(length);
+                try { return matrix::takeCompleteUtf8(mPendingUtf8Bytes); }
+                catch (const std::invalid_argument&) {
+                    mContext->protocolFailed = true;
+                    mContext->shouldStop = true;
+                    mPendingUtf8Bytes.clear();
+                    return "";
                 }
-
-                if (i > 0) {
-                    mPendingUtf8Bytes.erase(0, i);
-                }
-
-                return completeChars;
             }
 
+        public:
+            bool hasIncompleteUtf8() const { return !mPendingUtf8Bytes.empty(); }
+        private:
             bool shouldFlush(const std::string& completeChars) const {
                 return mContext->buffer.find("<eop>") != std::string::npos ||
                        mContext->buffer.size() >= 16 ||
@@ -655,6 +635,7 @@ static jboolean runStreamGenerationWithInputIds(
         // P1-2: prefill 前检查 cancel——cancel 若在 L628(清flag) 后、prefill 启动前到达，
         // 此处拦截不 prefill（prefill 内 response() 阻塞不可中断，受限于 MNN API）
         if (checkCancelFlag(llmPtr)) {
+            env->DeleteGlobalRef(callbackGlobalRef);
             clearCancelFlag(llmPtr);
             return JNI_FALSE;
         }
@@ -668,7 +649,7 @@ static jboolean runStreamGenerationWithInputIds(
         }
 
         if (!context.buffer.empty() && !context.shouldStop) {
-            callbackBuf.flushToCallback();
+            callbackBuf.flushToCallback(true);
         }
 
         if (callbackGlobalRef != nullptr) {
@@ -677,7 +658,7 @@ static jboolean runStreamGenerationWithInputIds(
         clearCancelFlag(llmPtr);
         
         LOGI("Stream generation completed");
-        return JNI_TRUE;
+        return context.protocolFailed || callbackBuf.hasIncompleteUtf8() ? JNI_FALSE : JNI_TRUE;
 
     } catch (const std::exception& e) {
         LOGE("Exception in generateStream: %s", e.what());
@@ -708,10 +689,9 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeGenerateStreamStructured(
     if (llmPtr == 0) return JNI_FALSE;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string messagesJson = jstringToString(env, jmessagesJson);
-    std::string toolsJson = jstringToString(env, jtoolsJson);
-
     try {
+        std::string messagesJson = jstringToString(env, jmessagesJson);
+        std::string toolsJson = jstringToString(env, jtoolsJson);
         std::string prompt = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
         if (prompt.empty()) {
             LOGE("Failed to apply structured chat template");
@@ -753,9 +733,8 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeApplyChatTemplate(
     if (llmPtr == 0) return nullptr;
     
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string userContent = jstringToString(env, juserContent);
-    
     try {
+        std::string userContent = jstringToString(env, juserContent);
         std::string templated = llm->apply_chat_template(userContent);
         return stringToJstring(env, templated);
     } catch (const std::exception& e) {
@@ -774,10 +753,9 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeApplyChatTemplateWithStruc
     if (llmPtr == 0) return nullptr;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string messagesJson = jstringToString(env, jmessagesJson);
-    std::string toolsJson = jstringToString(env, jtoolsJson);
-
     try {
+        std::string messagesJson = jstringToString(env, jmessagesJson);
+        std::string toolsJson = jstringToString(env, jtoolsJson);
         std::string templated = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
         if (templated.empty()) {
             return nullptr;
@@ -799,10 +777,9 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeCountTokensWithStructuredM
     if (llmPtr == 0) return 0;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string messagesJson = jstringToString(env, jmessagesJson);
-    std::string toolsJson = jstringToString(env, jtoolsJson);
-
     try {
+        std::string messagesJson = jstringToString(env, jmessagesJson);
+        std::string toolsJson = jstringToString(env, jtoolsJson);
         std::string templated = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
         if (templated.empty()) {
             return 0;
@@ -886,9 +863,8 @@ Java_com_matrix_agent_ondevice_mnn_MNNLlmNative_nativeSetConfig(
     if (llmPtr == 0) return JNI_FALSE;
     
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    std::string configJson = jstringToString(env, jconfigJson);
-    
     try {
+        std::string configJson = jstringToString(env, jconfigJson);
         bool success = llm->set_config(configJson);
         if (success) {
             LOGD("LLM config set successfully");

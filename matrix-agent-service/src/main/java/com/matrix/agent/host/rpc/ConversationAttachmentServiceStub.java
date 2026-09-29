@@ -39,15 +39,18 @@ public final class ConversationAttachmentServiceStub
     private final PersistenceGate persistenceGate;
     private final ModelServiceStub.CallerResolver callerResolver;
     private final ExecutorService ioExecutor;
+    private final java.util.concurrent.ScheduledExecutorService timers;
 
     public ConversationAttachmentServiceStub(RoomAttachmentStagingStore store,
             ConversationStore conversations, PersistenceGate persistenceGate,
-            ModelServiceStub.CallerResolver callerResolver, ExecutorService ioExecutor) {
+            ModelServiceStub.CallerResolver callerResolver, ExecutorService ioExecutor,
+            java.util.concurrent.ScheduledExecutorService timers) {
         this.store = Objects.requireNonNull(store, "store");
         this.conversations = Objects.requireNonNull(conversations, "conversations");
         this.persistenceGate = Objects.requireNonNull(persistenceGate, "persistenceGate");
         this.callerResolver = Objects.requireNonNull(callerResolver, "callerResolver");
         this.ioExecutor = Objects.requireNonNull(ioExecutor, "ioExecutor");
+        this.timers = Objects.requireNonNull(timers, "timers");
     }
 
     @Override
@@ -77,21 +80,31 @@ public final class ConversationAttachmentServiceStub
             return RoomAttachmentStagingStore.toDto(started.attachment());
         }
         try {
-            ioExecutor.execute(() -> {
-                try (InputStream input = new FileInputStream(fd.getFileDescriptor())) {
-                    store.completeStage(started.attachment().attachmentId, input, declaredMime);
-                } catch (IOException transport) {
-                    Log.w(TAG, "[Attachment] fd 读取失败 type="
-                            + transport.getClass().getSimpleName());
-                    store.failStage(started.attachment().attachmentId,
-                            MatrixErrorCode.TASK_FAILED);
-                } finally {
-                    closeQuietly(fd);
-                }
-            });
-        } catch (RejectedExecutionException unavailable) {
+            var input = new AttachmentInputStream(fd, 30_000);
+            var timeout = timers.schedule(() -> {
+                try { input.close(); } catch (IOException ignored) { }
+                try { store.failStage(started.attachment().attachmentId, MatrixErrorCode.TASK_FAILED); }
+                catch (RuntimeException unavailable) { Log.w(TAG, "[Attachment] timeout persistence unavailable"); }
+            }, 30, java.util.concurrent.TimeUnit.SECONDS);
+            try {
+                ioExecutor.execute(() -> {
+                    try (input) {
+                        store.completeStage(started.attachment().attachmentId, input, declaredMime);
+                    } catch (IOException | RuntimeException transport) {
+                        Log.w(TAG, "[Attachment] ingest failed type=" + transport.getClass().getSimpleName());
+                        try { store.failStage(started.attachment().attachmentId, MatrixErrorCode.TASK_FAILED); }
+                        catch (RuntimeException unavailable) { Log.w(TAG, "[Attachment] failure persistence unavailable"); }
+                    } finally {
+                        timeout.cancel(false);
+                        closeQuietly(fd);
+                    }
+                });
+            } catch (RejectedExecutionException unavailable) {
+                timeout.cancel(false);
+                throw unavailable;
+            }
+        } catch (RejectedExecutionException | IOException unavailable) {
             closeQuietly(fd);
-            // executor 已拒绝，不能让 STAGING 永久停留；以可解释 FAILED 行回给 chip。
             store.failStage(started.attachment().attachmentId, MatrixErrorCode.OVERLOADED);
         }
         return RoomAttachmentStagingStore.toDto(started.attachment());

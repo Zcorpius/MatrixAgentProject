@@ -16,6 +16,7 @@ import com.matrix.agent.contract.ModelTurn;
 import com.matrix.agent.contract.ModelTurnRequest;
 import com.matrix.agent.contract.ToolCall;
 import com.matrix.agent.contract.ToolDefinition;
+import com.matrix.agent.task.skill.MediaSwitchGuard;
 import com.matrix.agent.task.capability.CapabilityDefinition;
 import com.matrix.agent.task.capability.CapabilityProvider;
 import com.matrix.agent.task.capability.CapabilityRegistry;
@@ -68,6 +69,7 @@ public final class AgentEngine {
     private final SessionLockManager sessionLockManager;
     private final ToolExecutor toolExecutor;
     private final AgentBudget budget;
+    private final AgentEngineConfiguration configuration;
     private final ModelSanitizer modelSanitizer;
     private final AuditRedactor auditRedactor;
     // 可选 SteerMailbox,null 时跳过 drain(向后兼容旧构造器)。
@@ -181,6 +183,7 @@ public final class AgentEngine {
         this.steerMailbox = steerMailbox;
         AgentEngineConfiguration safeConfiguration = configuration == null
                 ? AgentEngineConfiguration.defaults() : configuration;
+        this.configuration = safeConfiguration;
         this.auditSink = safeConfiguration.auditSink();
         this.promptContextAssembler = safeConfiguration.promptContextAssembler();
         this.memoryWriter = safeConfiguration.memoryWriter();
@@ -198,6 +201,12 @@ public final class AgentEngine {
                 + " steerMailbox=" + (steerMailbox == null ? "off" : "on")
                 + " audit=" + this.auditSink.getClass().getSimpleName()
                 + " promptContext=" + promptContextAssembler.getClass().getSimpleName());
+    }
+
+    /** Shares immutable ports and the existing gateway lease boundary; no model is loaded or owned twice. */
+    public AgentEngine withBudget(AgentBudget budget) {
+        return new AgentEngine(modelGateway, modelCallExecutor, policyEngine, registry, provider,
+                sessionManager, contextUpdater, sessionLockManager, toolExecutor, budget, steerMailbox, configuration);
     }
 
     /** 进度发布 fail-open：阶段事件异常绝不影响任务执行（I3 端口契约）。 */
@@ -290,7 +299,8 @@ public final class AgentEngine {
         String systemPrompt = buildSystemPrompt(request);
         // per-request zone 投影——主驾/副驾看到不同 tool 列表,
         // 此前加的 toToolDefinitions(VehicleZone) 才真正接入。
-        List<ToolDefinition> tools = registry.toToolDefinitions(request.getOccupantZone());
+        List<ToolDefinition> tools = registry.toToolDefinitions(request.getOccupantZone()).stream()
+                .filter(tool -> request.getExecutionScope().allows(tool.getCapabilityName())).collect(java.util.stream.Collectors.toList());
         List<AgentMessage> conversation = new ArrayList<>();
         // maxMessageChars 限制单条消息长度——system/user 输入过长会撑爆总字符预算,
         // 也可能直接被模型 API 拒绝。所有进入 conversation 的消息统一过 enforceMessageBudget。
@@ -302,6 +312,7 @@ public final class AgentEngine {
                 + " convTokens=" + estimateConversationTokens(conversation));
 
         Set<String> blockedCapabilities = new HashSet<>();
+        MediaSwitchGuard mediaSwitchGuard = new MediaSwitchGuard(request);
         int totalToolCalls = 0;
         String finalAssistantText = null;
         StopReason stopReason = StopReason.MAX_ITERATIONS;
@@ -368,7 +379,14 @@ public final class AgentEngine {
                 // 运行阶段（I3）：进入模型前发布 PLANNING。压缩摘要调用在
                 // tryCompressConversation 内部、不经过此处，天然不发布（§6.4）。
                 publishPlanning(request.getRequestId());
-                ModelCallExecutor.Result result = modelCallExecutor.decide(modelGateway, turnRequest);
+                final int streamTurn = iteration;
+                com.matrix.agent.contract.ModelStreamSink stream = com.matrix.agent.contract.ModelStreamSink.NONE;
+                if (taskProgressSink.supportsAssistantStream()) {
+                    try { taskProgressSink.onAssistantStreamStarted(request.getRequestId(), streamTurn); }
+                    catch (RuntimeException ignored) { }
+                    stream = event -> taskProgressSink.onAssistantStreamEvent(request.getRequestId(), streamTurn, event);
+                }
+                ModelCallExecutor.Result result = modelCallExecutor.decide(modelGateway, turnRequest, stream);
                 if (!result.isSuccess()) {
                     stopReason = result.getTerminalReason();
                     stopMessage = result.getMessage();
@@ -535,7 +553,9 @@ public final class AgentEngine {
                     decisions.add(PolicyDecision.denyCapability(reason));
                     continue;
                 }
-                PolicyDecision decision = policyEngine.evaluate(request, call);
+                PolicyDecision switchDecision = mediaSwitchGuard.before(call);
+                PolicyDecision decision = switchDecision == null
+                        ? policyEngine.evaluate(request, call) : switchDecision;
                 decisions.add(decision);
                 // 调试轨迹：策略判定（POLICY_DECIDED）——允许/拒绝与理由（Redactor 净化）。
                 // 结构化键走 SDK 线格式契约；reason 是含空格的自由文本，只能作末尾记号。
@@ -630,6 +650,7 @@ public final class AgentEngine {
                             toolResult.getCapabilityName(), "Capability 未通过强制回读验证",
                             toolResult.getObservedState(), false, toolResult.getDurationMillis());
                 }
+                mediaSwitchGuard.after(call, toolResult);
                 observations.add(ToolObservation.of(call, toolResult));
                 contextUpdater.onToolCompleted(sessionContext, call, toolResult);
             }
@@ -718,7 +739,8 @@ public final class AgentEngine {
      * 按 {@link StopReason} 先判终止性质,再算最终状态:
      * <ul>
      *   <li>{@code DONE} / {@code NO_TOOL_CALL}:正常结束,按 Tool 结果分 SUCCEEDED / PARTIALLY / FAILED。</li>
-     *   <li>{@code CANCELLED} / {@code TIMEOUT} / {@code NETWORK_UNAVAILABLE}:直接对应 TaskState。</li>
+     *   <li>{@code CANCELLED} / {@code TIMEOUT} / {@code NETWORK_UNAVAILABLE} /
+     *       {@code REJECTED}:直接对应 TaskState。</li>
      *   <li>{@code MAX_ITERATIONS} / {@code MAX_TOOL_CALLS} / {@code BUDGET_EXHAUSTED} / {@code POLICY_HALT}:
      *       异常终止——有部分成功结果最多 PARTIALLY_SUCCEEDED,**永远不能 SUCCEEDED**。
      *       否则失控循环(模型一直调成功查询 Tool 直到耗尽预算)会被错判为成功。</li>
@@ -728,6 +750,7 @@ public final class AgentEngine {
         if (stopReason == StopReason.CANCELLED) return TaskState.CANCELLED;
         if (stopReason == StopReason.TIMEOUT) return TaskState.TIMED_OUT;
         if (stopReason == StopReason.NETWORK_UNAVAILABLE) return TaskState.NETWORK_UNAVAILABLE;
+        if (stopReason == StopReason.REJECTED) return TaskState.REJECTED;
         // 用户推迟语义——不是失败,被推迟的任务可被重新调度。
         if (stopReason == StopReason.DEFERRED) return TaskState.DEFERRED;
 
@@ -906,7 +929,7 @@ public final class AgentEngine {
             case ASSISTANT:
                 return AgentMessage.assistant(truncated, message.getToolCalls());
             case TOOL:
-                return AgentMessage.tool(message.getToolCallId(), message.getToolName(), truncated);
+                return message.withContent(truncated);
             case USER:
                 return AgentMessage.user(truncated);
             case SYSTEM:

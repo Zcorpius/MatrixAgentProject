@@ -1,0 +1,202 @@
+package com.matrix.agent.debug;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.util.Log;
+
+import com.matrix.agent.contract.ToolCall;
+import com.matrix.agent.host.di.RuntimeProfileResolver;
+import com.matrix.agent.host.MatrixAgentApplication;
+import com.matrix.agent.identity.Actor;
+import com.matrix.agent.identity.AgentRequest;
+import com.matrix.agent.identity.CancellationToken;
+import com.matrix.agent.platform.media.AndroidAppLaunchPort;
+import com.matrix.agent.platform.media.AndroidMediaSessionPort;
+import com.matrix.agent.platform.media.AndroidPackageProbe;
+import com.matrix.agent.platform.media.AndroidQQMusicUiPort;
+import com.matrix.agent.platform.media.MediaCapabilityProvider;
+import com.matrix.agent.platform.media.MediaSelectionUtterance;
+import com.matrix.agent.task.capability.CapabilityDefinition;
+import com.matrix.agent.task.capability.CapabilityRegistry;
+import com.matrix.agent.task.policy.PolicyDecision;
+import com.matrix.agent.task.policy.PolicyEngine;
+import com.matrix.agent.task.tool.ToolExecutor;
+import com.matrix.agent.task.tool.ToolResult;
+import com.matrix.agent.task.AgentOutcome;
+import com.matrix.agent.task.skill.MediaSwitchGuard;
+import com.matrix.agent.task.capability.MediaCapabilities;
+import com.matrix.agent.vehicle.VehicleState;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Debug-only, privileged device probe. Runs the production policy/executor/provider sequence
+ * without installing an instrumentation APK or exposing raw media metadata in logcat.
+ */
+public final class MediaProbeReceiver extends BroadcastReceiver {
+    private static final String TAG = "MatrixMediaProbe";
+    private static volatile MediaCapabilityProvider provider;
+
+    @Override public void onReceive(Context context, Intent intent) {
+        // Model calls plus UI interaction can exceed a broadcast's lifetime. Transfer ownership
+        // immediately; the non-exported debug service keeps the bounded operation cancellable.
+        context.startForegroundService(new Intent(intent).setClass(context, MediaProbeService.class));
+    }
+
+    static void run(Context context, Intent intent, CancellationToken token) {
+        if (intent.getBooleanExtra("reflection_probe", false)) {
+            com.matrix.agent.evaluation.ReflectionDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("memory_feature_probe", false)) {
+            com.matrix.agent.evaluation.ModelFeatureDeviceProbe.runMemoryComparison(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("model_feature_probe", false)) {
+            com.matrix.agent.evaluation.ModelFeatureDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.hasExtra("research_probe")) {
+            com.matrix.agent.evaluation.ResearchDeviceProbe.run(context, intent.getStringExtra("research_probe"));
+            return;
+        }
+        if (intent.getBooleanExtra("intelligence_probe", false)) {
+            com.matrix.agent.evaluation.IntelligenceDeviceProbe.run(context, token);
+            return;
+        }
+        if (intent.getBooleanExtra("model_evaluation", false)
+                || intent.getBooleanExtra("model_evaluation_resume", false)) {
+            com.matrix.agent.evaluation.DeviceEvaluationRunner.run(context, token,
+                    intent.getBooleanExtra("model_evaluation_resume", false));
+            return;
+        }
+        if (intent.hasExtra("switch_guard_text")) {
+            String command = intent.getStringExtra("switch_guard_text");
+            if (command == null || command.isBlank()) return;
+            AgentRequest request = AgentRequest.builder(command, Actor.DRIVER).build();
+            PolicyDecision decision = new MediaSwitchGuard(request).before(
+                    new ToolCall(MediaCapabilities.QQ_PLAY, Map.of()));
+            Log.i(TAG, "switchGuard decision=" + (decision == null ? "NOT_ACTIVE"
+                    : decision.getRejectionType()) + " capability=media.qqmusic.play");
+            return;
+        }
+        if (intent.hasExtra("engine_reject_text")) {
+            runEngineReject(context, intent.getStringExtra("engine_reject_text"), token);
+            return;
+        }
+        if (intent.hasExtra("engine_search_text")) {
+            runEngineSearch(context, intent.getStringExtra("engine_search_text"), token);
+            return;
+        }
+        String capability = intent.getStringExtra("capability");
+        CapabilityRegistry registry = CapabilityRegistry.createRuntimeRegistry();
+        CapabilityDefinition definition = registry.find(capability);
+        if (definition == null || !capability.startsWith("media.")) {
+            Log.w(TAG, "invalid capability");
+            return;
+        }
+        Map<String, Object> args = new LinkedHashMap<>();
+        if (intent.hasExtra("bvid")) args.put("bvid", intent.getStringExtra("bvid"));
+        if (intent.hasExtra("page")) args.put("page", intent.getIntExtra("page", 0));
+        if (intent.hasExtra("position_ms")) {
+            args.put("position_ms", intent.getLongExtra("position_ms", -1L));
+        }
+        if (intent.hasExtra("query")) args.put("query", intent.getStringExtra("query"));
+        if (intent.hasExtra("artist")) args.put("artist", intent.getStringExtra("artist"));
+        if (intent.hasExtra("title")) args.put("title", intent.getStringExtra("title"));
+        if (intent.hasExtra("index")) args.put("index", intent.getIntExtra("index", -1));
+        ToolCall call = new ToolCall(capability, args);
+        String requestText = intent.getStringExtra("request_text");
+        AgentRequest request = AgentRequest.builder(
+                        requestText == null ? "真机媒体调试操作" : requestText, Actor.DRIVER)
+                .sessionId("media-probe-session")
+                .runtimeProfile(new RuntimeProfileResolver(context).snapshot())
+                .vehicleState(VehicleState.unavailable())
+                .timeoutMillis(15_000L)
+                .cancellationToken(token)
+                .build();
+        PolicyDecision decision = new PolicyEngine(registry).evaluate(request, call);
+        if (!decision.isAllowed()) {
+            Log.i(TAG, "cap=" + capability + " policy=DENIED type="
+                    + decision.getRejectionType());
+            return;
+        }
+        MediaCapabilityProvider current = provider(context);
+        ToolExecutor executor = new ToolExecutor(1);
+        try {
+            ToolResult result = executor.execute(current, definition, request, call);
+            Map<String, Object> observed = result.getObservedState();
+            Log.i(TAG, "cap=" + capability + " status=" + result.getStatus()
+                    + " verified=" + result.isVerified()
+                    + " error=" + observed.get("media.error_code")
+                    + " dispatch=" + observed.get("media.dispatch_state")
+                    + " playback=" + observed.get("media.playback_state")
+                    + " candidateCount=" + (observed.get("media.candidates") instanceof java.util.List
+                            ? ((java.util.List<?>) observed.get("media.candidates")).size() : 0)
+                    + " confirmableIndex=" + observed.get("media.confirmable_index")
+                    + " actions=" + observed.get("media.supported_actions"));
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    private static synchronized MediaCapabilityProvider provider(Context context) {
+        if (provider == null) {
+            var handoff = ((MatrixAgentApplication) context).getContainer().getHandoffCoordinator();
+            AndroidAppLaunchPort launcher = new AndroidAppLaunchPort(context, handoff);
+            provider = new MediaCapabilityProvider(new AndroidPackageProbe(context),
+                    new AndroidMediaSessionPort(context), launcher,
+                    new AndroidQQMusicUiPort(context, launcher),
+                    new com.matrix.agent.platform.media.AndroidBilibiliUiPort(context,
+                            launcher), handoff);
+        }
+        return provider;
+    }
+
+    /** Runs the caller's authorized request through the configured model and production engine. */
+    private static void runEngineSearch(Context context, String text, CancellationToken token) {
+        if (text == null || text.isBlank() || text.length() > 128) {
+            Log.w(TAG, "engine search probe rejected input shape");
+            return;
+        }
+        long started = android.os.SystemClock.elapsedRealtime();
+        MatrixAgentApplication application = (MatrixAgentApplication) context;
+        var config = application.getContainer().getModelConfigStore().load();
+        Log.i(TAG, "engineConfig model=" + config.model + " protocol=" + config.protocol
+                + " plannerMode=" + config.plannerMode);
+        AgentOutcome outcome = application.getContainer().getAgentRuntimeRepository()
+                .executeForSession(text, Actor.DRIVER, "probe-qq-search", token);
+        Log.i(TAG, "engineSearch state=" + outcome.getFinalState()
+                + " stop=" + outcome.getStopReason()
+                + " toolCalls=" + outcome.getInternalResults().size()
+                + " answerReady=" + (outcome.getFinalAssistantText() != null)
+                + " asksConfirmation=" + (outcome.getFinalAssistantText() != null
+                        && outcome.getFinalAssistantText().contains("是否播放这首"))
+                + " elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - started));
+        for (ToolResult result : outcome.getInternalResults()) {
+            Log.i(TAG, "engineSearch tool=" + result.getCapabilityName()
+                    + " status=" + result.getStatus()
+                    + " error=" + result.getObservedState().get("media.error_code")
+                    + " confirmableIndex=" + result.getObservedState().get("media.confirmable_index"));
+        }
+    }
+
+    private static void runEngineReject(Context context, String text, CancellationToken token) {
+        if (!MediaSelectionUtterance.isNegative(text)) {
+            Log.w(TAG, "engine reject probe accepted only negative replies");
+            return;
+        }
+        long started = android.os.SystemClock.elapsedRealtime();
+        MatrixAgentApplication application = (MatrixAgentApplication) context;
+        AgentOutcome outcome = application.getContainer().getAgentRuntimeRepository()
+                .executeForSession(text, Actor.DRIVER, "probe-qq-search", token);
+        Log.i(TAG, "engineReject state=" + outcome.getFinalState()
+                + " stop=" + outcome.getStopReason()
+                + " toolCalls=" + outcome.getInternalResults().size()
+                + " answerReady=" + (outcome.getFinalAssistantText() != null)
+                + " elapsedMs=" + (android.os.SystemClock.elapsedRealtime() - started));
+    }
+
+}
