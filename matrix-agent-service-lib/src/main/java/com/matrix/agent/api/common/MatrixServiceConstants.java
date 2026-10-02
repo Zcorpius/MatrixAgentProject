@@ -36,6 +36,8 @@ public final class MatrixServiceConstants {
 
     public static final String ATTACHMENT_SERVICE = "matrix.service.ATTACHMENT";
     public static final String SCHEDULE_SERVICE = "matrix.service.SCHEDULE";
+    public static final String MEDIA_OUTPUT_SERVICE = "matrix.service.MEDIA_OUTPUT";
+    public static final int FEATURE_MEDIA_OUTPUT = 1 << 14;
     public static final int FEATURE_SCHEDULE_DOMAIN = 1 << 8;
     public static final int FEATURE_CALENDAR_DOMAIN = 1 << 9;
     public static final int FEATURE_CLOCK_DELEGATION = 1 << 10;

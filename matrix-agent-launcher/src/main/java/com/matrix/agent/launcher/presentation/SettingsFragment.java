@@ -1,13 +1,16 @@
 package com.matrix.agent.launcher.presentation;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -16,7 +19,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
 
+import com.matrix.agent.api.common.ConnectionState;
+import com.matrix.agent.api.media.MediaOutputSnapshot;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.LauncherApplication;
 import com.matrix.agent.launcher.R;
@@ -30,11 +36,15 @@ import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences.Mod
 import java.util.List;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Appearance controls for persisted mode, launcher palettes, and the floating character. */
 public final class SettingsFragment extends Fragment {
     private static final String STATE_SCROLL_Y = "settings_scroll_y";
     private record PetOption(LinearLayout card, TextView label, TextView check) {}
+    private record MediaChoice(LinearLayout card, FrameLayout iconShell, ImageView icon,
+            TextView title, TextView detail, TextView check) {}
     private LauncherActivity activity;
     private ScrollView settingsScroll;
     private int ink;
@@ -44,13 +54,19 @@ public final class SettingsFragment extends Fragment {
     private int accent;
     private final List<PetSpriteRepository.Subscription> petPreviews = new ArrayList<>();
     private final EnumMap<PetCharacter, PetOption> petOptions = new EnumMap<>(PetCharacter.class);
+    private final Map<Integer, MediaChoice> mediaOptions = new HashMap<>();
+    private MediaOutputViewModel mediaModel;
+    private TextView mediaStatus;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull android.view.LayoutInflater inflater,
                              @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         activity = (LauncherActivity) requireActivity();
+        mediaModel = new ViewModelProvider(this, activity.viewModelFactory())
+                .get(MediaOutputViewModel.class);
         petOptions.clear();
+        mediaOptions.clear();
         ink = tone(R.attr.matrix_ink);
         muted = tone(R.attr.matrix_ink_muted);
         paper = tone(R.attr.matrix_paper);
@@ -68,7 +84,7 @@ public final class SettingsFragment extends Fragment {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Button back = new Button(requireContext());
-        back.setText("‹   返回");
+        back.setText(R.string.launcher_return_with_pet);
         back.setAllCaps(false);
         back.setTextSize(14);
         back.setTypeface(Typeface.DEFAULT_BOLD);
@@ -76,25 +92,29 @@ public final class SettingsFragment extends Fragment {
         back.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         back.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         back.setPadding(0, 0, 0, 0);
-        back.setOnClickListener(view -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        back.setOnClickListener(view -> activity.returnWithFloatingPet());
         content.addView(back, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(42)));
-
-        TextView title = text(getString(R.string.launcher_appearance_title), 30, ink, true, true);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+        LinearLayout mediaHeading = sectionHeading(R.string.launcher_media_output,
+                R.string.launcher_media_output_summary);
+        LinearLayout.LayoutParams mediaHeadingParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        titleParams.topMargin = dp(4);
-        content.addView(title, titleParams);
-        TextView intro = text(getString(R.string.launcher_appearance_intro), 13, muted, false, false);
-        intro.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams introParams = new LinearLayout.LayoutParams(
+        mediaHeadingParams.topMargin = dp(18);
+        content.addView(mediaHeading, mediaHeadingParams);
+        mediaStatus = text(getString(R.string.launcher_media_output_loading),
+                12, muted, false, false);
+        LinearLayout.LayoutParams mediaStatusParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        introParams.topMargin = dp(7);
-        introParams.bottomMargin = dp(22);
-        content.addView(intro, introParams);
+        mediaStatusParams.topMargin = dp(8);
+        content.addView(mediaStatus, mediaStatusParams);
+        content.addView(mediaChoices());
 
-        content.addView(sectionHeading(R.string.launcher_appearance_mode,
-                R.string.launcher_appearance_mode_summary));
+        LinearLayout modeHeading = sectionHeading(R.string.launcher_appearance_mode,
+                R.string.launcher_appearance_mode_summary);
+        LinearLayout.LayoutParams modeHeadingParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        modeHeadingParams.topMargin = dp(24);
+        content.addView(modeHeading, modeHeadingParams);
         content.addView(modeChoices(LauncherThemePreferences.modes(),
                 LauncherThemePreferences.mode(requireContext())));
 
@@ -117,6 +137,161 @@ public final class SettingsFragment extends Fragment {
         int restoreY = savedInstanceState == null ? 0 : savedInstanceState.getInt(STATE_SCROLL_Y);
         if (restoreY > 0) scroll.post(() -> scroll.scrollTo(0, restoreY));
         return scroll;
+    }
+
+    @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        super.onViewCreated(view, state);
+        mediaModel.state().observe(getViewLifecycleOwner(), this::renderMedia);
+        new ViewModelProvider(requireActivity(), activity.viewModelFactory())
+                .get(LauncherViewModel.class).connectionState()
+                .observe(getViewLifecycleOwner(), connection ->
+                        mediaModel.setConnected(connection != null
+                                && connection == ConnectionState.CONNECTED));
+    }
+
+    @Override public void onStart() {
+        super.onStart();
+        mediaModel.start();
+    }
+
+    @Override public void onStop() {
+        mediaModel.stop();
+        super.onStop();
+    }
+
+    private LinearLayout mediaChoices() {
+        LinearLayout group = new LinearLayout(requireContext());
+        group.setOrientation(LinearLayout.HORIZONTAL);
+        mediaChoice(group, MediaOutputSnapshot.BLUETOOTH,
+                R.string.launcher_media_output_bluetooth, R.drawable.ic_media_bluetooth);
+        mediaChoice(group, MediaOutputSnapshot.LOCAL_HEADSET,
+                R.string.launcher_media_output_local, R.drawable.ic_media_headphones);
+        mediaChoice(group, MediaOutputSnapshot.SPEAKER,
+                R.string.launcher_media_output_speaker, R.drawable.ic_media_speaker);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(10);
+        group.setLayoutParams(params);
+        return group;
+    }
+
+    private void mediaChoice(LinearLayout group, int output, int label, int iconResource) {
+        LinearLayout option = new LinearLayout(requireContext());
+        option.setOrientation(LinearLayout.VERTICAL);
+        option.setGravity(Gravity.CENTER_HORIZONTAL);
+        option.setMinimumHeight(dp(120));
+        option.setPadding(dp(6), dp(12), dp(6), dp(11));
+        option.setBackground(mediaCardBackground(false));
+        option.setClickable(true);
+        option.setFocusable(true);
+        option.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        option.setOnClickListener(ignored -> mediaModel.select(output));
+
+        FrameLayout iconArea = new FrameLayout(requireContext());
+        iconArea.setImportantForAccessibility(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        option.addView(iconArea, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        FrameLayout iconShell = new FrameLayout(requireContext());
+        FrameLayout.LayoutParams shellParams = new FrameLayout.LayoutParams(dp(44), dp(44),
+                Gravity.CENTER);
+        iconArea.addView(iconShell, shellParams);
+        ImageView icon = new ImageView(requireContext());
+        icon.setImageResource(iconResource);
+        iconShell.addView(icon, new FrameLayout.LayoutParams(dp(25), dp(25), Gravity.CENTER));
+        TextView check = text("✓", 11, tone(R.attr.matrix_on_accent), true, false);
+        check.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams checkParams = new FrameLayout.LayoutParams(dp(20), dp(20),
+                Gravity.TOP | Gravity.END);
+        iconArea.addView(check, checkParams);
+
+        TextView title = text(getString(label), 13, ink, true, false);
+        title.setGravity(Gravity.CENTER);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleParams.topMargin = dp(6);
+        option.addView(title, titleParams);
+        TextView detail = text("", 11, muted, false, false);
+        detail.setGravity(Gravity.CENTER);
+        detail.setSingleLine(true);
+        detail.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = dp(4);
+        option.addView(detail, detailParams);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(120), 1f);
+        if (!mediaOptions.isEmpty()) params.leftMargin = dp(8);
+        group.addView(option, params);
+        mediaOptions.put(output, new MediaChoice(option, iconShell, icon, title, detail, check));
+    }
+
+    private GradientDrawable mediaCardBackground(boolean selected) {
+        GradientDrawable background = panelBackground(selected
+                ? tone(R.attr.matrix_selected) : card, dp(17));
+        background.setStroke(dp(1), tone(selected
+                ? R.attr.matrix_accent_deep : R.attr.matrix_divider));
+        return background;
+    }
+
+    private static int mediaLabel(int output) {
+        return switch (output) {
+            case MediaOutputSnapshot.BLUETOOTH -> R.string.launcher_media_output_bluetooth;
+            case MediaOutputSnapshot.LOCAL_HEADSET -> R.string.launcher_media_output_local;
+            default -> R.string.launcher_media_output_speaker;
+        };
+    }
+
+    private void renderMedia(MediaOutputViewModel.State state) {
+        if (mediaStatus == null) return;
+        MediaOutputSnapshot snapshot = state.snapshot();
+        String notice = state.notice();
+        mediaStatus.setText(!notice.isEmpty() ? notice : snapshot == null
+                ? getString(R.string.launcher_media_output_loading)
+                : snapshot.selected == MediaOutputSnapshot.UNKNOWN
+                    ? getString(R.string.launcher_media_output_unknown)
+                    : getString(R.string.launcher_media_output_current,
+                            getString(mediaLabel(snapshot.selected))));
+        int selectedInk = LauncherThemePreferences.isDark(requireContext())
+                ? ink : tone(R.attr.matrix_accent_deep);
+        for (Map.Entry<Integer, MediaChoice> entry : mediaOptions.entrySet()) {
+            int output = entry.getKey();
+            MediaChoice choice = entry.getValue();
+            boolean available = state.connected() && snapshot != null
+                    && switch (output) {
+                        case MediaOutputSnapshot.BLUETOOTH -> snapshot.bluetoothAvailable;
+                        case MediaOutputSnapshot.LOCAL_HEADSET -> snapshot.localHeadsetAvailable;
+                        case MediaOutputSnapshot.SPEAKER -> snapshot.speakerAvailable;
+                        default -> false;
+                    };
+            boolean selected = snapshot != null && snapshot.selected == output;
+            String title = getString(mediaLabel(output));
+            String detail = selected ? getString(R.string.launcher_media_output_active)
+                    : !state.connected() ? getString(R.string.launcher_media_output_waiting)
+                    : available ? getString(R.string.launcher_media_output_ready)
+                    : getString(R.string.launcher_media_output_unavailable);
+            choice.detail().setText(detail);
+            choice.card().setContentDescription(title + "，" + detail);
+            choice.card().setEnabled(available && !state.busy());
+            choice.card().setSelected(selected);
+            choice.card().setAlpha(available ? 1f : .48f);
+            choice.card().setBackground(mediaCardBackground(selected));
+            choice.card().setElevation(selected ? dp(2) : 0);
+            choice.title().setTextColor(selected ? selectedInk : ink);
+            choice.detail().setTextColor(selected ? selectedInk : muted);
+            choice.icon().setImageTintList(ColorStateList.valueOf(selected ? selectedInk : ink));
+            GradientDrawable iconBackground = panelBackground(selected ? card : paper, dp(22));
+            iconBackground.setShape(GradientDrawable.OVAL);
+            choice.iconShell().setBackground(iconBackground);
+            GradientDrawable checkBackground = panelBackground(
+                    tone(R.attr.matrix_accent_deep), dp(10));
+            checkBackground.setShape(GradientDrawable.OVAL);
+            choice.check().setBackground(checkBackground);
+            choice.check().setVisibility(selected ? View.VISIBLE : View.GONE);
+        }
     }
 
     @Override public void onSaveInstanceState(@NonNull Bundle outState) {
@@ -201,6 +376,8 @@ public final class SettingsFragment extends Fragment {
     }
 
     @Override public void onDestroyView() {
+        mediaStatus = null;
+        mediaOptions.clear();
         petPreviews.forEach(PetSpriteRepository.Subscription::close);
         petPreviews.clear();
         petOptions.clear();

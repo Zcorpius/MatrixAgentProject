@@ -136,6 +136,38 @@ public final class OverlayController implements HandoffClient.Presentation, Over
     public void setPetCharacter(PetCharacter character) {
         if (window != null) window.setPetCharacter(character);
     }
+    /** Reveals the conversation pet or creates a standalone pet before Launcher leaves the screen. */
+    public boolean showFloatingPet() {
+        if (!canDisplay() || preparing != null || ticket != null || committedAsPrepared
+                || (presenter != null && window == null)) return false;
+        if (window != null) {
+            window.collapse();
+            window.setHidden(false);
+            publish();
+            return true;
+        }
+        OverlayWindow pet = null;
+        try {
+            pet = new OverlayWindow(context, this, petSprites, ignored -> { });
+            pet.setPetOnly();
+            pet.attach(false);
+            window = pet;
+            bindingVersion++;
+            publish();
+            return true;
+        } catch (RuntimeException failure) {
+            if (pet != null) pet.close();
+            Log.w("MatrixOverlay", "Cannot display standalone pet", failure);
+            return false;
+        }
+    }
+    /** Returning to Launcher removes only the standalone pet; task handoff state is preserved. */
+    public void launcherVisible() {
+        if (window == null || presenter != null) return;
+        releaseCurrent();
+        bindingVersion++;
+        publish();
+    }
 
     @Override public HandoffClient.Decision fastDecision(ExternalAppHandoffRequest request) {
         Snapshot current = snapshot;
@@ -259,8 +291,9 @@ public final class OverlayController implements HandoffClient.Presentation, Over
         if (preparing == candidate) preparing = null;
         candidate.dispose();
         if (candidate.suppressedPrevious != null && candidate.suppressedPrevious == window
-                && candidate.expectedVersion == bindingVersion && presenter != null && connected
-                && !Objects.equals(visibleConversation, presenter.binding().conversationId()) && canDisplay()) {
+                && candidate.expectedVersion == bindingVersion && canDisplay()
+                && (presenter == null || connected && !Objects.equals(
+                        visibleConversation, presenter.binding().conversationId()))) {
             window.setHidden(false);
         }
         publish();
@@ -402,7 +435,19 @@ public final class OverlayController implements HandoffClient.Presentation, Over
     @Override public void loadOlderMessages() { if (presenter != null) presenter.loadOlder(); }
     @Override public void cancel() { if (presenter != null) presenter.cancel(); }
     @Override public void returnToAgent() {
-        if (presenter == null) return;
+        if (presenter == null) {
+            if (window == null) return;
+            Intent home = new Intent(context, LauncherActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            try {
+                context.startActivity(home);
+                launcherVisible();
+            } catch (RuntimeException failure) {
+                Log.w("MatrixOverlay", "Cannot return to Launcher from pet", failure);
+            }
+            return;
+        }
         OverlayBinding binding = presenter.binding();
         returningConversation = binding.conversationId();
         Intent intent = new Intent(context, LauncherActivity.class).setAction(ACTION_OPEN_CONVERSATION)
