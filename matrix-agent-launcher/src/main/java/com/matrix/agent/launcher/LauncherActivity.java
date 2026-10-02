@@ -1,12 +1,18 @@
 package com.matrix.agent.launcher;
 
 import android.os.Bundle;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -57,6 +63,13 @@ public final class LauncherActivity extends AppCompatActivity {
     private ImageView[] navigationIcons;
     private LauncherViewModelFactory viewModelFactory;
     private int selectedNavigationId = R.id.nav_conversation;
+    private boolean leavingForPet;
+    private final ActivityResultLauncher<Intent> overlayPermission = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (Settings.canDrawOverlays(this)) returnWithFloatingPet();
+                else Toast.makeText(this, R.string.launcher_overlay_permission_needed,
+                        Toast.LENGTH_SHORT).show();
+            });
 
     @Override public void onCreate(@Nullable Bundle savedInstanceState) {
         boolean dark = LauncherThemePreferences.isDark(this);
@@ -119,6 +132,37 @@ public final class LauncherActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         showInitialPage(intent);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (!leavingForPet) ((LauncherApplication) getApplication()).overlay().launcherVisible();
+    }
+
+    @Override protected void onStop() {
+        leavingForPet = false;
+        super.onStop();
+    }
+
+    /** Settings' return action leaves the task behind only after the pet window is attached. */
+    public void returnWithFloatingPet() {
+        if (!Settings.canDrawOverlays(this)) {
+            Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            try { overlayPermission.launch(permission); }
+            catch (RuntimeException failure) {
+                Toast.makeText(this, R.string.launcher_overlay_permission_needed,
+                        Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        if (!((LauncherApplication) getApplication()).overlay().showFloatingPet()) {
+            Toast.makeText(this, R.string.launcher_overlay_unavailable,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        leavingForPet = true;
+        if (!moveTaskToBack(true)) finish();
     }
 
     @Override

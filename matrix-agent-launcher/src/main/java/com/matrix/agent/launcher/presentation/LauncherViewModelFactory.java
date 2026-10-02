@@ -11,6 +11,7 @@ import com.matrix.agent.launcher.data.ModelRepository;
 import com.matrix.agent.launcher.data.DownloadRepository;
 import com.matrix.agent.launcher.data.VoiceRepository;
 import com.matrix.agent.launcher.data.ConversationRepository;
+import com.matrix.agent.launcher.data.MediaOutputRepository;
 
 /** Explicit dependency injection for Launcher ViewModels; no ViewModel reaches into an Activity. */
 public final class LauncherViewModelFactory implements ViewModelProvider.Factory {
@@ -25,6 +26,7 @@ public final class LauncherViewModelFactory implements ViewModelProvider.Factory
     @NonNull @Override @SuppressWarnings("unchecked")
     public <T extends ViewModel> T create(@NonNull Class<T> type) {
         if (type == LauncherViewModel.class) return (T) new LauncherViewModel(gateway);
+        if (type == MediaOutputViewModel.class) return (T) new MediaOutputViewModel(new MediaOutputRepository(gateway));
         if (type == ScheduleViewModel.class) return (T) new ScheduleViewModel(new com.matrix.agent.launcher.data.ScheduleRepository(gateway));
         if (type == AgentTaskViewModel.class) return (T) new AgentTaskViewModel(new AgentTaskRepository(gateway));
         if (type == ModelViewModel.class) return (T) new ModelViewModel(new ModelRepository(gateway));

@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="launcher_nav_settings">设置</string>
+    <string name="launcher_return_with_pet">‹   返回并显示悬浮人物</string>
+    <string name="launcher_overlay_permission_needed">请允许 Matrix 显示悬浮窗</string>
+    <string name="launcher_overlay_unavailable">暂时无法显示悬浮人物</string>
+    <string name="overlay_standalone_pet_description">悬浮人物，点按返回 Matrix</string>
+    <string name="launcher_media_output">媒体输出</string>
+    <string name="launcher_media_output_summary">跟随系统当前媒体路由；接入或移除耳机后自动更新。</string>
+    <string name="launcher_media_output_bluetooth">蓝牙耳机</string>
+    <string name="launcher_media_output_local">本地耳机</string>
+    <string name="launcher_media_output_speaker">手机扬声器</string>
+    <string name="launcher_media_output_unavailable">未连接</string>
+    <string name="launcher_media_output_selected">当前输出</string>
+    <string name="launcher_media_output_current">当前输出 · %1$s</string>
+    <string name="launcher_media_output_active">使用中</string>
+    <string name="launcher_media_output_ready">可切换</string>
+    <string name="launcher_media_output_waiting">暂不可用</string>
+    <string name="launcher_media_output_unknown">当前媒体输出待确认</string>
+    <string name="launcher_media_output_loading">正在读取媒体输出…</string>
     <string name="launcher_appearance_title">外观</string>
     <string name="launcher_appearance_intro">让 Matrix 更贴近你的使用习惯。更改会立即应用到整个 Launcher。</string>
     <string name="launcher_appearance_mode">外观模式</string>

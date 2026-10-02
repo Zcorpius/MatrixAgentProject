@@ -21,6 +21,8 @@ public final class MatrixServiceGraph {
     private final ConversationGraph conversation;
     private final com.matrix.agent.host.rpc.ExternalAppHandoffServiceStub handoff;
     private final com.matrix.agent.host.rpc.OverlayInteractionServiceStub overlayInteraction;
+    private final com.matrix.agent.host.rpc.MediaOutputServiceStub mediaOutput;
+    public IBinder mediaOutputBinder() { return mediaOutput; }
     public IBinder overlayInteractionBinder() { return overlayInteraction; }
     public IBinder handoffBinder() { return handoff.asBinder(); }
 
@@ -55,6 +57,7 @@ public final class MatrixServiceGraph {
                 container.getAppContext(), container.getHandoffCoordinator());
         overlayInteraction = android.os.Build.VERSION.SDK_INT >= 35
                 ? new com.matrix.agent.host.rpc.OverlayInteractionServiceStub(container.getAppContext()) : null;
+        mediaOutput = new com.matrix.agent.host.rpc.MediaOutputServiceStub(container.getAppContext());
         conversation.setHandoffDiagnostics(container.getHandoffDiagnostics());
         conversation.setHandoffContexts(container.getHandoffContexts());
         container.getAgentRuntimeRepository().addConversationClearHook(container.getHandoffContexts()::clear);
@@ -87,6 +90,7 @@ public final class MatrixServiceGraph {
                 | MatrixServiceConstants.FEATURE_PERSISTENCE_GATE;
         if (voice.isAvailable()) flags |= MatrixServiceConstants.FEATURE_VOICE_DOMAIN;
         if (overlayInteraction != null) flags |= MatrixServiceConstants.FEATURE_OVERLAY_INTERACTION;
+        flags |= MatrixServiceConstants.FEATURE_MEDIA_OUTPUT;
         if (conversation.isAvailable()) {
             flags |= MatrixServiceConstants.FEATURE_CONVERSATION_DOMAIN
                     | MatrixServiceConstants.FEATURE_HANDOFF_DOMAIN;
@@ -100,6 +104,7 @@ public final class MatrixServiceGraph {
         return flags;
     }
     public void shutdown() {
+        mediaOutput.close();
         schedule.close();
         handoff.close();
         if (android.os.Build.VERSION.SDK_INT >= 35 && overlayInteraction != null) overlayInteraction.close();

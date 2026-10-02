@@ -207,6 +207,10 @@ public final class MatrixAgent {
         return (ScheduleManager) getMatrixManager(MatrixServiceConstants.SCHEDULE_SERVICE);
     }
 
+    public MediaOutputManager getMediaOutputManager() {
+        return (MediaOutputManager) getMatrixManager(MatrixServiceConstants.MEDIA_OUTPUT_SERVICE);
+    }
+
     public ConversationManager getConversationManager() {
         return (ConversationManager) getMatrixManager(MatrixServiceConstants.CONVERSATION_SERVICE);
     }
@@ -579,6 +583,8 @@ public final class MatrixAgent {
                 return new DownloadManager(this, serviceBinder);
             case MatrixServiceConstants.SCHEDULE_SERVICE:
                 return new ScheduleManager(this, serviceBinder);
+            case MatrixServiceConstants.MEDIA_OUTPUT_SERVICE:
+                return new MediaOutputManager(this, serviceBinder);
             case MatrixServiceConstants.CONVERSATION_SERVICE:
                 return new ConversationManager(this, serviceBinder);
             case MatrixServiceConstants.DEBUG_TRACE_SERVICE:

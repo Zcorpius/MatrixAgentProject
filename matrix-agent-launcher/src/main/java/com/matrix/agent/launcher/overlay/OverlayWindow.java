@@ -55,7 +55,7 @@ public final class OverlayWindow implements AutoCloseable {
     private final EditText input;
     private final Button cancel, send;
     private final WindowManager.LayoutParams layout;
-    private boolean attached, expanded, editing, hidden, applyingDraft;
+    private boolean attached, expanded, editing, hidden, applyingDraft, petOnly;
     private boolean interactive = true;
     private int activity = -1;
     private int bubbleX, bubbleY, panelX, panelY;
@@ -300,6 +300,13 @@ public final class OverlayWindow implements AutoCloseable {
     public boolean editing() { return editing; }
     public boolean interactive() { return interactive; }
     public boolean petVisible() { return visible() && interactive && !expanded; }
+    /** A standalone pet opens Launcher on tap instead of exposing an empty conversation panel. */
+    public void setPetOnly() {
+        if (attached) throw new IllegalStateException("Pet mode must be set before attaching");
+        petOnly = true;
+        bubble.setContentDescription(context.getString(R.string.overlay_standalone_pet_description));
+        bubble.setOnClickListener(view -> actions.returnToAgent());
+    }
     public void setPetCharacter(PetCharacter character) { bubble.setCharacter(character); }
     public void wave() { if (petVisible()) bubble.wave(); }
     public void cancelLook() { bubble.cancelLook(); }
@@ -341,6 +348,7 @@ public final class OverlayWindow implements AutoCloseable {
         update(); actions.changed();
     }
     public void expand() {
+        if (petOnly) return;
         bubble.cancelDrag();
         expanded = true; root.invalidateOutline();
         bubble.setVisibility(View.GONE); panel.setVisibility(View.VISIBLE);
