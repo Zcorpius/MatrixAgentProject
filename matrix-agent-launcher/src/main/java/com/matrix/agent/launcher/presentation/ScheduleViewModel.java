@@ -213,7 +213,8 @@ public final class ScheduleViewModel extends ViewModel {
                 var old = state.getValue();
                 state.setValue(new State(false, reply.isSuccess() ? reply.value.message : message(reply.error),
                         old.snapshot, old.detail, old.tab, old.selectedPlan));
-            } else refresh();
+            } else if (operation == ScheduleCodes.DELETE) select(Tab.PLANS);
+            else refresh();
         });
     }
     private static String message(Throwable error) { return error == null || error.getMessage() == null ? "Host 暂不可用，请重试" : error.getMessage(); }
