@@ -39,6 +39,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
     private ScheduleSpec pendingSpec;
     private String draftKey;
     private boolean discardDraft, requestPending;
+    private ScheduleUi ui;
 
     public static ScheduleEditorDialog create(ScheduleInfo plan, ScheduleTemplateInfo template) {
         var dialog = new ScheduleEditorDialog(); Bundle args = new Bundle();
@@ -51,6 +52,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         restored = saved; existing = getArguments() == null ? null : getArguments().getParcelable("plan");
         template = getArguments() == null ? null : getArguments().getParcelable("template");
         model = new ViewModelProvider(requireActivity(), ((LauncherActivity) requireActivity()).viewModelFactory()).get(ScheduleViewModel.class);
+        ui = new ScheduleUi(requireContext());
         draftKey = existing != null ? "edit:" + existing.scheduleId : template != null ? "template:" + template.templateId
                 : "create:" + requireArguments().getString("binding", "");
         if (saved == null) saved = model.draft(draftKey);
@@ -61,10 +63,17 @@ public final class ScheduleEditorDialog extends DialogFragment {
         ScheduleSpec initial = existing == null ? null : existing.spec;
         research = "source_research".equals(template != null ? template.templateId : initial == null ? "" : initial.action.templateId);
         calendarBinding = initial == null ? requireArguments().getString("binding", "") : initial.timing.calendarBindingId;
-        ScrollView scroll = new ScrollView(requireContext()); LinearLayout form = new LinearLayout(requireContext());
-        form.setOrientation(LinearLayout.VERTICAL); int padding = dp(18); form.setPadding(padding, padding, padding, padding); scroll.addView(form);
+        ScrollView scroll = new ScrollView(requireContext());
+        scroll.setBackgroundColor(ui.paper);
+        LinearLayout form = ui.column();
+        form.setPadding(dp(20), dp(18), dp(20), dp(26)); scroll.addView(form);
+        form.addView(ui.eyebrow("任务中心  /  计划"));
+        form.addView(ui.title(existing == null ? "新建计划" : "编辑计划", 25), ui.top(6));
+        form.addView(ui.label("填写内容与时间，预览后再确认保存。", 13, ui.muted, false), ui.top(7));
+        section(form, "01  内容");
         title = field(form, "标题", "title", initial == null ? template == null ? "" : template.title : initial.title, false);
         goal = field(form, "提醒内容或执行目标", "goal", initial == null ? template == null ? "" : template.description : initial.action.text, false); goal.setMinLines(2);
+        section(form, "02  时间");
         timing = choice(form, "何时触发", new String[]{"指定日期与时间", "一段时间后", "每天", "每周", "已绑定日历实例"},
                 saved == null ? initial == null ? 1 : Math.min(4, initial.timing.kind - 1) : saved.getInt("timing"));
         if (!calendarBinding.isEmpty()) { timing.setSelection(4); timing.setEnabled(false); }
@@ -75,14 +84,25 @@ public final class ScheduleEditorDialog extends DialogFragment {
                 ? Instant.ofEpochMilli(initial.timing.atMillis).atZone(ZoneId.of(initial.timing.zoneId)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : defaultDate, false);
         minutes = field(form, "延迟多少分钟", "minutes", initial == null ? "5" : Long.toString(Math.max(1, initial.timing.delayMillis / 60_000)), true);
         localTime = field(form, "每天或每周的时间（HH:mm）", "localTime", initial == null || initial.timing.localTime.isEmpty() ? "08:00" : initial.timing.localTime, false);
-        LinearLayout weekdays = new LinearLayout(requireContext()); weekdays.setOrientation(LinearLayout.VERTICAL);
-        String[] names = {"一", "二", "三", "四", "五", "六", "日"};
-        for (int i = 0; i < 7; i++) { CheckBox day = new CheckBox(requireContext()); day.setText(names[i]); day.setTextSize(11); day.setPadding(0,0,0,0); day.setChecked(saved == null ? initial != null && (initial.timing.weekdaysMask & (1 << i)) != 0 : saved.getBoolean("day" + i)); days.add(day); weekdays.addView(day, new LinearLayout.LayoutParams(-1, -2)); }
-        form.addView(weekdays);
+        LinearLayout weekdays = ui.column();
+        LinearLayout firstDays = ui.row(); LinearLayout remainingDays = ui.row();
+        weekdays.addView(firstDays); weekdays.addView(remainingDays);
+        String[] names = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+        for (int i = 0; i < 7; i++) {
+            CheckBox day = new CheckBox(requireContext());
+            day.setText(names[i]); day.setTextSize(13); day.setTextColor(ui.ink);
+            day.setButtonTintList(android.content.res.ColorStateList.valueOf(ui.accent));
+            day.setPadding(0, 0, 0, 0);
+            day.setChecked(saved == null ? initial != null && (initial.timing.weekdaysMask & (1 << i)) != 0 : saved.getBoolean("day" + i));
+            days.add(day);
+            (i < 4 ? firstDays : remainingDays).addView(day, new LinearLayout.LayoutParams(0, dp(48), 1));
+        }
+        form.addView(weekdays, ui.top(8));
         zone = field(form, "时区", "zone", initial == null ? ZoneId.systemDefault().getId() : initial.timing.zoneId, false);
         startDate = field(form, "周期开始日期（可空，yyyy-MM-dd）", "startDate", initial == null ? "" : initial.timing.startDate, false);
         endDate = field(form, "周期结束日期（可空，含当日）", "endDate", initial == null ? "" : initial.timing.endDate, false);
         followZone = check(form, "周期计划跟随设备时区", "follow", initial != null && initial.timing.followDeviceZone);
+        section(form, "03  执行方式");
         action = choice(form, "到期动作", new String[]{"本地通知", "Agent 执行"}, saved == null ? initial != null && initial.action.kind == AGENT ? 1 : 0 : saved.getInt("action"));
         if (!model.supports(com.matrix.agent.api.common.MatrixServiceConstants.FEATURE_SCHEDULE_AGENT) && (initial == null || initial.action.kind == NOTIFICATION)) {
             action.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, new String[]{"本地通知"}));
@@ -98,6 +118,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         if (research) label(form, "仅检索百科片段、论文摘要和书目信息，不读取全文。活动执行最多 30 分钟，可在任务中心停止。请明确勾选网络授权。");
         tomorrow = check(form, "同时查询明日日程（可选步骤）", "tomorrow", parameters.optBoolean("includeTomorrow", true));
         calendarId = field(form, "限定日历编号（留空表示所有可读日历）", "calendarId", parameters.has("calendarId") ? parameters.optString("calendarId") : "", true);
+        section(form, "04  错过执行");
         misfire = choice(form, "错过时如何处理", new String[]{"跳过历史时段", "宽限内执行", "合并最近一次"},
                 saved == null ? initial == null ? WITHIN_GRACE - 1 : initial.misfirePolicy - 1 : saved.getInt("misfire"));
         if (initial != null && initial.action.kind == TOOL) {
@@ -106,7 +127,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         }
         grace = field(form, research ? "触发后到期窗口，含排队和执行（分钟，至少 30）" : "允许迟到的分钟数", "grace", initial == null ? research ? "40" : "10" : Long.toString(initial.graceMillis / 60_000), true);
         label(form, "权限、后台条件或待机限制可能使执行延后。预览后确认启用，关闭页面不会暂停计划。返回会保留草稿；放弃只删除本地草稿。");
-        error = label(form, "");
+        error = label(form, ""); error.setTextColor(ui.danger);
         if (requestPending && pendingSpec != null) {
             Button retry = new Button(requireContext()); retry.setText("核对并重试上次保存请求");
             retry.setOnClickListener(v -> new AlertDialog.Builder(requireContext()).setTitle("上次请求")
@@ -114,8 +135,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
                     .setNegativeButton("返回", null).setPositiveButton("重试", (d, w) -> save()).show());
             form.addView(retry);
         }
-        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setTitle(existing == null ? "新建计划" : "编辑计划")
-                .setView(scroll).setNegativeButton("返回", null)
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(scroll).setNegativeButton("返回", null)
                 .setNeutralButton("放弃", null)
                 .setPositiveButton("预览", null).create();
         Runnable updateFields = () -> {
@@ -136,6 +156,15 @@ public final class ScheduleEditorDialog extends DialogFragment {
         };
         timing.setOnItemSelectedListener(changed); action.setOnItemSelectedListener(changed); updateFields.run();
         dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(ui.dialogBackground());
+                dialog.getWindow().setLayout(
+                        (int) (getResources().getDisplayMetrics().widthPixels * .94f),
+                        (int) (getResources().getDisplayMetrics().heightPixels * .88f));
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(ui.danger);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ui.muted);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ui.accentDeep);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> preview());
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
                 if (requestPending) { error.setText("上次保存结果尚未确认，请先预览并重试原请求。"); return; }
@@ -235,15 +264,37 @@ public final class ScheduleEditorDialog extends DialogFragment {
         super.onDismiss(dialog);
     }
     private EditText field(LinearLayout form, String caption, String key, String initial, boolean number) {
-        LinearLayout group = new LinearLayout(requireContext()); group.setOrientation(LinearLayout.VERTICAL); form.addView(group);
-        label(group, caption); EditText input = new EditText(requireContext()); input.setSingleLine(!key.equals("goal"));
-        if (number) input.setInputType(InputType.TYPE_CLASS_NUMBER); input.setText(restored == null ? initial : restored.getString(key, initial)); group.addView(input); return input;
+        LinearLayout group = ui.column(); form.addView(group, ui.top(5));
+        label(group, caption);
+        EditText input = new EditText(requireContext()); input.setSingleLine(!key.equals("goal"));
+        if (number) input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setText(restored == null ? initial : restored.getString(key, initial));
+        input.setTextSize(15); input.setTextColor(ui.ink); input.setHintTextColor(ui.muted);
+        input.setBackground(ui.fieldBackground()); input.setMinHeight(dp(50));
+        input.setPadding(dp(14), dp(10), dp(14), dp(10));
+        group.addView(input, ui.top(5)); return input;
     }
     private Spinner choice(LinearLayout form, String caption, String[] choices, int selected) {
-        label(form, caption); Spinner spinner = new Spinner(requireContext()); spinner.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, choices)); spinner.setSelection(selected); form.addView(spinner); return spinner;
+        label(form, caption);
+        Spinner spinner = new Spinner(requireContext());
+        spinner.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, choices));
+        spinner.setSelection(selected);
+        spinner.setBackground(ui.fieldBackground()); spinner.setMinimumHeight(dp(50)); spinner.setPadding(dp(12), 0, dp(9), 0);
+        form.addView(spinner, ui.top(5)); return spinner;
     }
-    private CheckBox check(LinearLayout form, String title, String key, boolean initial) { CheckBox view = new CheckBox(requireContext()); view.setText(title); view.setChecked(restored == null ? initial : restored.getBoolean(key, initial)); form.addView(view); return view; }
-    private TextView label(LinearLayout form, String text) { TextView label = new TextView(requireContext()); label.setText(text); label.setPadding(0, dp(10), 0, dp(4)); form.addView(label); return label; }
+    private CheckBox check(LinearLayout form, String title, String key, boolean initial) {
+        CheckBox view = new CheckBox(requireContext()); view.setText(title); view.setTextSize(14); view.setTextColor(ui.ink);
+        view.setMinHeight(dp(48)); view.setChecked(restored == null ? initial : restored.getBoolean(key, initial));
+        form.addView(view, ui.top(4)); return view;
+    }
+    private TextView label(LinearLayout form, String text) {
+        TextView label = ui.label(text, 12, ui.muted, true);
+        form.addView(label, ui.top(13)); return label;
+    }
+    private void section(LinearLayout form, String text) {
+        form.addView(ui.eyebrow(text), ui.top(26));
+        ui.divider(form, 9);
+    }
     private static void show(EditText field, boolean visible) { ((View)field.getParent()).setVisibility(visible ? View.VISIBLE : View.GONE); }
     private static String value(EditText input) { return input == null ? "" : input.getText().toString().trim(); }
     private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value); }
