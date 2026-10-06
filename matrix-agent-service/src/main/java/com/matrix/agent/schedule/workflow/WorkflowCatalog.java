@@ -3,10 +3,10 @@ package com.matrix.agent.schedule.workflow;
 import com.matrix.agent.api.schedule.*;
 import java.util.*;
 
-/** Released versions are immutable. Weather/routing are deliberately absent until real providers exist. */
+/** Released versions are immutable; providers and authorization are validated before admission. */
 public final class WorkflowCatalog {
     private WorkflowCatalog() { }
-    private static final List<WorkflowTemplate> TEMPLATES = List.of(template(false), template(true), ResearchWorkflow.template());
+    private static final List<WorkflowTemplate> TEMPLATES = List.of(template(false), template(true), ResearchWorkflow.template(), WeatherWorkflow.template());
     private static WorkflowTemplate template(boolean agent) {
         return new WorkflowTemplate(agent ? "daily_agenda_agent" : "daily_agenda", 1,
                 agent ? "Agent 日程简报" : "每日行程提醒",
@@ -28,7 +28,9 @@ public final class WorkflowCatalog {
             List<ScheduleStepInfo> steps = new ArrayList<>();
             for (var step : template.steps()) steps.add(new ScheduleStepInfo("", step.id(), step.title(), step.dependencies(), step.required(), ScheduleCodes.WAITING_DEPENDENCY, 0, 0, 0, "", ""));
             result.add(new ScheduleTemplateInfo(template.id(), template.version(), template.title(), template.description(),
-                    List.copyOf(template.capabilities()), steps, ResearchWorkflow.isResearch(template) ? "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"maxLength\":300}},\"required\":[\"query\"],\"additionalProperties\":false}" : "{\"type\":\"object\",\"properties\":{\"includeTomorrow\":{\"type\":\"boolean\"},\"calendarId\":{\"type\":\"integer\"}},\"additionalProperties\":false}"));
+                    List.copyOf(template.capabilities()), steps, ResearchWorkflow.isResearch(template) ? "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"maxLength\":300}},\"required\":[\"query\"],\"additionalProperties\":false}"
+                            : WeatherWorkflow.isWeather(template) ? "{\"type\":\"object\",\"properties\":{\"mode\":{\"enum\":[\"CURRENT_AT_TRIGGER\",\"FIXED_CITY\"]},\"fixedCityId\":{\"type\":\"string\"},\"fixedCityName\":{\"type\":\"string\"},\"fixedCityZone\":{\"type\":\"string\"},\"backupCityId\":{\"type\":\"string\"},\"backupCityName\":{\"type\":\"string\"},\"backupCityZone\":{\"type\":\"string\"},\"allowLocation\":{\"type\":\"boolean\"},\"allowWeatherNetwork\":{\"type\":\"boolean\"}},\"required\":[\"mode\",\"allowLocation\",\"allowWeatherNetwork\"],\"additionalProperties\":false}"
+                            : "{\"type\":\"object\",\"properties\":{\"includeTomorrow\":{\"type\":\"boolean\"},\"calendarId\":{\"type\":\"integer\"}},\"additionalProperties\":false}"));
         }
         return List.copyOf(result);
     }
@@ -38,6 +40,7 @@ public final class WorkflowCatalog {
         try {
             org.json.JSONObject parameters = new org.json.JSONObject(action.parametersJson);
             if (ResearchWorkflow.isResearch(template)) { ResearchWorkflow.validate(action, parameters); return; }
+            if (WeatherWorkflow.isWeather(template)) { WeatherWorkflow.validate(action, parameters); return; }
             for (var keys = parameters.keys(); keys.hasNext();) {
                 String key = keys.next(); Object value = parameters.get(key);
                 if (key.equals("includeTomorrow") && value instanceof Boolean) continue;

@@ -179,6 +179,12 @@ public final class AppContainer implements DownloadRuntime {
         platformRoutes.put(com.matrix.agent.task.capability.WebCapabilities.SEARCH,
                 new com.matrix.agent.platform.web.WebSearchProvider(
                         new com.matrix.agent.platform.web.PinnedWebSearchTransport(httpClient.metadata())));
+        var weatherConfig = new com.matrix.agent.platform.weather.WeatherConfigStore(appContext);
+        var qweather = new com.matrix.agent.platform.weather.QWeatherAdapter(
+                new com.matrix.agent.platform.weather.QWeatherTransport(httpClient.metadata(), weatherConfig));
+        var weatherProvider = new com.matrix.agent.platform.weather.WeatherCapabilityProvider(
+                new com.matrix.agent.platform.weather.AndroidCurrentLocationProvider(appContext), qweather, qweather);
+        for (String capability : com.matrix.agent.task.capability.WeatherCapabilities.ALL) platformRoutes.put(capability, weatherProvider);
         platformRoutes.put(SystemControlCapabilityProvider.MEDIA_VOLUME, systemControlProvider);
         platformRoutes.put(SystemControlCapabilityProvider.SCREEN_BRIGHTNESS, systemControlProvider);
         for (String capability : MediaCapabilityProvider.capabilities()) {
@@ -285,6 +291,7 @@ public final class AppContainer implements DownloadRuntime {
         agentRuntimeRepository.setLegacyMemoryClearHook(
                 () -> com.matrix.agent.data.memory.RoomMemoryMigrator
                         .clearLegacySharedPreferences(appContext));
+        agentRuntimeRepository.addConversationClearHook(weatherConfig::clear);
         agentRuntimeRepository.setResetLifecycleHooks(
                 () -> PendingUserDataReset.mark(appContext),
                 () -> PendingUserDataReset.clearMarker(appContext));

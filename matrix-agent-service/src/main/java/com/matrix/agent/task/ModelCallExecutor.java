@@ -257,6 +257,7 @@ public final class ModelCallExecutor {
         if (error instanceof ModelApiException.NetworkException) return StopReason.NETWORK_UNAVAILABLE;
         if (error instanceof ModelApiException.TimeoutException) return StopReason.TIMEOUT;
         if (error instanceof ModelApiException.RateLimitException) return StopReason.MODEL_RATE_LIMITED;
+        if (error instanceof ModelApiException.OutputTruncatedException) return StopReason.LENGTH_EXCEEDED;
         return StopReason.MODEL_CALL_FAILED;
     }
 

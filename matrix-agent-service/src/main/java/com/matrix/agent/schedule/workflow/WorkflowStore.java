@@ -31,7 +31,16 @@ public final class WorkflowStore {
                 step.required = definition.required(); step.runtimeRequestId = ScheduleStore.uuid(); step.operationKey = ScheduleStore.uuid();
                 step.state = WAITING_DEPENDENCY;
                 org.json.JSONObject input = new org.json.JSONObject();
-                if (ResearchWorkflow.isResearch(template) && definition.kind() == WorkflowTemplate.Kind.TOOL) {
+                if (WeatherWorkflow.isWeather(template) && definition.id().equals("resolve_city")) {
+                    input.put("mode", parameters.getString("mode"));
+                    input.put("allowLocation", parameters.optBoolean("allowLocation"));
+                    if (parameters.has("fixedCityId")) input.put("fixedCityId", parameters.getString("fixedCityId"))
+                            .put("fixedCityName", parameters.getString("fixedCityName"))
+                            .put("fixedCityZone", parameters.getString("fixedCityZone"));
+                    if (parameters.has("backupCityId")) input.put("backupCityId", parameters.getString("backupCityId"))
+                            .put("backupCityName", parameters.getString("backupCityName"))
+                            .put("backupCityZone", parameters.getString("backupCityZone"));
+                } else if (ResearchWorkflow.isResearch(template) && definition.kind() == WorkflowTemplate.Kind.TOOL) {
                     input.put("query", parameters.getString("query")).put("source", definition.id());
                 } else if (definition.kind() == WorkflowTemplate.Kind.TOOL) {
                     LocalDate queryDate = definition.id().equals("tomorrow") ? date.plusDays(1) : date;
@@ -105,7 +114,11 @@ public final class WorkflowStore {
                 if (!terminalRun(parent.state)) wait = true;
                 else if (parent.required && parent.state != SUCCEEDED && parent.state != PARTIAL) blocked = true;
             }
-            if (blocked) { row.state = SKIPPED; row.reason = "REQUIRED_DEPENDENCY_FAILED"; row.completedAt = clock.wall().toEpochMilli(); store.dao().updateStep(row); }
+            if (WeatherWorkflow.isWeather(template) && row.stepId.equals("fetch_weather")
+                    && byId.get("resolve_city").state != SUCCEEDED) {
+                row.state = SKIPPED; row.reason = "CITY_UNAVAILABLE";
+                row.completedAt = clock.wall().toEpochMilli(); store.dao().updateStep(row);
+            } else if (blocked) { row.state = SKIPPED; row.reason = "REQUIRED_DEPENDENCY_FAILED"; row.completedAt = clock.wall().toEpochMilli(); store.dao().updateStep(row); }
             else if (!wait) { row.state = QUEUED; row.leaseGeneration++; store.dao().updateStep(row); ready.add(row); }
         }
         return ready;

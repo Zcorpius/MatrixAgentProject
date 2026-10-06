@@ -21,6 +21,24 @@ public final class ScheduleStoreTest {
             new ScheduleAction(NOTIFICATION, "reminder", "", 0, "{}", List.of(), false, false), 600_000, WITHIN_GRACE); }
     private String create(long seconds) { return store.create(owner, once(seconds), UUID.randomUUID().toString(), clock(0)).scheduleId; }
     private void admit(String id, long seconds) { admission.reconcile(clock(seconds), false, true); admission.attempted("admit:" + id, clock(seconds), "started"); assertTrue(admission.admitOne("admit:" + id, clock(seconds), clock(seconds).wall().toEpochMilli(), clock(seconds).elapsedMillis())); }
+    @Test public void weatherPlanWaitsInDraftUntilContentAdmissionIsRestored() {
+        var block = new java.util.concurrent.atomic.AtomicReference<>("WEATHER_NOT_CONFIGURED");
+        var guarded = new ScheduleStore(db, () -> 1, () -> false, action -> { }, () -> "", action -> block.get());
+        var action = new ScheduleAction(WORKFLOW, "查询本次城市天气", "daily_weather_current", 1,
+                "{\"mode\":\"CURRENT_AT_TRIGGER\",\"allowLocation\":true,\"allowWeatherNetwork\":true}",
+                List.of("location.resolve_city", "weather.today"), true, false);
+        var original = once(60);
+        var spec = new ScheduleSpec("天气提醒", original.timing, action, original.graceMillis, original.misfirePolicy);
+        String id = guarded.create(owner, spec, UUID.randomUUID().toString(), clock(0)).scheduleId;
+        assertEquals(DRAFT, guarded.dao().definition(id).state);
+        assertEquals("WEATHER_NOT_CONFIGURED", guarded.dao().definition(id).reason);
+        assertThrows(ScheduleFailure.class, () -> guarded.control(owner.uid(), id, "", guarded.dao().definition(id).revision,
+                RESUME, UUID.randomUUID().toString(), clock(1)));
+        block.set("");
+        var latest = guarded.dao().definition(id);
+        guarded.control(owner.uid(), id, "", latest.revision, RESUME, UUID.randomUUID().toString(), clock(2));
+        assertEquals(ACTIVE, guarded.dao().definition(id).state);
+    }
     @Test public void queuedFixedRescheduleReusesBothIdentitiesAndInvalidatesOldGeneration() {
         String id = create(10); admit(id, 10); var plan = store.dao().definition(id); var first = store.dao().occurrence(id, plan.fixedOccurrenceKey);
         String request = first.runtimeRequestId;

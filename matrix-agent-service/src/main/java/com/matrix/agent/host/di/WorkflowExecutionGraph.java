@@ -68,12 +68,18 @@ public final class WorkflowExecutionGraph {
                 if (rows.stream().allMatch(row -> terminalRun(row.state))) {
                     boolean unknown = rows.stream().anyMatch(row -> row.state == EXECUTION_UNKNOWN);
                     boolean requiredFailed = rows.stream().anyMatch(row -> row.required && row.state != SUCCEEDED && row.state != PARTIAL);
-                    boolean partial = rows.stream().anyMatch(row -> row.state == PARTIAL || (!row.required && row.state != SUCCEEDED && !row.reason.equals("USER_DISABLED")));
-                    String result = rows.stream().filter(row -> row.stepId.equals("summary")).map(row -> row.result).findFirst().orElse("");
+                    boolean backupCity = WeatherWorkflow.isWeather(session.template) && rows.stream()
+                            .filter(row -> row.stepId.equals("resolve_city") && row.state == SUCCEEDED)
+                            .anyMatch(row -> "BACKUP_CITY".equals(ScheduleCodec.arguments(row.outputJson).get("source")));
+                    boolean partial = backupCity || rows.stream().anyMatch(row -> row.state == PARTIAL
+                            || (!row.required && row.state != SUCCEEDED && !row.reason.equals("USER_DISABLED")));
+                    String resultStep = WeatherWorkflow.isWeather(session.template) ? "compose" : "summary";
+                    String result = rows.stream().filter(row -> row.stepId.equals(resultStep)).map(row -> row.result).findFirst().orElse("");
                     int state = unknown ? EXECUTION_UNKNOWN : session.token.isCancelled() ? CANCELLED : requiredFailed ? FAILED : partial ? PARTIAL : SUCCEEDED;
                     String reason = unknown ? "STEP_EXECUTION_UNKNOWN" : System.currentTimeMillis() >= current.expiresAt ? "QUEUE_EXPIRED"
                             : !schedules.authorized(current) ? "AUTHORIZATION_REVOKED" : session.token.isCancelled() ? "CANCELLED"
-                            : requiredFailed ? "REQUIRED_STEP_FAILED" : partial ? "OPTIONAL_OR_DELIVERY_PARTIAL" : "";
+                            : requiredFailed ? "REQUIRED_STEP_FAILED" : partial ? backupCity ? "WEATHER_BACKUP_CITY_USED"
+                                    : "OPTIONAL_OR_DELIVERY_PARTIAL" : "";
                     session.complete(state, result, reason);
                     return;
                 }
@@ -149,14 +155,20 @@ public final class WorkflowExecutionGraph {
             int state = SUCCEEDED; String text = "", output = "{}", reason = ""; boolean retryable = false;
             switch (definition.kind()) {
                 case TOOL -> {
-                    var result = session.host.automaticTasks().tool(task, definition.capability(), parameters(queued.inputJson), session.token);
+                    Map<String, Object> arguments = WeatherWorkflow.isWeather(session.template)
+                            && definition.id().equals("fetch_weather") ? weatherArguments(run) : parameters(queued.inputJson);
+                    var result = session.host.automaticTasks().tool(task, definition.capability(), arguments, session.token);
                     state = result.getStatus() == ToolResult.Status.SUCCESS && result.isVerified() ? SUCCEEDED
                             : result.getStatus() == ToolResult.Status.EXECUTION_UNKNOWN ? EXECUTION_UNKNOWN : FAILED;
+                    if (state == SUCCEEDED && Boolean.TRUE.equals(result.getObservedState().get("partial"))) state = PARTIAL;
                     output = boundedOutput(result.getObservedState()); text = state == SUCCEEDED ? "只读查询已完成" : "只读查询未完成";
-                    reason = state == SUCCEEDED ? "" : result.getStatus().name();
-                    retryable = result.getStatus() == ToolResult.Status.TIMED_OUT || result.getStatus() == ToolResult.Status.EXECUTION_FAILED;
+                    reason = state == SUCCEEDED || state == PARTIAL ? "" : String.valueOf(result.getObservedState().getOrDefault("reasonCode", result.getStatus().name()));
+                    retryable = result.getStatus() == ToolResult.Status.TIMED_OUT ||
+                            (result.getStatus() == ToolResult.Status.EXECUTION_FAILED &&
+                                    Set.of("WEATHER_NETWORK_UNAVAILABLE", "WEATHER_HTTP_UNAVAILABLE").contains(reason));
                 }
-                case TRANSFORM -> text = summary(run.runId);
+                case TRANSFORM -> text = WeatherWorkflow.isWeather(session.template)
+                        ? safeText(WeatherBriefComposer.compose(schedules.call(store -> store.dao().steps(run.runId)))) : summary(run.runId);
                 case AGENT -> {
                     var result = session.host.automaticTasks().agent(task, session.token);
                     state = switch (result.getFinalState()) { case SUCCEEDED -> SUCCEEDED; case PARTIALLY_SUCCEEDED -> PARTIAL;
@@ -170,22 +182,34 @@ public final class WorkflowExecutionGraph {
                     }
                 }
                 case DELIVER -> {
-                    text = summaryResult(run.runId);
+                    text = summaryResult(run.runId, session.template);
                     if (!calendars.verifyRun(run) || !scope.rejection().isEmpty()) { state = CANCELLED; reason = "AUTHORIZATION_REVOKED"; break; }
-                    String blocked = schedules.notifications().postResult(run, text);
+                    String blocked = WeatherWorkflow.isWeather(session.template)
+                            ? schedules.notifications().postWeatherResult(run, text)
+                            : schedules.notifications().postResult(run, text);
                     boolean posted = blocked.isEmpty(); reason = blocked; state = posted ? SUCCEEDED : PARTIAL;
+                    boolean reminderDelivered = !WeatherWorkflow.isWeather(session.template)
+                            || DeliveryFacts.delivered(schedules.call(store -> store.dao().run(run.runId).deliveryFactsJson), "notification");
+                    if (posted && !reminderDelivered) { state = PARTIAL; reason = "REMINDER_DELIVERY_FAILED"; }
+                    final boolean allPosted = posted && reminderDelivered;
                     schedules.call(store -> {
                         var current = store.dao().run(run.runId);
-                        if (current != null && current.dataEpoch == store.currentEpoch()) { current.deliveryStatus = posted ? DELIVERED : DELIVERY_BLOCKED;
+                        if (current != null && current.dataEpoch == store.currentEpoch()) { current.deliveryStatus = allPosted ? DELIVERED : posted ? DELIVERY_PARTIAL : DELIVERY_BLOCKED;
                             store.dao().updateRun(current);
-                            new ScheduleAdmissionStore(store).recordDelivery(run.runId, "notification", posted ? "DELIVERED" : blocked,
-                                    schedules.notifications().policySnapshot(com.matrix.agent.schedule.android.ScheduleNotificationPort.resultChannel(run)), schedules.clock().sample());
+                            new ScheduleAdmissionStore(store).recordDelivery(run.runId,
+                                    WeatherWorkflow.isWeather(session.template) ? "weather_update" : "notification",
+                                    posted ? "DELIVERED" : blocked,
+                                    schedules.notifications().policySnapshot(WeatherWorkflow.isWeather(session.template)
+                                            ? com.matrix.agent.schedule.android.ScheduleNotificationPort.WEATHER_UPDATES
+                                            : com.matrix.agent.schedule.android.ScheduleNotificationPort.resultChannel(run)), schedules.clock().sample());
                             if (!posted && parentSpec.action.speakResult) new ScheduleAdmissionStore(store).recordDelivery(run.runId, "speech",
                                     "NOT_ATTEMPTED_NOTIFICATION_BLOCKED", "{}", schedules.clock().sample()); }
                         return null;
                     });
                     if (parentSpec.action.speakResult && posted) {
-                        String spoken = speech.speak(session.host, queued.runtimeRequestId, text, scope, allowance);
+                        String spokenText = WeatherWorkflow.isWeather(session.template)
+                                ? WeatherBriefComposer.forSpeech(schedules.call(store -> store.dao().steps(run.runId))) : text;
+                        String spoken = speech.speak(session.host, queued.runtimeRequestId, spokenText, scope, allowance);
                         schedules.call(store -> {
                             var admission = new ScheduleAdmissionStore(store);
                             admission.recordDelivery(run.runId, "speech", spoken.isEmpty() ? "DELIVERED" : spoken, "{}", schedules.clock().sample());
@@ -276,7 +300,18 @@ public final class WorkflowExecutionGraph {
         }
         return safeText(text.toString());
     }
-    private String summaryResult(String run) { return schedules.call(store -> store.dao().step(run, "summary").result); }
+    private String summaryResult(String run, WorkflowTemplate template) { return schedules.call(store -> store.dao().step(run,
+            WeatherWorkflow.isWeather(template) ? "compose" : "summary").result); }
+    private Map<String, Object> weatherArguments(ScheduleRunEntity run) {
+        var city = schedules.call(store -> store.dao().step(run.runId, "resolve_city"));
+        if (city == null || city.state != SUCCEEDED) throw new IllegalStateException("weather city checkpoint unavailable");
+        var data = ScheduleCodec.arguments(city.outputJson);
+        ZoneId zone = ZoneId.of(String.valueOf(data.get("zoneId")));
+        long triggerAt = run.receivedAt != null ? run.receivedAt : run.admittedAt != null ? run.admittedAt : run.scheduledAt;
+        String date = Instant.ofEpochMilli(triggerAt).atZone(zone).toLocalDate().toString();
+        return Map.of("cityId", String.valueOf(data.get("cityId")), "cityName", String.valueOf(data.get("cityName")),
+                "zoneId", zone.getId(), "localDate", date);
+    }
     private static Map<String, Object> parameters(String encoded) { return ScheduleCodec.arguments(encoded); }
     private static String boundedOutput(Map<String, Object> output) throws org.json.JSONException {
         var data = new org.json.JSONObject(output);

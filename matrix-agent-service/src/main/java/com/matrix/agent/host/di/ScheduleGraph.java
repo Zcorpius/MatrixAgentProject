@@ -26,6 +26,7 @@ public final class ScheduleGraph implements ScheduleRuntime {
     private final AndroidScheduleClock clock;
     private final ScheduleAlarmAdapter alarms;
     private final ScheduleNotificationPort notifications;
+    private final com.matrix.agent.platform.weather.WeatherConfigStore weatherConfig;
     private final ExecutorService lane = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(128), action -> new Thread(action, "matrix-schedule"), new ThreadPoolExecutor.AbortPolicy());
     private final ScheduledExecutorService watchdog = new com.matrix.agent.platform.BoundedScheduledExecutor("matrix-schedule-deadline", 512);
@@ -40,6 +41,7 @@ public final class ScheduleGraph implements ScheduleRuntime {
         this.context = context.getApplicationContext();
         clock = new AndroidScheduleClock(context); alarms = new ScheduleAlarmAdapter(context);
         notifications = new ScheduleNotificationPort(context);
+        weatherConfig = new com.matrix.agent.platform.weather.WeatherConfigStore(context);
     }
     public AndroidScheduleClock clock() { return clock; }
     public ScheduleAlarmAdapter alarms() { return alarms; }
@@ -60,7 +62,8 @@ public final class ScheduleGraph implements ScheduleRuntime {
             var admission = persistence.await(deadline - SystemClock.elapsedRealtime());
             if (!admission.available()) throw new ScheduleFailure(MatrixErrorCode.PERSISTENCE_UNAVAILABLE, "加密计划存储不可用");
             current = new ScheduleStore(admission.database(), admission.memory()::currentEpoch, persistence::resetPending,
-                    com.matrix.agent.schedule.execution.ScheduleActionPolicy::validate, () -> reminderBlock);
+                    com.matrix.agent.schedule.execution.ScheduleActionPolicy::validate, () -> reminderBlock,
+                    this::weatherAdmissionBlock);
             store = current;
         }
         current.checkAvailable();
@@ -102,6 +105,25 @@ public final class ScheduleGraph implements ScheduleRuntime {
     public void changed() {
         var sample = clock.sample();
         wake("COMMAND", -1, sample.wall().toEpochMilli(), sample.elapsedMillis(), success -> { });
+    }
+    private String weatherAdmissionBlock(com.matrix.agent.api.schedule.ScheduleAction action) {
+        if (action.kind != WORKFLOW || !com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(action.templateId)) return "";
+        var parameters = ScheduleCodec.arguments(action.parametersJson);
+        if (!action.allowNetwork || !Boolean.TRUE.equals(parameters.get("allowWeatherNetwork"))) return "WEATHER_NETWORK_NOT_AUTHORIZED";
+        if (weatherConfig.load() == null) return "WEATHER_NOT_CONFIGURED";
+        if (!"CURRENT_AT_TRIGGER".equals(parameters.get("mode"))) return "";
+        if (!Boolean.TRUE.equals(parameters.get("allowLocation"))) return "LOCATION_NOT_AUTHORIZED";
+        if (context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) return "LOCATION_PERMISSION_DENIED";
+        if (context.checkSelfPermission(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) return "BACKGROUND_LOCATION_DENIED";
+        // City-grade cold/background fixes require a working low-power provider. On the
+        // reference LineageOS image fused delegates only to GPS, which timed out in T00.
+        var location = context.getSystemService(android.location.LocationManager.class);
+        if (location == null || !location.getAllProviders().contains(android.location.LocationManager.NETWORK_PROVIDER)
+                || !location.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER))
+            return "LOCATION_PROVIDER_UNCERTIFIED";
+        return "";
     }
 
     @Override public void wake(String source, long expectedEpoch, long receivedAt, long receivedElapsed, java.util.function.Consumer<Boolean> completion) {
@@ -196,6 +218,13 @@ public final class ScheduleGraph implements ScheduleRuntime {
                             admission.finish(run.runId, blocked.isEmpty() ? SUCCEEDED : FAILED,
                                     blocked.isEmpty() ? DELIVERED : DELIVERY_BLOCKED, "", blocked, clock.sample(), blocked.isEmpty());
                         } else {
+                            var action = ScheduleCodec.spec(run.specJson).action;
+                            if (action.kind == WORKFLOW
+                                    && com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(action.templateId)) {
+                                String blocked = notifications.postWeatherPending(run);
+                                admission.recordDelivery(run.runId, "notification", blocked.isEmpty() ? "DELIVERED" : blocked,
+                                        notifications.policySnapshot(ScheduleNotificationPort.REMINDERS), clock.sample());
+                            }
                             LongExecutionStarter starter = longExecution;
                             if (starter != null) starter.start(run.runId);
                             else throw new IllegalStateException("scheduled execution starter unavailable");

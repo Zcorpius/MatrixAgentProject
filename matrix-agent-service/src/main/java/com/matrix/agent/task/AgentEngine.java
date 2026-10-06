@@ -299,8 +299,10 @@ public final class AgentEngine {
         String systemPrompt = buildSystemPrompt(request);
         // per-request zone 投影——主驾/副驾看到不同 tool 列表,
         // 此前加的 toToolDefinitions(VehicleZone) 才真正接入。
-        List<ToolDefinition> tools = registry.toToolDefinitions(request.getOccupantZone()).stream()
-                .filter(tool -> request.getExecutionScope().allows(tool.getCapabilityName())).collect(java.util.stream.Collectors.toList());
+        List<ToolDefinition> tools = WeatherScheduleToolProjection.project(request,
+                registry.toToolDefinitions(request.getOccupantZone()).stream()
+                        .filter(tool -> request.getExecutionScope().allows(tool.getCapabilityName()))
+                        .collect(java.util.stream.Collectors.toList()));
         List<AgentMessage> conversation = new ArrayList<>();
         // maxMessageChars 限制单条消息长度——system/user 输入过长会撑爆总字符预算,
         // 也可能直接被模型 API 拒绝。所有进入 conversation 的消息统一过 enforceMessageBudget。
@@ -364,6 +366,7 @@ public final class AgentEngine {
                 break;
             }
 
+            ToolCall weatherPlan = iteration == 1 ? WeatherScheduleFastPath.plan(request) : null;
             ModelTurn turn;
             if (forcedSteer != null) {
                 // FORCE_TOOL:跳过 LLM,直接构造一个 ModelTurn 包裹用户指定的 ToolCall
@@ -372,6 +375,10 @@ public final class AgentEngine {
                         "[steer:force_tool]");
                 Log.i(TAG, "[Engine] iter " + iteration + " steer FORCE_TOOL cap="
                         + forcedSteer.getPayload() + " -> skip LLM, execute directly");
+            } else if (weatherPlan != null) {
+                turn = ModelTurn.ofToolCalls(Collections.singletonList(weatherPlan),
+                        "[local:daily_weather_plan]");
+                Log.i(TAG, "[Engine] iter " + iteration + " local weather plan -> schedule.create");
             } else {
                 ModelTurnRequest turnRequest = new ModelTurnRequest(request, conversation, tools,
                         systemPrompt, sessionContext);
@@ -700,6 +707,13 @@ public final class AgentEngine {
                 stopMessage = "加入 tool observation 后超过字符或条数预算";
                 break;
             }
+            if (weatherPlan != null && forcedSteer == null && !internalResults.isEmpty()) {
+                ToolResult result = internalResults.get(internalResults.size() - 1);
+                finalAssistantText = WeatherScheduleFastPath.answer(weatherPlan, result);
+                stopReason = StopReason.LOCAL_PLAN_DONE;
+                stopMessage = result.isSuccess() ? "天气计划已形成可核对的受理结果" : "天气计划未被受理";
+                break;
+            }
         }
 
         trajectory.finish(stopReason, elapsedMillis(started), totalToolCalls);
@@ -756,7 +770,8 @@ public final class AgentEngine {
 
         int successCount = trajectory.countSuccessfulToolCalls();
         int total = trajectory.getTotalToolCalls();
-        boolean normalStop = stopReason == StopReason.DONE || stopReason == StopReason.NO_TOOL_CALL;
+        boolean normalStop = stopReason == StopReason.DONE || stopReason == StopReason.NO_TOOL_CALL
+                || stopReason == StopReason.LOCAL_PLAN_DONE;
 
         if (normalStop) {
             if (total == 0) return TaskState.SUCCEEDED;

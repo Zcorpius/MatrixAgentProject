@@ -289,6 +289,18 @@ public final class ModelCallExecutorTest {
     }
 
     @Test
+    public void truncatedStructuredOutputHasSpecificTerminalReason() {
+        ModelGateway gateway = ignored -> {
+            throw new IllegalStateException("模型规划失败", new ModelApiException.OutputTruncatedException());
+        };
+
+        ModelCallExecutor.Result result = new ModelCallExecutor(1).decide(gateway, request("truncated-output"));
+
+        assertFalse(result.isSuccess());
+        assertEquals(StopReason.LENGTH_EXCEEDED, result.getTerminalReason());
+    }
+
+    @Test
     public void serverErrorIsNotReportedAsSafetyPolicy() {
         ModelGateway gateway = request -> {
             throw new ModelApiException.ServerException(503, "stream", new IllegalStateException("HTTP 503"));

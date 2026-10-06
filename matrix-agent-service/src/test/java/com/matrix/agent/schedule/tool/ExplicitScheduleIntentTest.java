@@ -63,6 +63,16 @@ public final class ExplicitScheduleIntentTest {
         reject("别创建提醒，只想了解功能", plan, true);
     }
 
+    @Test public void chineseClockTimeIsBoundToTheSameMinuteAsNumericTime() {
+        verify("制定每天九点十分的闹钟，并告诉我当天的天气情况",
+                weatherFollowingDevice("09:10"), true);
+        reject("制定每天九点十分的闹钟，并告诉我当天的天气情况",
+                weatherFollowingDevice("09:11"), true);
+        verify("每天上午九点十分提醒我喝水", plan(DAILY, "Asia/Shanghai", 0, 0, "09:10", 0, "喝水"), true);
+        reject("每天九点左右提醒我喝水", plan(DAILY, "Asia/Shanghai", 0, 0, "09:00", 0, "喝水"), true);
+        reject("每天九点十分和十点提醒我喝水", plan(DAILY, "Asia/Shanghai", 0, 0, "09:10", 0, "喝水"), true);
+    }
+
     private static ScheduleSpec plan(int kind, String zone, long at, long delay,
             String local, int weekdays, String text) {
         return new ScheduleSpec("喝水", new ScheduleTiming(kind, zone, at, delay, local,
@@ -76,6 +86,14 @@ public final class ExplicitScheduleIntentTest {
                 0, "", "", true, "", 0),
                 new ScheduleAction(NOTIFICATION, "喝水", "", 1, "{}", List.of(), false, false),
                 600_000, WITHIN_GRACE);
+    }
+
+    private static ScheduleSpec weatherFollowingDevice(String local) {
+        return new ScheduleSpec("天气", new ScheduleTiming(DAILY, "Asia/Shanghai", 0, 0, local,
+                0, "", "", true, "", 0),
+                new ScheduleAction(WORKFLOW, "当天的天气情况", "daily_weather_current", 1,
+                        "{\"mode\":\"CURRENT_AT_TRIGGER\",\"allowLocation\":true,\"allowWeatherNetwork\":true}",
+                        List.of("location.resolve_city", "weather.today"), true, false), 600_000, WITHIN_GRACE);
     }
 
     private static void verify(String user, ScheduleSpec plan, boolean creates) {

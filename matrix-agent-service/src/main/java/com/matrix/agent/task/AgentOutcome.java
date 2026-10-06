@@ -27,10 +27,9 @@ public final class AgentOutcome {
     private final List<ToolResult> internalResults;
     private final long durationMillis;
     /**
-     * 模型最终回合的可信答复文本（可空）。仅在 AgentEngine 的可信上下文中捕获——
-     * StopReason.NO_TOOL_CALL 且 content 非空白时为该 content，其余终态为 null。
-     * 对话域据此构造 {@code AssistantReply(MODEL_FINAL)}；null 时投影器合成
-     * SYNTHESIZED_TERMINAL 说明。不得从 trajectory 反解析替代本字段。
+     * 可信答复文本（可空）。模型直接答复只在 NO_TOOL_CALL 时捕获；有界本地计划
+     * 在 LOCAL_PLAN_DONE 时可提供已核验的说明。对话投影按来源分别处理，绝不从
+     * trajectory 反解析替代本字段。
      */
     private final String finalAssistantText;
 
@@ -68,7 +67,7 @@ public final class AgentOutcome {
     public StopReason getStopReason() { return stopReason; }
     public Trajectory getTrajectory() { return trajectory; }
     public long getDurationMillis() { return durationMillis; }
-    /** 模型最终回合的可信答复文本；非对话终态路径与无答复终态为 null。 */
+    /** 模型直接答复或本地计划的可信答复文本；其他路径为 null。 */
     public String getFinalAssistantText() { return finalAssistantText; }
 
     /**

@@ -12,12 +12,16 @@ import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.LinearLayout;
 import com.matrix.agent.launcher.BuildConfig;
+import com.matrix.agent.launcher.LauncherApplication;
 import com.matrix.agent.launcher.presentation.ConversationTraceRenderer;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.matrix.agent.launcher.R;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 import com.matrix.agent.launcher.presentation.ConversationMessageRenderer;
+import com.matrix.agent.launcher.overlay.pet.PetCharacter;
+import com.matrix.agent.launcher.overlay.pet.PetCharacterPreferences;
+import com.matrix.agent.launcher.overlay.pet.PetPortraitSelection;
 import com.matrix.agent.launcher.presentation.ConversationViewModel.UiMessage;
 import java.util.List;
 
@@ -28,6 +32,8 @@ final class OverlayConversationList extends FrameLayout {
     private final Button older;
     private final TextView assistantStream;
     private final Rows adapter;
+    private final PetPortraitSelection userPortrait;
+    private long portraitRevision;
     private List<UiMessage> messages = List.of();
     private long renderVersion;
     private boolean more, loading, connected, pendingFollow;
@@ -54,6 +60,12 @@ final class OverlayConversationList extends FrameLayout {
         assistantStream.setVisibility(View.GONE);
         list.addFooterView(assistantStream, null, false);
         adapter = new Rows(context); list.setAdapter(adapter);
+        userPortrait = new PetPortraitSelection(
+                ((LauncherApplication) context.getApplicationContext()).petSprites(), bitmap -> {
+                    portraitRevision++;
+                    adapter.notifyDataSetChanged();
+                });
+        userPortrait.select(PetCharacterPreferences.get(context));
         addView(list, new FrameLayout.LayoutParams(-1, -1));
         empty = new TextView(context);
         empty.setTextColor(LauncherThemePreferences.colorResource(context, R.color.overlay_muted)); empty.setTextSize(14);
@@ -131,9 +143,11 @@ final class OverlayConversationList extends FrameLayout {
             list.setSelectionFromTop(list.getCount() - 1, list.getHeight() - assistantStream.getHeight());
         } else list.setSelection(messages.size()); // header occupies position 0
     }
+    void setPetCharacter(PetCharacter character) { userPortrait.select(character); }
+    void close() { userPortrait.close(); }
+
     private final class Rows extends BaseAdapter {
-        private final ConversationMessageRenderer renderer;
-        Rows(Context context) { renderer = new ConversationMessageRenderer(context); }
+        Rows(Context context) { }
         @Override public int getCount() { return messages.size(); }
         @Override public UiMessage getItem(int position) { return messages.get(position); }
         @Override public long getItemId(int position) { return getItem(position).sequence(); }
@@ -145,15 +159,18 @@ final class OverlayConversationList extends FrameLayout {
             int width = list.getWidth() > 0 ? list.getWidth()
                     : Math.min(dp(420), (int) (getResources().getDisplayMetrics().widthPixels * .88f)) - dp(24);
             Row holder = convert != null && convert.getTag() instanceof Row row ? row : new Row();
-            if (!message.equals(holder.message) || holder.width != width) {
+            if (!message.equals(holder.message) || holder.width != width
+                    || holder.portraitRevision != portraitRevision) {
                 holder.container.removeAllViews();
                 LinearLayout content = new LinearLayout(getContext());
                 content.setOrientation(LinearLayout.VERTICAL);
-                content.addView(renderer.create(message, width, this::copy));
+                content.addView(new ConversationMessageRenderer(getContext(), userPortrait.portrait())
+                        .create(message, width, this::copy));
                 if (BuildConfig.MATRIX_DEBUG_TRACE_UI && !message.debugTraces().isEmpty())
                     content.addView(new ConversationTraceRenderer(getContext()).create(message, width));
                 holder.container.addView(content);
                 holder.message = message; holder.width = width;
+                holder.portraitRevision = portraitRevision;
             }
             return holder.container;
         }
@@ -167,6 +184,7 @@ final class OverlayConversationList extends FrameLayout {
         final FrameLayout container = new FrameLayout(getContext());
         UiMessage message;
         int width;
+        long portraitRevision;
         Row() {
             container.setLayoutParams(new ListView.LayoutParams(-1, -2));
             container.setTag(this);

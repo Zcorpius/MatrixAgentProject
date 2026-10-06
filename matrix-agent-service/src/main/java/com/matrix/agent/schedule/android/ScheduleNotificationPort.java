@@ -17,7 +17,8 @@ import com.matrix.agent.schedule.domain.ScheduleCodec;
 
 /** Posting confirms handoff to NotificationManager, never that the user heard or read a reminder. */
 public final class ScheduleNotificationPort {
-    public static final String REMINDERS = "schedule_reminders", STATUS = "schedule_execution_status", ATTENTION = "schedule_attention";
+    public static final String REMINDERS = "schedule_reminders", STATUS = "schedule_execution_status",
+            ATTENTION = "schedule_attention", WEATHER_UPDATES = "schedule_weather_updates";
     private final Context context;
     private final NotificationManager notifications;
     public ScheduleNotificationPort(Context context) {
@@ -32,8 +33,9 @@ public final class ScheduleNotificationPort {
         notifications.createNotificationChannels(java.util.List.of(
                 channel(REMINDERS, "计划提醒", NotificationManager.IMPORTANCE_HIGH),
                 channel(STATUS, "计划执行状态", NotificationManager.IMPORTANCE_LOW),
-                channel(ATTENTION, "计划需要处理", NotificationManager.IMPORTANCE_DEFAULT)));
-            for (String id : java.util.List.of(REMINDERS, STATUS, ATTENTION))
+                channel(ATTENTION, "计划需要处理", NotificationManager.IMPORTANCE_DEFAULT),
+                channel(WEATHER_UPDATES, "天气内容更新", NotificationManager.IMPORTANCE_LOW)));
+            for (String id : java.util.List.of(REMINDERS, STATUS, ATTENTION, WEATHER_UPDATES))
                 if (notifications.getNotificationChannel(id) == null) return "NOTIFICATION_CHANNEL_MISSING";
             return "";
         } catch (RuntimeException unavailable) { return "NOTIFICATION_CHANNEL_INITIALIZATION_FAILED"; }
@@ -50,7 +52,7 @@ public final class ScheduleNotificationPort {
     }
     private String checkBlocked(String channelId) {
         if (notifications == null) return "NOTIFICATION_SERVICE_UNAVAILABLE";
-        if (java.util.List.of(REMINDERS, STATUS, ATTENTION).stream().anyMatch(id -> notifications.getNotificationChannel(id) == null)) {
+        if (java.util.List.of(REMINDERS, STATUS, ATTENTION, WEATHER_UPDATES).stream().anyMatch(id -> notifications.getNotificationChannel(id) == null)) {
             String failure = ensureChannels(); if (!failure.isEmpty()) return failure;
         }
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return "NOTIFICATION_PERMISSION_DENIED";
@@ -60,9 +62,12 @@ public final class ScheduleNotificationPort {
         return "";
     }
     public String post(ScheduleRunEntity run) {
-        return post(run, ScheduleCodec.spec(run.specJson).action.text, REMINDERS);
+        return post(run, ScheduleCodec.spec(run.specJson).action.text, REMINDERS, false, false);
     }
-    public String postResult(ScheduleRunEntity run, String text) { return post(run, text, resultChannel(run)); }
+    public String postResult(ScheduleRunEntity run, String text) { return post(run, text, resultChannel(run), false, false); }
+    /** Same tag, id and channel across both phases; the update is deliberately silent. */
+    public String postWeatherPending(ScheduleRunEntity run) { return post(run, "已到点，正在准备天气…", REMINDERS, false, true); }
+    public String postWeatherResult(ScheduleRunEntity run, String text) { return post(run, text, WEATHER_UPDATES, true, true); }
     public static String resultChannel(ScheduleRunEntity run) {
         boolean attention = run.state == com.matrix.agent.api.schedule.ScheduleCodes.FAILED
                 || run.state == com.matrix.agent.api.schedule.ScheduleCodes.PARTIAL
@@ -78,12 +83,12 @@ public final class ScheduleNotificationPort {
                     .put("observedAt", System.currentTimeMillis()).toString();
         } catch (RuntimeException | org.json.JSONException unavailable) { return "{}"; }
     }
-    private synchronized String post(ScheduleRunEntity run, String text, String channel) {
+    private synchronized String post(ScheduleRunEntity run, String text, String channel, boolean silent, boolean keepIndividual) {
         String blocked = blockedReason(channel);
         if (!blocked.isEmpty()) return blocked;
         var active = notifications.getActiveNotifications();
         long count = java.util.Arrays.stream(active).filter(item -> item.getTag() != null && item.getTag().startsWith("schedule:")).count();
-        boolean grouped = count >= 8 || ATTENTION.equals(channel);
+        boolean grouped = !keepIndividual && (count >= 8 || ATTENTION.equals(channel));
         String tag = grouped ? "schedule:summary:" + channel : "schedule:" + run.runId;
         // A batch has one visible summary, while every occurrence remains separately queryable in history.
         if (grouped && java.util.Arrays.stream(active).anyMatch(item -> tag.equals(item.getTag()) && System.currentTimeMillis() - item.getPostTime() < 30_000)) return "";
@@ -108,6 +113,7 @@ public final class ScheduleNotificationPort {
                 .setContentIntent(content).setAutoCancel(true).setOnlyAlertOnce(true)
                 .setGroup("matrix-schedules:" + channel).setGroupSummary(grouped)
                 .setWhen(run.scheduledAt).setShowWhen(true).build();
+        if (silent) { notification.defaults = 0; notification.sound = null; notification.vibrate = null; }
         notifications.notify(tag, 1, notification);
         // notify() is asynchronous; verify that the system retained the notification rather than assuming success.
         for (int attempt = 0; attempt < 10; attempt++) {

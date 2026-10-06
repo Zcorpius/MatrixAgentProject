@@ -388,7 +388,7 @@ public final class CapabilityRegistry {
 
     /** Host catalog: preserves the stable demo fixture while adding real media capabilities. */
     public static CapabilityRegistry createRuntimeRegistry() {
-        return WebCapabilities.registerInto(ScheduleCapabilities.registerInto(CalendarClockCapabilities.registerInto(MediaCapabilities.registerInto(createDemoRegistry()))));
+        return WeatherCapabilities.registerInto(WebCapabilities.registerInto(ScheduleCapabilities.registerInto(CalendarClockCapabilities.registerInto(MediaCapabilities.registerInto(createDemoRegistry())))));
     }
 
     private static CapabilityDefinition readOnly(String name, String description) {
