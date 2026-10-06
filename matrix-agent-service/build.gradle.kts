@@ -272,6 +272,9 @@ dependencies {
 
     // 受控网络层（MatrixHttpClient）
     implementation(libs.okhttp)
+    // Android's JCA provider on the target ROM cannot import Ed25519 PKCS#8 keys.
+    // Use a bundled, versioned implementation for QWeather JWT signing.
+    implementation(libs.bouncycastle.prov)
 
     implementation(libs.jtokkit)
 

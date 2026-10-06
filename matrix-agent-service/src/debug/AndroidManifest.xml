@@ -15,5 +15,9 @@
             android:name="com.matrix.agent.platform.media.BilibiliViewProbeReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <receiver
+            android:name="com.matrix.agent.platform.weather.WeatherDeviceProbeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
     </application>
 </manifest>

@@ -10,6 +10,8 @@ import com.matrix.agent.contract.FinishReason;
 public enum StopReason {
     /** 模型选择直接答复用户,正常完成。 */
     DONE,
+    /** A trusted local planner completed a bounded operation and supplied a verified factual reply. */
+    LOCAL_PLAN_DONE,
     /** 模型返回不带 tool_call,等同于 DONE,独立列出便于诊断。 */
     NO_TOOL_CALL,
     /** 超过最大迭代数。 */

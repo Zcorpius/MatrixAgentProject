@@ -34,6 +34,14 @@ public final class ConversationAssistantProjectorTest {
         assertTrue(reply.displaySafe());
     }
 
+    @Test public void verifiedLocalPlanUsesSynthesizedReplyWithoutPretendingToBeModelText() {
+        AssistantReply reply = ConversationAssistantProjector.project(
+                outcome(TaskState.SUCCEEDED, StopReason.LOCAL_PLAN_DONE,
+                        "已保存每天 10:10 的 Agent 天气提醒草稿，尚未启用。"), 2000);
+        assertEquals(AssistantReply.Source.SYNTHESIZED_TERMINAL, reply.source());
+        assertTrue(reply.text().contains("草稿"));
+    }
+
     @Test public void modelFinalTruncatesAtCapAndMarksTruncated() {
         String longText = "x".repeat(3000);
         AssistantReply reply = ConversationAssistantProjector.project(

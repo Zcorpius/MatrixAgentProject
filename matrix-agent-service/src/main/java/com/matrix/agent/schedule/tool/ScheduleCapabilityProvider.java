@@ -29,7 +29,7 @@ public final class ScheduleCapabilityProvider implements CapabilityProvider {
             if (request.getExecutionScope().automatic() || request.getInteractiveOrigin() == null) return ToolResult.rejected(capability, "此入口没有可验证的交互式计划管理授权，请使用任务中心");
             ScheduleIdentity identity = backend.identity(request);
             String user = request.getInteractiveOrigin().userText();
-            if (capability.equals("schedule.create") && !user.matches("(?s).*(提醒我|提醒一下|设置|创建|安排|定时|每天|每周|分钟后|小时后).*")) return ToolResult.rejected(capability, "当前用户没有明确要求创建计划，请先确认");
+            if (capability.equals("schedule.create") && !user.matches("(?s).*(提醒我|提醒一下|设置|设定|制定|指定|创建|安排|定时|每天|每周|分钟后|小时后).*")) return ToolResult.rejected(capability, "当前用户没有明确要求创建计划，请先确认");
             String hash = ScheduleCodec.canonicalObject(new org.json.JSONObject(call.getArguments()).toString());
             String operationId = UUID.nameUUIDFromBytes((request.getRequestId() + ":" + capability + ":" + hash).getBytes(StandardCharsets.UTF_8)).toString();
             Map<String, Object> output;
@@ -53,7 +53,9 @@ public final class ScheduleCapabilityProvider implements CapabilityProvider {
                     backend.changed(); var plan = backend.execute(store -> store.owned(identity.uid(), result.scheduleId));
                     output = Map.of("scheduleId", result.scheduleId, "revision", result.revision, "nextDueAt", plan.nextDueAt == null ? 0 : plan.nextDueAt,
                             "state", plan.state, "health", plan.health, "code", result.code);
-                    message = "计划已保存；系统注册状态请在任务中心核对";
+                    message = com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(spec.action.templateId)
+                            ? "Agent 天气提醒已保存；它不是 DeskClock 原生闹钟。请在任务中心核对草稿/启用状态与独立授权。"
+                            : "计划已保存；系统注册状态请在任务中心核对";
                 }
                 case "schedule.list" -> {
                     List<Map<String, Object>> plans = backend.execute(store -> {
@@ -86,15 +88,44 @@ public final class ScheduleCapabilityProvider implements CapabilityProvider {
         if (calendar && !user.contains("日历") && !user.contains("日程") && !user.contains("行程")) throw new IllegalArgumentException("尚未获得读取日历的明确授权");
         if (network && !user.matches("(?s).*(联网|在线|网络|云端).*")) throw new IllegalArgumentException("在线执行需要用户明确授权，请确认后重试或使用任务中心");
         if (speak && !user.matches("(?s).*(播报|读出来|念出来).*")) throw new IllegalArgumentException("播报需要用户明确选择");
-        if (action != NOTIFICATION && !user.matches("(?s).*(执行|生成|整理|摘要|简报|查询|研究).*")) throw new IllegalArgumentException("当前只获得提醒授权，不能扩大成自动执行");
+        boolean weather = action == WORKFLOW && com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(string(call, "templateId", ""));
+        if (action != NOTIFICATION && !user.matches("(?s).*(执行|生成|整理|摘要|简报|查询|研究).*" )
+                && !(weather && user.contains("天气") && user.contains("告诉我"))) throw new IllegalArgumentException("当前只获得提醒授权，不能扩大成自动执行");
         String template = string(call, "templateId", ""); int version = (int) number(call, "templateVersion", 1);
         List<String> caps = action == WORKFLOW ? List.copyOf(WorkflowCatalog.require(template, version).capabilities()) : calendar ? List.of("calendar.query") : List.of();
         boolean research = action == WORKFLOW && com.matrix.agent.schedule.workflow.ResearchWorkflow.ID.equals(template);
-        if (action == WORKFLOW && !research && !calendar) throw new IllegalArgumentException("日程模板需要明确的日历授权");
-        String parameters = research ? new org.json.JSONObject(Map.of("query", string(call, "researchQuery", ""))).toString() : "{}";
-        return new ScheduleSpec(string(call, "title", ""), new ScheduleTiming(kind, string(call, "timeZone", clock.deviceZone().getId()),
+        if (action == WORKFLOW && !research && !weather && !calendar) throw new IllegalArgumentException("日程模板需要明确的日历授权");
+        String parameters;
+        if (research) parameters = new org.json.JSONObject(Map.of("query", string(call, "researchQuery", ""))).toString();
+        else if (weather) {
+            String mode = string(call, "weatherMode", "CURRENT_AT_TRIGGER");
+            boolean location = Boolean.TRUE.equals(call.argument("allowLocation"));
+            if (location && !user.matches("(?s).*(当前位置|所在城市|定位).*")) throw new IllegalArgumentException("请明确授权按当前位置查询天气");
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("mode", mode); values.put("allowLocation", location); values.put("allowWeatherNetwork", network);
+            if (mode.equals("FIXED_CITY")) {
+                if (!user.contains(string(call, "fixedCityName", ""))) throw new IllegalArgumentException("固定城市必须由用户明确指定");
+                values.put("fixedCityId", string(call, "fixedCityId", ""));
+                values.put("fixedCityName", string(call, "fixedCityName", ""));
+                values.put("fixedCityZone", string(call, "fixedCityZone", ""));
+            } else if (call.argument("backupCityId") != null || call.argument("backupCityName") != null
+                    || call.argument("backupCityZone") != null) {
+                String backupName = string(call, "backupCityName", "");
+                if (backupName.isBlank() || !user.contains(backupName) || !user.contains("备用"))
+                    throw new IllegalArgumentException("备用城市必须由用户明确指定");
+                values.put("backupCityId", string(call, "backupCityId", ""));
+                values.put("backupCityName", backupName);
+                values.put("backupCityZone", string(call, "backupCityZone", ""));
+            }
+            parameters = new org.json.JSONObject(values).toString();
+        } else parameters = "{}";
+        boolean follow = weather && "CURRENT_AT_TRIGGER".equals(string(call, "weatherMode", "CURRENT_AT_TRIGGER"))
+                || Boolean.TRUE.equals(call.argument("followDeviceZone"));
+        String zone = weather && "FIXED_CITY".equals(string(call, "weatherMode", ""))
+                ? string(call, "fixedCityZone", "") : string(call, "timeZone", clock.deviceZone().getId());
+        return new ScheduleSpec(string(call, "title", ""), new ScheduleTiming(kind, zone,
                 number(call, "atMillis", 0), Math.multiplyExact(number(call, "afterMinutes", 0), 60_000), string(call, "localTime", ""),
-                (int) number(call, "weekdaysMask", 0), "", "", Boolean.TRUE.equals(call.argument("followDeviceZone")), "", 0),
+                (int) number(call, "weekdaysMask", 0), "", "", follow, "", 0),
                 new ScheduleAction(action, string(call, "text", ""), template, version, parameters, caps, network, speak), research ? com.matrix.agent.schedule.workflow.ResearchWorkflow.DEFAULT_WINDOW_MILLIS : ScheduleNormalizer.DEFAULT_GRACE_MILLIS, WITHIN_GRACE);
     }
     private static String string(ToolCall call, String key, String fallback) { Object value = call.argument(key); return value instanceof String text ? text : fallback; }

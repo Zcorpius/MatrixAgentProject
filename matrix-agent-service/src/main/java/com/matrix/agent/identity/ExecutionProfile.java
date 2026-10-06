@@ -3,6 +3,7 @@ package com.matrix.agent.identity;
 /** Host-selected execution ceilings. Model arguments cannot change a request's profile. */
 public enum ExecutionProfile {
     INTERACTIVE(8, 8, 60_000, 120_000, 60_000, 16, 8),
+    WEATHER(0, 4, 45_000, 45_000, 16_000, 4, 4),
     RESEARCH(40, 40, 30 * 60_000, 30 * 60_000, 3 * 60_000, 40, 16);
 
     private final int iterations, toolCalls, workflowToolCalls, workflowSteps;

@@ -26,7 +26,7 @@ public final class CalendarClockCapabilities {
         register(registry, "calendar.delete", "删除事件或指定重复实例；必须先查询并确认范围，提供 revision", true,
                 object().property("eventId", integer()).property("revision", text(64)).property("scope", text(16))
                         .property("originalStartMillis", integer()).required("eventId", "revision", "scope").build());
-        register(registry, "clock.set_alarm", "委托系统时钟创建下一次指定时分或每周闹钟；不支持任意日期，不保证创建已核验", true,
+        register(registry, "clock.set_alarm", "仅用于独立的原生时钟响铃：委托系统时钟创建下一次指定时分或每周闹钟；不能触发天气工作流，不支持任意日期，不保证创建已核验。天气闹钟组合默认使用 Agent 天气提醒", true,
                 object().property("hour", integer()).property("minute", integer()).property("label", text(80))
                         .property("weekdaysMask", integer()).required("hour", "minute", "label").build());
         register(registry, "clock.set_timer", "委托系统时钟设置倒计时；返回未核验的委托状态", true,

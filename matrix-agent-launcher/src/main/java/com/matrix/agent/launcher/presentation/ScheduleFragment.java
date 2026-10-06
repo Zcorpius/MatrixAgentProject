@@ -179,6 +179,7 @@ public final class ScheduleFragment extends Fragment {
         content.addView(ui.eyebrow("计划详情  ·  " + ScheduleLabels.plan(plan)), ui.top(14));
         content.addView(ui.title(plan.spec.title, 27), ui.top(7));
         content.addView(ui.label(plan.spec.action.text, 15, ui.muted, false), ui.top(8));
+        if (!plan.reason.isEmpty()) content.addView(ui.label(ScheduleLabels.reason(plan.reason), 14, ui.danger, false), ui.top(8));
         LinearLayout facts = card();
         facts.addView(ui.eyebrow("执行安排"));
         facts.addView(text("下次：" + ScheduleLabels.time(plan.nextDueAt)
@@ -189,6 +190,18 @@ public final class ScheduleFragment extends Fragment {
                 + "\n授权能力：" + (plan.spec.action.capabilities.isEmpty() ? "无" : String.join("、", plan.spec.action.capabilities))
                 + "\n网络：" + (plan.spec.action.allowNetwork ? "允许" : "不允许") + " · 播报：" + (plan.spec.action.speakResult ? "遵守系统策略" : "关闭"), 14), ui.top(12));
         content.addView(facts, ui.top(22));
+        if ("daily_weather_current".equals(plan.spec.action.templateId)) {
+            try {
+                var weather = new org.json.JSONObject(plan.spec.action.parametersJson);
+                String city = "FIXED_CITY".equals(weather.optString("mode"))
+                        ? "固定城市：" + weather.optString("fixedCityName") + "（" + weather.optString("fixedCityId") + "）"
+                        : "每次到点重新定位城市" + (weather.has("backupCityId")
+                                ? "；定位失败时改用已授权的备用城市 " + weather.optString("backupCityName") : "");
+                content.addView(text(city + "\n位置授权：" + (weather.optBoolean("allowLocation") ? "已选择" : "未选择")
+                        + " · 天气网络授权：" + (weather.optBoolean("allowWeatherNetwork") ? "已选择" : "未选择")
+                        + "\n查询结果按城市当地日期解释；动态模式的 09:10 按设备本地时间触发。", 14), space());
+            } catch (org.json.JSONException invalid) { content.addView(text("天气参数不可读取，请检查计划。", 14), space()); }
+        }
         section("管理计划", "");
         content.addView(button("预览未来时间", () -> model.previewPlan(plan, preview -> {
             if (isAdded()) new AlertDialog.Builder(requireContext()).setTitle("计划时间预览")
@@ -224,6 +237,10 @@ public final class ScheduleFragment extends Fragment {
         if (!run.templateId.isEmpty()) content.addView(text("本次冻结模板：" + run.templateId + " · v" + run.templateVersion, 14), space());
         timeline.addView(text("计划时刻 " + ScheduleLabels.time(run.scheduledAt) + "\n广播接收 " + ScheduleLabels.time(run.receivedAt)
                 + "\n受理 " + ScheduleLabels.time(run.admittedAt) + "\n开始 " + ScheduleLabels.time(run.startedAt)
+                + ("daily_weather_current".equals(run.templateId) ? "\n城市解析 " + ScheduleLabels.time(detail.steps().stream()
+                        .filter(step -> step.stepId.equals("resolve_city")).map(step -> step.completedAt).findFirst().orElse(0L))
+                        + "\n天气查询 " + ScheduleLabels.time(detail.steps().stream()
+                        .filter(step -> step.stepId.equals("fetch_weather")).map(step -> step.completedAt).findFirst().orElse(0L)) : "")
                 + "\n结束 " + ScheduleLabels.time(run.completedAt) + "\n投递 " + ScheduleLabels.time(run.deliveredAt)
                 + "\n" + ScheduleLabels.delivery(run.deliveryStatus), 14), ui.top(8));
         content.addView(timeline, ui.top(22));
@@ -246,11 +263,11 @@ public final class ScheduleFragment extends Fragment {
     private void renderDelivery(ScheduleRunInfo run) {
         try {
             var facts = new org.json.JSONObject(run.deliveryFactsJson);
-            for (String channel : java.util.List.of("notification", "speech")) {
+            for (String channel : java.util.List.of("notification", "weather_update", "speech")) {
                 var receipt = facts.optJSONObject(channel); if (receipt == null) continue;
                 String status = receipt.optString("status", "UNKNOWN");
-                String label = channel.equals("notification") ? "通知" : "播报";
-                String description = status.equals("DELIVERED") ? channel.equals("notification") ? "已发布" : "已完成" : ScheduleLabels.reason(status);
+                String label = channel.equals("notification") ? "到点提醒" : channel.equals("weather_update") ? "天气内容更新" : "播报";
+                String description = status.equals("DELIVERED") ? channel.equals("speech") ? "已完成" : "已发布" : ScheduleLabels.reason(status);
                 String timing = receipt.has("deliveredAt") ? " · " + ScheduleLabels.time(receipt.optLong("deliveredAt")) : " · 未完成交付";
                 var policy = receipt.optJSONObject("policy");
                 String sound = channel.equals("notification") ? "\n声音未核验" : "";

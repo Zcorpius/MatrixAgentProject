@@ -1,11 +1,13 @@
 package com.matrix.agent.launcher.presentation;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.core.content.ContextCompat;
 import com.matrix.agent.api.conversation.ConversationMessage;
@@ -15,7 +17,11 @@ import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 /** Shared role, message text, status and steer rendering. Hosts own scrolling and commands. */
 public final class ConversationMessageRenderer {
     private final Context context;
-    public ConversationMessageRenderer(Context context) { this.context = context; }
+    private final Bitmap userPortrait;
+    public ConversationMessageRenderer(Context context, Bitmap userPortrait) {
+        this.context = context;
+        this.userPortrait = userPortrait;
+    }
     private int color(int resource) { return LauncherThemePreferences.colorResource(context, resource); }
     public View create(ConversationViewModel.UiMessage message, int availableWidth,
             java.util.function.Consumer<ConversationViewModel.UiMessage> longPress) {
@@ -112,8 +118,7 @@ public final class ConversationMessageRenderer {
         } else if (isUser) {
             row.addView(weightSpacer());
             row.addView(bubbleContent, bubbleParams);
-            row.addView(avatarView(R.drawable.avatar_user_penguin,
-                    R.string.conversation_avatar_user, R.color.matrix_chat_avatar_user_bg),
+            row.addView(userAvatarView(),
                     avatarLayoutParams(avatarSize, avatarGap, true));
         } else {
             row.addView(avatarView(R.drawable.avatar_assistant_matrix,
@@ -143,10 +148,19 @@ public final class ConversationMessageRenderer {
         return params;
     }
 
-    private android.widget.ImageView avatarView(int drawableRes, int descriptionRes,
+    private ImageView userAvatarView() {
+        ImageView avatar = avatarView(0, R.string.conversation_avatar_user,
+                R.color.matrix_chat_avatar_user_bg);
+        avatar.setId(R.id.conversation_user_avatar);
+        avatar.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        avatar.setImageBitmap(userPortrait);
+        return avatar;
+    }
+
+    private ImageView avatarView(int drawableRes, int descriptionRes,
             int backgroundColorRes) {
-        android.widget.ImageView avatar = new android.widget.ImageView(context);
-        avatar.setImageResource(drawableRes);
+        ImageView avatar = new ImageView(context);
+        if (drawableRes != 0) avatar.setImageResource(drawableRes);
         avatar.setContentDescription(context.getString(descriptionRes));
         avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         GradientDrawable mask = new GradientDrawable();

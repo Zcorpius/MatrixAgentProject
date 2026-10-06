@@ -30,6 +30,10 @@ public final class ConversationAssistantProjector {
         if (maxReplyChars <= 0) throw new IllegalArgumentException("maxReplyChars 必须大于 0");
 
         String finalText = outcome.getFinalAssistantText();
+        if (outcome.getStopReason() == StopReason.LOCAL_PLAN_DONE
+                && finalText != null && !finalText.isBlank()) {
+            return AssistantReply.synthesized(new ModelSanitizer(maxReplyChars).sanitize(finalText));
+        }
         if (outcome.getStopReason() == StopReason.NO_TOOL_CALL
                 && finalText != null && !finalText.isBlank()) {
             ModelSanitizer sanitizer = new ModelSanitizer(maxReplyChars);
@@ -44,7 +48,7 @@ public final class ConversationAssistantProjector {
     private static String synthesizedExplanation(StopReason reason) {
         if (reason == null) return "任务未能完成。";
         return switch (reason) {
-            case NO_TOOL_CALL, DONE -> "任务未能产生有效回复。";
+            case NO_TOOL_CALL, DONE, LOCAL_PLAN_DONE -> "任务未能产生有效回复。";
             case TIMEOUT -> "任务超时，未能完成。";
             case NETWORK_UNAVAILABLE -> "无法连接云端模型，请检查网络后重试。";
             case MODEL_RATE_LIMITED -> "模型服务返回限流或额度不足（HTTP 429），请稍后重试并检查模型额度。";

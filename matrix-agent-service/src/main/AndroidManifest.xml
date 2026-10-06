@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -85,6 +87,11 @@
             android:name="com.matrix.agent.host.MatrixAgentManagerService"
             android:exported="true"
             android:permission="com.matrix.agent.permission.ACCESS_AGENT" />
+
+        <activity android:name="com.matrix.agent.platform.weather.WeatherConfigActivity"
+            android:exported="true"
+            android:permission="com.matrix.agent.permission.ACCESS_AGENT"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
         <!-- 系统语音入口与 Binder PTT 共用同一个 Host-owned VoiceRuntime。系统是否选为
              默认助手仍由用户/OEM 决定；未选中时不会后台常驻采音。 -->

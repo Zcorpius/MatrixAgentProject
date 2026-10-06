@@ -76,6 +76,46 @@
         android:layout_height="1dp"
         android:background="?attr/matrix_divider" />
 
+    <LinearLayout
+        android:id="@+id/conversation_history_more"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:background="?attr/matrix_paper"
+        android:foreground="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="?attr/matrix_divider"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/conversation_history_more_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="14dp"
+            android:text="@string/conversation_history_more"
+            android:textColor="?attr/matrix_accent_deep"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:importantForAccessibility="no" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="?attr/matrix_divider"
+            android:importantForAccessibility="no" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/conversation_notice"
         android:layout_width="match_parent"

@@ -297,7 +297,8 @@
     <string name="conversation_bootstrapping">正在连接 Host 并准备对话线程…</string>
     <string name="conversation_empty">还没有消息。输入一句话开始；执行状态与结果会出现在这里。</string>
     <string name="conversation_sending">已提交，等待 Host 受理…</string>
-    <string name="conversation_history_more">点击对话区顶部可加载更早历史</string>
+    <string name="conversation_history_more">↑  加载更早消息</string>
+    <string name="conversation_history_loading">正在加载更早消息…</string>
     <string name="conversation_avatar_user">用户头像</string>
     <string name="conversation_avatar_assistant">Matrix 助手头像</string>
     <string name="conversation_status_accepted">已发送 · 等待调度</string>

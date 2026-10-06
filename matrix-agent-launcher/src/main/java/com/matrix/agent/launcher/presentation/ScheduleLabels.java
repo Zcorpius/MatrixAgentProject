@@ -23,6 +23,18 @@ final class ScheduleLabels {
             case "EXACT_ALARM_PERMISSION_DENIED" -> "精确闹钟权限未开启，计划尚未安排";
             case "AUTHORIZATION_REVOKED" -> "原授权或当前用户条件已变化，执行已停止";
             case "NETWORK_UNAVAILABLE" -> "网络不可用";
+            case "WEATHER_NOT_CONFIGURED" -> "天气服务未配置；请先在天气模板中打开 Host 配置页";
+            case "WEATHER_NETWORK_NOT_AUTHORIZED" -> "天气网络授权未选择；计划仅保留为草稿";
+            case "LOCATION_NOT_AUTHORIZED", "LOCATION_PERMISSION_DENIED" -> "当前位置定位未获允许";
+            case "BACKGROUND_LOCATION_DENIED" -> "Host 尚未获得后台定位权限";
+            case "LOCATION_PROVIDER_UNCERTIFIED" -> "当前 ROM 没有可用的城市级后台定位源；请改用固定城市";
+            case "LOCATION_DISABLED" -> "设备定位服务已关闭";
+            case "LOCATION_STALE", "LOCATION_INACCURATE", "CITY_AMBIGUOUS" -> "位置不够新或城市不明确";
+            case "WEATHER_RATE_LIMITED" -> "天气服务正在限流";
+            case "WEATHER_CREDENTIAL_REJECTED" -> "天气凭据失效，请检查 Host 配置";
+            case "WEATHER_TIMEOUT", "WEATHER_NETWORK_UNAVAILABLE" -> "天气服务暂不可用";
+            case "REMINDER_DELIVERY_FAILED" -> "天气内容已更新，但到点提醒未确认送达";
+            case "WEATHER_BACKUP_CITY_USED" -> "本次改用已授权的备用城市天气，未取得当前位置天气";
             case "SUPPRESSED_BY_POLICY" -> "播报被当前勿扰、通话或夜间策略抑制";
             case "PROCESS_INTERRUPTED_AFTER_START", "STEP_EXECUTION_UNKNOWN" -> "执行中断，外部效果尚待核验，不会自动重做";
             case "OUTSIDE_ALLOWED_WINDOW", "QUEUE_EXPIRED" -> "已超过本次允许的执行窗口";

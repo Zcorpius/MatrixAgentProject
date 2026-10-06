@@ -111,6 +111,9 @@ public final class PolicyEngine {
                     "任务被标记为只读(readOnlyHint=true),禁止执行写操作");
         }
 
+        PolicyDecision weatherAlarmDecision = WeatherAlarmIntentPolicy.evaluate(request, cap);
+        if (weatherAlarmDecision != null) return weatherAlarmDecision;
+
         PolicyDecision mediaDecision = mediaTargetPolicy.evaluate(request, cap);
         if (mediaDecision != null) return mediaDecision;
         mediaDecision = bilibiliVideoIntentPolicy.evaluate(request, call);
