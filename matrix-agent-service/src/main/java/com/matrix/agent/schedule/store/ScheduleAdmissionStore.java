@@ -270,7 +270,9 @@ public final class ScheduleAdmissionStore {
             if (!DeliveryFacts.delivered(run.deliveryFactsJson, channel)) {
                 run.deliveryFactsJson = DeliveryFacts.record(run.deliveryFactsJson, channel, status, clock.wall().toEpochMilli(), policy);
             }
-            boolean complete = DeliveryFacts.delivered(run.deliveryFactsJson, "notification")
+            boolean weather = com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(
+                    ScheduleCodec.spec(run.specJson).action.templateId);
+            boolean complete = DeliveryFacts.delivered(run.deliveryFactsJson, weather ? "weather_update" : "notification")
                     && (!ScheduleCodec.spec(run.specJson).action.speakResult || DeliveryFacts.delivered(run.deliveryFactsJson, "speech"));
             if (complete && run.deliveredAt == null) run.deliveredAt = clock.wall().toEpochMilli();
             dao.updateRun(run);

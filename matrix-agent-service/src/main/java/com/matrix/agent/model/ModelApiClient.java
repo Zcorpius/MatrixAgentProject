@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.matrix.agent.contract.AgentMessage;
 import com.matrix.agent.contract.ModelTurn;
+import com.matrix.agent.contract.ModelApiException;
 import com.matrix.agent.contract.ToolDefinition;
 import com.matrix.agent.identity.CancellationToken;
 import com.matrix.agent.platform.MatrixHttpClient;
@@ -93,7 +94,13 @@ public final class ModelApiClient implements LlmClient {
             if (event instanceof com.matrix.agent.contract.ModelStreamEvent.BodyDelta delta) bodySink.accept(delta.text());
         });
         if (turn.getFinishReason() != com.matrix.agent.contract.FinishReason.STOP || turn.hasToolCalls()) {
-            throw new IllegalStateException("incomplete structured completion");
+            Log.w(TAG, "[Http] structured completion rejected finish=" + turn.getFinishReason()
+                    + " toolCalls=" + turn.getToolCalls().size()
+                    + " contentChars=" + turn.getAssistantMessage().getContent().length());
+            if (turn.getFinishReason() == com.matrix.agent.contract.FinishReason.LENGTH) {
+                throw new ModelApiException.OutputTruncatedException();
+            }
+            throw new IllegalStateException("incomplete structured completion: " + turn.getFinishReason());
         }
         return turn.getAssistantMessage().getContent();
     }

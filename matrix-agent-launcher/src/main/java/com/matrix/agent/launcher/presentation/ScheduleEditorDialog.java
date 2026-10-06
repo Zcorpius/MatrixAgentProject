@@ -3,6 +3,8 @@ package com.matrix.agent.launcher.presentation;
 import static com.matrix.agent.api.schedule.ScheduleCodes.*;
 
 import android.app.Dialog;
+import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -10,9 +12,12 @@ import android.widget.*;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.DialogFragment;
 import androidx.lifecycle.ViewModelProvider;
 import com.matrix.agent.api.schedule.*;
+import com.matrix.agent.api.common.MatrixServiceConstants;
 import com.matrix.agent.launcher.LauncherActivity;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -27,11 +32,12 @@ public final class ScheduleEditorDialog extends DialogFragment {
     private ScheduleTemplateInfo template;
     private EditText title, goal, dateTime, minutes, localTime, zone, grace, offset;
     private String calendarBinding = "";
-    private Spinner timing, action, misfire;
+    private Spinner timing, action, misfire, weatherMode;
     private boolean saving;
-    private CheckBox followZone, network, speak, calendar, tomorrow;
-    private EditText calendarId, startDate, endDate, researchQuery;
-    private boolean research;
+    private CheckBox followZone, network, speak, calendar, tomorrow, locationConsent, backupCity;
+    private EditText calendarId, startDate, endDate, researchQuery, fixedCityId, fixedCityName, fixedCityZone;
+    private Button selectCity;
+    private boolean research, weather;
     private final List<CheckBox> days = new ArrayList<>();
     private TextView error;
     private Bundle restored;
@@ -40,6 +46,17 @@ public final class ScheduleEditorDialog extends DialogFragment {
     private String draftKey;
     private boolean discardDraft, requestPending;
     private ScheduleUi ui;
+    private final ActivityResultLauncher<Intent> cityPicker = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(), result -> {
+                Intent data = result.getData();
+                if (result.getResultCode() != Activity.RESULT_OK || data == null || fixedCityId == null) return;
+                String id = data.getStringExtra(MatrixServiceConstants.EXTRA_WEATHER_CITY_ID);
+                String name = data.getStringExtra(MatrixServiceConstants.EXTRA_WEATHER_CITY_NAME);
+                String cityZone = data.getStringExtra(MatrixServiceConstants.EXTRA_WEATHER_CITY_ZONE);
+                if (id == null || name == null || cityZone == null) return;
+                fixedCityId.setText(id); fixedCityName.setText(name); fixedCityZone.setText(cityZone);
+                if (backupCity == null || !backupCity.isChecked()) weatherMode.setSelection(1);
+            });
 
     public static ScheduleEditorDialog create(ScheduleInfo plan, ScheduleTemplateInfo template) {
         var dialog = new ScheduleEditorDialog(); Bundle args = new Bundle();
@@ -62,6 +79,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         requestPending = saved != null && saved.getBoolean("requestPending");
         ScheduleSpec initial = existing == null ? null : existing.spec;
         research = "source_research".equals(template != null ? template.templateId : initial == null ? "" : initial.action.templateId);
+        weather = "daily_weather_current".equals(template != null ? template.templateId : initial == null ? "" : initial.action.templateId);
         calendarBinding = initial == null ? requireArguments().getString("binding", "") : initial.timing.calendarBindingId;
         ScrollView scroll = new ScrollView(requireContext());
         scroll.setBackgroundColor(ui.paper);
@@ -69,7 +87,8 @@ public final class ScheduleEditorDialog extends DialogFragment {
         form.setPadding(dp(20), dp(18), dp(20), dp(26)); scroll.addView(form);
         form.addView(ui.eyebrow("任务中心  /  计划"));
         form.addView(ui.title(existing == null ? "新建计划" : "编辑计划", 25), ui.top(6));
-        form.addView(ui.label("填写内容与时间，预览后再确认保存。", 13, ui.muted, false), ui.top(7));
+        form.addView(ui.label(weather ? "这是 Agent 天气提醒。DeskClock 原生闹钟需要单独创建；请先选择城市来源与授权。"
+                : "填写内容与时间，预览后再确认保存。", 13, ui.muted, false), ui.top(7));
         section(form, "01  内容");
         title = field(form, "标题", "title", initial == null ? template == null ? "" : template.title : initial.title, false);
         goal = field(form, "提醒内容或执行目标", "goal", initial == null ? template == null ? "" : template.description : initial.action.text, false); goal.setMinLines(2);
@@ -109,12 +128,34 @@ public final class ScheduleEditorDialog extends DialogFragment {
         }
         if (template != null || initial != null && initial.action.kind == WORKFLOW) { action.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, new String[]{"工作流模板执行"})); action.setEnabled(false); label(form, "模板：" + (template == null ? initial.action.templateId : template.title)); }
         calendar = check(form, "允许读取日历以完成目标", "calendar", initial != null && initial.action.capabilities.contains("calendar.query"));
-        network = check(form, "允许使用网络与已配置的在线模型", "network", initial != null && initial.action.allowNetwork);
+        network = check(form, weather ? "允许向和风天气发送粗位置（解析城市）及城市并联网获取天气" : "允许使用网络与已配置的在线模型", "network", initial != null && initial.action.allowNetwork);
         speak = check(form, "完成后播报（遵守勿扰与通话策略）", "speak", initial != null && initial.action.speakResult);
         org.json.JSONObject parameters;
         try { parameters = new org.json.JSONObject(initial == null ? "{}" : initial.action.parametersJson); }
         catch (org.json.JSONException invalid) { parameters = new org.json.JSONObject(); }
         researchQuery = field(form, "研究问题（最多 300 字）", "researchQuery", parameters.optString("query"), false);
+        weatherMode = choice(form, "城市来源", new String[]{"每次到点重新定位", "固定城市"},
+                saved == null ? "FIXED_CITY".equals(parameters.optString("mode")) ? 1 : 0 : saved.getInt("weatherMode"));
+        locationConsent = check(form, "允许到点读取设备城市级位置", "locationConsent", parameters.optBoolean("allowLocation"));
+        backupCity = check(form, "定位失败时改用我选定的备用城市（会明确标注）", "backupCity",
+                saved == null ? parameters.has("backupCityId") : saved.getBoolean("backupCity"));
+        fixedCityId = field(form, "固定/备用城市 LocationID", "fixedCityId",
+                parameters.optString("fixedCityId", parameters.optString("backupCityId")), false);
+        fixedCityName = field(form, "固定/备用城市名称", "fixedCityName",
+                parameters.optString("fixedCityName", parameters.optString("backupCityName")), false);
+        fixedCityZone = field(form, "固定/备用城市 IANA 时区", "fixedCityZone",
+                parameters.optString("fixedCityZone", parameters.optString("backupCityZone")), false);
+        if (weather) {
+            label(form, "当前位置需要 Host 的粗定位、后台定位权限及可用的城市级定位源。尚未满足或天气服务未配置时，计划仅保存为草稿；可选择固定城市。数据来源：和风天气（QWeather）。");
+            Button settings = new Button(requireContext()); settings.setText("配置天气服务与定位权限");
+            settings.setOnClickListener(v -> startActivity(new android.content.Intent().setClassName("com.matrix.agent",
+                    "com.matrix.agent.platform.weather.WeatherConfigActivity"))); form.addView(settings);
+            selectCity = new Button(requireContext()); selectCity.setText("搜索固定城市");
+            selectCity.setOnClickListener(v -> cityPicker.launch(new Intent().setClassName("com.matrix.agent",
+                    "com.matrix.agent.platform.weather.WeatherConfigActivity")
+                    .putExtra(MatrixServiceConstants.EXTRA_PICK_WEATHER_CITY, true)));
+            form.addView(selectCity);
+        }
         if (research) label(form, "仅检索百科片段、论文摘要和书目信息，不读取全文。活动执行最多 30 分钟，可在任务中心停止。请明确勾选网络授权。");
         tomorrow = check(form, "同时查询明日日程（可选步骤）", "tomorrow", parameters.optBoolean("includeTomorrow", true));
         calendarId = field(form, "限定日历编号（留空表示所有可读日历）", "calendarId", parameters.has("calendarId") ? parameters.optString("calendarId") : "", true);
@@ -143,18 +184,32 @@ public final class ScheduleEditorDialog extends DialogFragment {
             boolean recurring = selected == DAILY || selected == WEEKLY;
             show(dateTime, selected == ONCE); show(minutes, selected == AFTER_DELAY); show(localTime, recurring);
             show(startDate, recurring); show(endDate, recurring); show(offset, selected == CALENDAR_OFFSET);
+            show(zone, !weather);
             weekdays.setVisibility(selected == WEEKLY ? View.VISIBLE : View.GONE); followZone.setVisibility(recurring ? View.VISIBLE : View.GONE);
             boolean workflow = template != null || initial != null && initial.action.kind == WORKFLOW;
             boolean executes = workflow || action.getSelectedItemPosition() == 1;
             calendar.setVisibility(executes && !workflow ? View.VISIBLE : View.GONE);
             network.setVisibility(executes ? View.VISIBLE : View.GONE); speak.setVisibility(executes ? View.VISIBLE : View.GONE);
-            tomorrow.setVisibility(workflow && !research ? View.VISIBLE : View.GONE); show(calendarId, workflow && !research); show(researchQuery, workflow && research);
+            boolean fixed = weather && weatherMode.getSelectedItemPosition() == 1;
+            boolean backup = weather && !fixed && backupCity.isChecked();
+            if (weather) network.setText(fixed ? "允许向和风天气发送所选城市并联网获取天气"
+                    : "允许向和风天气发送粗位置（解析城市）及城市并联网获取天气");
+            showChoice(weatherMode, weather);
+            locationConsent.setVisibility(weather && !fixed ? View.VISIBLE : View.GONE);
+            backupCity.setVisibility(weather && !fixed ? View.VISIBLE : View.GONE);
+            show(fixedCityId, fixed || backup); show(fixedCityName, fixed || backup); show(fixedCityZone, fixed || backup);
+            if (selectCity != null) selectCity.setVisibility(fixed || backup ? View.VISIBLE : View.GONE);
+            tomorrow.setVisibility(workflow && !research && !weather ? View.VISIBLE : View.GONE);
+            show(calendarId, workflow && !research && !weather); show(researchQuery, workflow && research);
+            if (weather) followZone.setVisibility(View.GONE);
         };
         AdapterView.OnItemSelectedListener changed = new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { updateFields.run(); }
             public void onNothingSelected(AdapterView<?> parent) { }
         };
-        timing.setOnItemSelectedListener(changed); action.setOnItemSelectedListener(changed); updateFields.run();
+        timing.setOnItemSelectedListener(changed); action.setOnItemSelectedListener(changed);
+        weatherMode.setOnItemSelectedListener(changed); backupCity.setOnCheckedChangeListener((button, checked) -> updateFields.run());
+        updateFields.run();
         dialog.setOnShowListener(ignored -> {
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setBackgroundDrawable(ui.dialogBackground());
@@ -189,7 +244,13 @@ public final class ScheduleEditorDialog extends DialogFragment {
                 new AlertDialog.Builder(requireContext()).setTitle("确认计划")
                         .setMessage(preview.spec.title + "\n\n" + preview.spec.action.text + "\n\n接下来：\n" + String.join("\n", preview.nextOccurrences)
                                 + (preview.spec.timing.kind == AFTER_DELAY ? "\n相对延迟从确认保存时起算。" : "")
-                                + "\n时区：" + preview.spec.timing.zoneId + " · 宽限：" + preview.spec.graceMillis / 60_000 + " 分钟"
+                                + "\n时区：" + preview.spec.timing.zoneId + (preview.spec.timing.followDeviceZone ? "（跟随设备）" : "（固定）")
+                                + " · 宽限：" + preview.spec.graceMillis / 60_000 + " 分钟"
+                                + (weather ? "\n城市：" + (weatherMode.getSelectedItemPosition() == 0 ? "每次到点重新定位"
+                                        + (backupCity.isChecked() ? "；失败时改用备用城市 " + value(fixedCityName) : "") : value(fixedCityName))
+                                        + "\n网络：" + (network.isChecked() ? "已授权" : "未授权")
+                                        + " · 定位：" + (weatherMode.getSelectedItemPosition() == 0 && locationConsent.isChecked() ? "已选择" : "不使用")
+                                        + "\n天气来源：和风天气（QWeather）；未配置或未获系统定位权限将保存为草稿。" : "")
                                 + "\n通知遵循系统渠道与勿扰设置。")
                         .setNegativeButton("继续编辑", (d, w) -> { operationId = UUID.randomUUID().toString(); pendingSpec = null; })
                         .setPositiveButton(existing == null ? "启用计划" : "保存修改", (d, w) -> save()).show();
@@ -214,14 +275,17 @@ public final class ScheduleEditorDialog extends DialogFragment {
     }
     private ScheduleSpec draft() {
         int kind = timing.getSelectedItemPosition() + 1;
-        ZoneId selectedZone = ZoneId.of(value(zone)); long at = 0, delay = 0; int mask = 0;
+        ZoneId selectedZone = ZoneId.of(weather ? weatherMode.getSelectedItemPosition() == 0
+                ? ZoneId.systemDefault().getId() : value(fixedCityZone) : value(zone));
+        long at = 0, delay = 0; int mask = 0;
         if (kind == CALENDAR_OFFSET && calendarBinding.isEmpty()) throw new IllegalArgumentException("请先从日历选择一个实例");
         if (kind == ONCE) at = LocalDateTime.parse(value(dateTime), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")).atZone(selectedZone).toInstant().toEpochMilli();
         if (kind == AFTER_DELAY) delay = Math.multiplyExact(Long.parseLong(value(minutes)), 60_000);
         for (int i = 0; i < days.size(); i++) if (days.get(i).isChecked()) mask |= 1 << i;
         ScheduleTiming time = new ScheduleTiming(kind, selectedZone.getId(), at, delay, value(localTime), mask,
                 value(startDate), value(endDate),
-                followZone.isChecked(), calendarBinding, kind == CALENDAR_OFFSET ? Math.multiplyExact(Long.parseLong(value(offset)), 60_000) : 0);
+                weather ? weatherMode.getSelectedItemPosition() == 0 : followZone.isChecked(),
+                calendarBinding, kind == CALENDAR_OFFSET ? Math.multiplyExact(Long.parseLong(value(offset)), 60_000) : 0);
         boolean workflow = template != null || existing != null && existing.spec.action.kind == WORKFLOW;
         int actionKind = workflow ? WORKFLOW : existing != null && existing.spec.action.kind == TOOL ? TOOL : action.getSelectedItemPosition() == 0 ? NOTIFICATION : AGENT;
         List<String> capabilities = actionKind == NOTIFICATION ? List.of() : actionKind == TOOL ? existing.spec.action.capabilities : workflow
@@ -232,7 +296,18 @@ public final class ScheduleEditorDialog extends DialogFragment {
             try {
                 var parameters = new org.json.JSONObject();
                 if (research) parameters.put("query", value(researchQuery));
-                else {
+                else if (weather) {
+                    boolean fixed = weatherMode.getSelectedItemPosition() == 1;
+                    parameters.put("mode", fixed ? "FIXED_CITY" : "CURRENT_AT_TRIGGER");
+                    parameters.put("allowLocation", !fixed && locationConsent.isChecked());
+                    parameters.put("allowWeatherNetwork", network.isChecked());
+                    if (fixed) parameters.put("fixedCityId", value(fixedCityId))
+                            .put("fixedCityName", value(fixedCityName))
+                            .put("fixedCityZone", value(fixedCityZone));
+                    else if (backupCity.isChecked()) parameters.put("backupCityId", value(fixedCityId))
+                            .put("backupCityName", value(fixedCityName))
+                            .put("backupCityZone", value(fixedCityZone));
+                } else {
                     parameters.put("includeTomorrow", tomorrow.isChecked());
                     if (!value(calendarId).isEmpty()) parameters.put("calendarId", Long.parseLong(value(calendarId)));
                 }
@@ -250,9 +325,11 @@ public final class ScheduleEditorDialog extends DialogFragment {
     }
     private void writeDraft(Bundle saved) {
         saved.putBoolean("requestPending", requestPending); saved.putString("operation", operationId); saved.putParcelable("pending", pendingSpec);
-        EditText[] fields = {title, goal, dateTime, minutes, localTime, zone, grace, offset, calendarId, startDate, endDate, researchQuery}; String[] names = {"title", "goal", "dateTime", "minutes", "localTime", "zone", "grace", "offset", "calendarId", "startDate", "endDate", "researchQuery"};
+        EditText[] fields = {title, goal, dateTime, minutes, localTime, zone, grace, offset, calendarId, startDate, endDate, researchQuery, fixedCityId, fixedCityName, fixedCityZone}; String[] names = {"title", "goal", "dateTime", "minutes", "localTime", "zone", "grace", "offset", "calendarId", "startDate", "endDate", "researchQuery", "fixedCityId", "fixedCityName", "fixedCityZone"};
         for (int i = 0; i < fields.length; i++) saved.putString(names[i], value(fields[i]));
         saved.putInt("misfire", misfire.getSelectedItemPosition()); saved.putInt("timing", timing.getSelectedItemPosition()); saved.putInt("action", action.getSelectedItemPosition());
+        saved.putInt("weatherMode", weatherMode.getSelectedItemPosition()); saved.putBoolean("locationConsent", locationConsent.isChecked());
+        saved.putBoolean("backupCity", backupCity.isChecked());
         saved.putBoolean("tomorrow", tomorrow.isChecked());
         saved.putBoolean("follow", followZone.isChecked()); saved.putBoolean("network", network.isChecked()); saved.putBoolean("speak", speak.isChecked()); saved.putBoolean("calendar", calendar.isChecked());
         for (int i = 0; i < days.size(); i++) saved.putBoolean("day" + i, days.get(i).isChecked());
@@ -275,8 +352,9 @@ public final class ScheduleEditorDialog extends DialogFragment {
         group.addView(input, ui.top(5)); return input;
     }
     private Spinner choice(LinearLayout form, String caption, String[] choices, int selected) {
-        label(form, caption);
+        TextView captionView = label(form, caption);
         Spinner spinner = new Spinner(requireContext());
+        spinner.setTag(captionView);
         spinner.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, choices));
         spinner.setSelection(selected);
         spinner.setBackground(ui.fieldBackground()); spinner.setMinimumHeight(dp(50)); spinner.setPadding(dp(12), 0, dp(9), 0);
@@ -296,6 +374,10 @@ public final class ScheduleEditorDialog extends DialogFragment {
         ui.divider(form, 9);
     }
     private static void show(EditText field, boolean visible) { ((View)field.getParent()).setVisibility(visible ? View.VISIBLE : View.GONE); }
+    private static void showChoice(Spinner spinner, boolean visible) {
+        spinner.setVisibility(visible ? View.VISIBLE : View.GONE);
+        ((View) spinner.getTag()).setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
     private static String value(EditText input) { return input == null ? "" : input.getText().toString().trim(); }
     private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value); }
 }

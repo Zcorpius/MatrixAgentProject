@@ -41,6 +41,8 @@ public class KeywordIntentClassifierTest {
         // 同时含读关键词"查"和写关键词"打开" → 模糊 → 按写处理
         assertEquals(false, classifier.isReadOnly("查一下空调然后打开"));
         assertEquals(false, classifier.isReadOnly("get status and save preference"));
+        assertEquals(false, classifier.isReadOnly("那制定每天九点十分的闹钟，并告诉我当天的天气情况"));
+        assertEquals(false, classifier.isReadOnly("那指定每天九点十分的闹钟，并告诉我当天的天气情况"));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.matrix.agent.launcher.presentation;
 
 import android.animation.ObjectAnimator;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -12,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -27,6 +29,8 @@ import com.matrix.agent.api.debug.DebugTraceWireEvent;
 import com.matrix.agent.launcher.BuildConfig;
 import com.matrix.agent.launcher.LauncherActivity;
 import com.matrix.agent.launcher.R;
+import com.matrix.agent.launcher.overlay.pet.PetCharacterPreferences;
+import com.matrix.agent.launcher.overlay.pet.PetPortraitSelection;
 import com.matrix.agent.launcher.presentation.theme.LauncherThemePreferences;
 
 import java.util.List;
@@ -48,7 +52,10 @@ public final class ConversationFragment extends Fragment {
     private static final String KEY_ENTER_TO_SEND = "enter_to_send";
 
     private LinearLayout messageRows;
+    private PetPortraitSelection userPortrait;
     private TextView notice;
+    private View historyMore;
+    private TextView historyMoreLabel;
     private EditText input;
     private TextView cancelButton;
     private android.widget.ImageButton voiceButton;
@@ -97,7 +104,10 @@ public final class ConversationFragment extends Fragment {
         viewModel = new ViewModelProvider(requireActivity(), activity.viewModelFactory())
                 .get(ConversationViewModel.class);
         messageRows = root.findViewById(R.id.conversation_messages);
+        userPortrait = new PetPortraitSelection(launcherApplication().petSprites(), this::updateUserAvatars);
         notice = root.findViewById(R.id.conversation_notice);
+        historyMore = root.findViewById(R.id.conversation_history_more);
+        historyMoreLabel = root.findViewById(R.id.conversation_history_more_label);
         input = root.findViewById(R.id.conversation_input);
         cancelButton = root.findViewById(R.id.conversation_cancel);
         voiceButton = root.findViewById(R.id.conversation_voice);
@@ -155,6 +165,7 @@ public final class ConversationFragment extends Fragment {
         });
         cancelButton.setOnClickListener(ignored -> viewModel.cancelLatest());
         stageView.setOnClickListener(ignored -> scrollToStageTask());
+        historyMore.setOnClickListener(ignored -> viewModel.loadOlder());
         root.findViewById(R.id.conversation_scroll).setOnClickListener(
                 ignored -> viewModel.refresh());
 
@@ -198,6 +209,7 @@ public final class ConversationFragment extends Fragment {
 
     @Override public void onResume() {
         super.onResume();
+        userPortrait.select(PetCharacterPreferences.get(requireContext()));
         var value = viewModel.state().getValue();
         launcherApplication().overlay().conversationPageVisible(value == null ? null : value.conversationId);
     }
@@ -328,6 +340,8 @@ public final class ConversationFragment extends Fragment {
     }
 
     @Override public void onDestroyView() {
+        if (userPortrait != null) userPortrait.close();
+        userPortrait = null;
         if (pttPulse != null) pttPulse.cancel();
         pttPulse = null;
         assistantStreamView = null;
@@ -763,6 +777,14 @@ public final class ConversationFragment extends Fragment {
     }
 
     private void renderNotice(ConversationViewModel.State value) {
+        boolean showHistory = value.hasMoreHistory && !value.messages.isEmpty()
+                && value.transientError == null && !value.sending;
+        historyMore.setVisibility(showHistory ? View.VISIBLE : View.GONE);
+        historyMore.setEnabled(showHistory && !value.loadingHistory);
+        historyMoreLabel.setText(value.loadingHistory
+                ? R.string.conversation_history_loading : R.string.conversation_history_more);
+        historyMore.setContentDescription(historyMoreLabel.getText());
+
         CharSequence hint = null;
         if (value.transientError != null) {
             hint = value.transientError;
@@ -772,8 +794,6 @@ public final class ConversationFragment extends Fragment {
             hint = getText(R.string.conversation_empty);
         } else if (value.sending) {
             hint = getText(R.string.conversation_sending);
-        } else if (value.hasMoreHistory) {
-            hint = getText(R.string.conversation_history_more);
         }
         if (hint == null) {
             notice.setVisibility(View.GONE);
@@ -945,10 +965,18 @@ public final class ConversationFragment extends Fragment {
     private View buildRow(ConversationViewModel.UiMessage message) {
         int width = messageRows.getWidth() > 0 ? messageRows.getWidth()
                 : getResources().getDisplayMetrics().widthPixels;
-        View row = new ConversationMessageRenderer(requireContext()).create(message,
+        View row = new ConversationMessageRenderer(requireContext(), userPortrait.portrait()).create(message,
                 width - messageRows.getPaddingStart() - messageRows.getPaddingEnd(), this::showActions);
         row.setTag(R.id.conversation_messages, signatureOf(message));
         return row;
+    }
+
+    private void updateUserAvatars(Bitmap portrait) {
+        if (messageRows == null) return;
+        for (int i = 0; i < messageRows.getChildCount(); i++) {
+            ImageView avatar = messageRows.getChildAt(i).findViewById(R.id.conversation_user_avatar);
+            if (avatar != null) avatar.setImageBitmap(portrait);
+        }
     }
 
     /**

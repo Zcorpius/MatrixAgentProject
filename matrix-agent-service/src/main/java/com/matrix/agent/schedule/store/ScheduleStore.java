@@ -24,6 +24,7 @@ public final class ScheduleStore {
     private final ScheduleNormalizer normalizer = new ScheduleNormalizer();
     private final java.util.function.Consumer<ScheduleAction> actionValidator;
     private final java.util.function.Supplier<String> reminderBlock;
+    private final java.util.function.Function<ScheduleAction, String> contentBlock;
 
     public ScheduleStore(MatrixDatabase database, LongSupplier epoch, BooleanSupplier resetPending) {
         this(database, epoch, resetPending, action -> { });
@@ -34,16 +35,25 @@ public final class ScheduleStore {
     }
     public ScheduleStore(MatrixDatabase database, LongSupplier epoch, BooleanSupplier resetPending,
             java.util.function.Consumer<ScheduleAction> actionValidator, java.util.function.Supplier<String> reminderBlock) {
+        this(database, epoch, resetPending, actionValidator, reminderBlock, action -> "");
+    }
+    public ScheduleStore(MatrixDatabase database, LongSupplier epoch, BooleanSupplier resetPending,
+            java.util.function.Consumer<ScheduleAction> actionValidator, java.util.function.Supplier<String> reminderBlock,
+            java.util.function.Function<ScheduleAction, String> contentBlock) {
         this.database = database;
         this.dao = database.scheduleDao();
         this.epoch = epoch;
         this.resetPending = resetPending;
         this.actionValidator = actionValidator;
         this.reminderBlock = reminderBlock;
+        this.contentBlock = contentBlock;
     }
 
     public String notificationBlock(ScheduleDefinitionEntity plan) {
-        return ScheduleCodec.spec(plan.specJson).action.kind == NOTIFICATION ? reminderBlock.get() : "";
+        ScheduleAction action = ScheduleCodec.spec(plan.specJson).action;
+        return action.kind == NOTIFICATION || action.kind == WORKFLOW
+                && com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(action.templateId)
+                ? reminderBlock.get() : "";
     }
 
     public void validateAction(ScheduleAction action) { actionValidator.accept(action); }
@@ -81,11 +91,12 @@ public final class ScheduleStore {
             if (row.nextDueAt == null && normalized.rule() instanceof TimeRule.CalendarOffset)
                 throw new ScheduleFailure(INVALID_ARGUMENT, "所选日历实例的触发时刻已过去或不可用");
             String blocked = notificationBlock(row);
+            if (blocked.isEmpty()) blocked = contentBlock.apply(normalized.spec().action);
             if (!blocked.isEmpty()) { row.state = DRAFT; row.health = BLOCKED; row.reason = blocked; }
             else if (dao.activeCount(0) >= 100) throw new ScheduleFailure(OVERLOADED, "最多启用 100 个计划");
             dao.insertDefinition(row);
             long sequence = event(row, "", "CREATED", "", clock.wall().toEpochMilli());
-            return remember(identity.uid(), operationId, hash, row, "", sequence, row.state == DRAFT ? "通知不可用，计划已保存为草稿；恢复权限后请启用" : "计划已保存，正在安排");
+            return remember(identity.uid(), operationId, hash, row, "", sequence, row.state == DRAFT ? "所需权限或天气服务未就绪，计划已保存为草稿；准备好后请启用" : "计划已保存，正在安排");
         });
     }
 
@@ -128,6 +139,16 @@ public final class ScheduleStore {
             row.revision++; row.registrationGeneration++; row.updatedAt = clock.wall().toEpochMilli();
             row.specJson = ScheduleCodec.spec(normalized.spec());
             row.health = PENDING; row.reason = "";
+            boolean continuingWeather = row.state == ACTIVE
+                    && com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(old.action.templateId)
+                    && old.action.templateId.equals(normalized.spec().action.templateId)
+                    && java.util.Objects.equals(ScheduleCodec.arguments(old.action.parametersJson).get("mode"),
+                            ScheduleCodec.arguments(normalized.spec().action.parametersJson).get("mode"));
+            if (!continuingWeather && (!old.action.parametersJson.equals(normalized.spec().action.parametersJson)
+                    || !old.action.templateId.equals(normalized.spec().action.templateId))) {
+                String blocked = contentBlock.apply(normalized.spec().action);
+                if (!blocked.isEmpty()) { row.state = DRAFT; row.health = BLOCKED; row.reason = blocked; }
+            }
             if (changed) {
                 if (row.state == COMPLETED) {
                     if (dao.activeCount(0) >= 100) throw new ScheduleFailure(OVERLOADED, "启用计划数量已达上限");
@@ -187,6 +208,7 @@ public final class ScheduleStore {
                 case RESUME -> {
                     if (row.state != PAUSED && row.state != DRAFT) throw new ScheduleFailure(INVALID_STATE, "只有草稿或暂停的计划可以启用");
                     String blocked = notificationBlock(row);
+                    if (blocked.isEmpty()) blocked = contentBlock.apply(ScheduleCodec.spec(row.specJson).action);
                     if (!blocked.isEmpty()) throw new ScheduleFailure(PERMISSION_DENIED, blocked);
                     if (dao.activeCount(0) >= 100) throw new ScheduleFailure(OVERLOADED, "启用计划数量已达上限");
                     row.state = ACTIVE; row.health = PENDING; row.reason = "";

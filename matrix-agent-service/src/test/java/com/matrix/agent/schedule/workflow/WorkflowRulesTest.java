@@ -27,7 +27,9 @@ public final class WorkflowRulesTest {
         for (var descriptor : WorkflowCatalog.describe()) {
             var template = WorkflowCatalog.require(descriptor.templateId, descriptor.version);
             assertTrue(template.steps().size() <= 8);
-            assertEquals(ResearchWorkflow.isResearch(template) ? 180_000 : 40_000, template.steps().stream().filter(s -> s.id().equals("summary")).findFirst().orElseThrow().timeoutMillis());
+            if (!WeatherWorkflow.isWeather(template))
+                assertEquals(ResearchWorkflow.isResearch(template) ? 180_000 : 40_000,
+                        template.steps().stream().filter(s -> s.id().equals("summary")).findFirst().orElseThrow().timeoutMillis());
         }
         assertThrows(IllegalArgumentException.class, () -> WorkflowCatalog.require("daily_agenda", 2));
     }

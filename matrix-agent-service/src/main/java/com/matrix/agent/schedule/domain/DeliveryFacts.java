@@ -7,7 +7,8 @@ import org.json.JSONObject;
 public final class DeliveryFacts {
     private DeliveryFacts() { }
     public static String record(String previous, String channel, String status, long at, String policy) {
-        if (!channel.equals("notification") && !channel.equals("speech")) throw new IllegalArgumentException("unknown delivery channel");
+        if (!channel.equals("notification") && !channel.equals("weather_update") && !channel.equals("speech"))
+            throw new IllegalArgumentException("unknown delivery channel");
         if (status.length() > 120 || policy.length() > 2048) throw new IllegalArgumentException("delivery fact too large");
         try {
             var facts = new JSONObject(previous);

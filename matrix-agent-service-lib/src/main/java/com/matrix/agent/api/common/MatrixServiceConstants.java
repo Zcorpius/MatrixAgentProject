@@ -46,6 +46,11 @@ public final class MatrixServiceConstants {
     public static final String ACTION_OPEN_SCHEDULE = "com.matrix.agent.action.OPEN_SCHEDULE";
     public static final String EXTRA_SCHEDULE_ID = "schedule_id";
     public static final String EXTRA_SCHEDULE_RUN_ID = "schedule_run_id";
+    /** Signature-protected Host city picker → Launcher editor result; never contains coordinates. */
+    public static final String EXTRA_PICK_WEATHER_CITY = "matrix_weather_pick_city";
+    public static final String EXTRA_WEATHER_CITY_ID = "matrix_weather_city_id";
+    public static final String EXTRA_WEATHER_CITY_NAME = "matrix_weather_city_name";
+    public static final String EXTRA_WEATHER_CITY_ZONE = "matrix_weather_city_zone";
 
     /** Host notification → Launcher download page deep-link contract. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.matrix.agent.action.OPEN_DOWNLOADS";

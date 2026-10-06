@@ -307,7 +307,10 @@ public final class OverlayWindow implements AutoCloseable {
         bubble.setContentDescription(context.getString(R.string.overlay_standalone_pet_description));
         bubble.setOnClickListener(view -> actions.returnToAgent());
     }
-    public void setPetCharacter(PetCharacter character) { bubble.setCharacter(character); }
+    public void setPetCharacter(PetCharacter character) {
+        bubble.setCharacter(character);
+        conversationList.setPetCharacter(character);
+    }
     public void wave() { if (petVisible()) bubble.wave(); }
     public void cancelLook() { bubble.cancelLook(); }
     public void pointer(OverlayPointerSample sample) {
@@ -530,6 +533,7 @@ public final class OverlayWindow implements AutoCloseable {
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
     @Override public void close() {
         bubble.close();
+        conversationList.close();
         dismissActionsMenu(); finishEditing();
         if (attached) {
             attached = false;

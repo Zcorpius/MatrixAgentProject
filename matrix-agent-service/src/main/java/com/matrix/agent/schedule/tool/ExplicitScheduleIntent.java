@@ -24,6 +24,7 @@ final class ExplicitScheduleIntent {
     private static final Pattern RELATIVE_DELAY = Pattern.compile(
             "(?<![\\d一二两三四五六七八九十百])([0-9]{1,6}|[一二两三四五六七八九十百]{1,6})\\s*(分钟|小时|天)(?:之?后|以后)");
     private static final Pattern CLOCK_TIME = Pattern.compile("(?<!\\d)([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)");
+    private static final Pattern CHINESE_CLOCK_TIME = Pattern.compile("(?<![一二三四五六七八九十百\\d])([一二两三四五六七八九十]{1,3}|[01]?\\d|2[0-3])点(?:(半)|([一二两三四五六七八九十]{1,3}|[0-5]?\\d)分?)?");
     private static final Pattern WEEKDAY = Pattern.compile("每周([一二三四五六日天])");
     private static final Pattern IANA_ZONE = Pattern.compile("([A-Za-z_]+/[A-Za-z_]+(?:/[A-Za-z_]+)?)时区");
     private static final Pattern UTC_ZONE = Pattern.compile("(?i)(?<![A-Za-z])UTC时区");
@@ -39,13 +40,25 @@ final class ExplicitScheduleIntent {
             throw new IllegalArgumentException("当前用户未授权创建确定时间的计划");
         }
         ScheduleTiming timing = proposed.timing;
-        verifyZone(user, timing, clock.deviceZone());
+        verifyZone(user, proposed, clock.deviceZone());
         verifyLiteralTime(user, timing);
         if (creates) verifySubject(user, proposed);
     }
 
-    private static void verifyZone(String user, ScheduleTiming timing, ZoneId deviceZone) {
+    private static void verifyZone(String user, ScheduleSpec proposed, ZoneId deviceZone) {
+        ScheduleTiming timing = proposed.timing;
         RequestedZone requested = statedZone(user, deviceZone);
+        if (com.matrix.agent.schedule.workflow.WeatherWorkflow.ID.equals(proposed.action.templateId)) {
+            var parameters = com.matrix.agent.schedule.domain.ScheduleCodec.arguments(proposed.action.parametersJson);
+            if ("CURRENT_AT_TRIGGER".equals(parameters.get("mode")) && !user.contains("时区")
+                    && !user.contains("北京时间") && !user.contains("上海时间")) {
+                requested = new RequestedZone(deviceZone, true);
+            } else if ("FIXED_CITY".equals(parameters.get("mode")) && !user.contains("时区")
+                    && !user.contains("北京时间") && !user.contains("上海时间")) {
+                try { requested = new RequestedZone(ZoneId.of(String.valueOf(parameters.get("fixedCityZone"))), false); }
+                catch (RuntimeException invalid) { throw new IllegalArgumentException("固定城市时区无效"); }
+            }
+        }
         ZoneId actual;
         try { actual = ZoneId.of(timing.zoneId); }
         catch (DateTimeException invalid) { throw new IllegalArgumentException("计划时区无效", invalid); }
@@ -68,6 +81,8 @@ final class ExplicitScheduleIntent {
             return new RequestedZone(ZoneId.of("Asia/Shanghai"), false);
         }
         if (user.contains("时区")) throw new IllegalArgumentException("请使用明确的 IANA 时区");
+        // A moving-city weather brief is scheduled in the device's local time; the city zone
+        // is only used to select the forecast's local date after location is resolved.
         return new RequestedZone(deviceZone, false);
     }
 
@@ -97,9 +112,20 @@ final class ExplicitScheduleIntent {
         }
         if (user.contains("每周") || user.contains("每天")) {
             Matcher time = CLOCK_TIME.matcher(user);
-            if (!time.find()) throw new IllegalArgumentException("请明确计划的具体钟点");
-            String localTime = LocalTime.of(Integer.parseInt(time.group(1)), Integer.parseInt(time.group(2))).toString();
-            if (time.find()) throw new IllegalArgumentException("请明确唯一的计划钟点");
+            Matcher chinese = CHINESE_CLOCK_TIME.matcher(user);
+            boolean numeric = time.find(), named = chinese.find();
+            if (!numeric && !named) throw new IllegalArgumentException("请明确计划的具体钟点");
+            String numericHour = numeric ? time.group(1) : "", numericMinute = numeric ? time.group(2) : "";
+            String namedHour = named ? chinese.group(1) : "", half = named ? chinese.group(2) : null;
+            String namedMinute = named ? chinese.group(3) : null;
+            if (numeric && named || numeric && time.find() || named && chinese.find()
+                    || user.matches("(?s).*(左右|大概|约摸|差不多).*")) throw new IllegalArgumentException("请明确唯一且精确的计划钟点");
+            int hour = numeric ? Integer.parseInt(numericHour) : (int) numeral(namedHour);
+            int minute = numeric ? Integer.parseInt(numericMinute) : half != null ? 30
+                    : namedMinute == null ? 0 : (int) numeral(namedMinute);
+            if (user.contains("下午") || user.contains("晚上")) { if (hour < 12) hour += 12; }
+            if (user.contains("凌晨") && hour == 12) hour = 0;
+            String localTime = LocalTime.of(hour, minute).toString();
             require(localTime.equals(timing.localTime), "计划钟点与用户要求不一致");
             if (user.contains("每周")) {
                 Matcher weekday = WEEKDAY.matcher(user);

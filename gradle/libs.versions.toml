@@ -44,6 +44,7 @@ vosk = "0.3.75"
 kotlinStdlib = "2.1.21"
 # Sherpa 模型上游（k2-fsa asr-models/kws-models）发布为 tar.bz2，java.util.zip 不解此格式
 commonsCompress = "1.27.1"
+bouncyCastle = "1.86"
 
 # 测试 [老工程已验证]
 junit = "4.13.2"
@@ -85,6 +86,7 @@ vosk = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" 
 # 端侧语音（:ondevice sherpa-onnx AAR 运行时依赖 / :matrix-agent-service tar.bz2 解压）
 kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlinStdlib" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
+bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncyCastle" }
 
 # JVM 单测
 junit = { group = "junit", name = "junit", version.ref = "junit" }
